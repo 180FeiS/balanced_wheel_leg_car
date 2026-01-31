@@ -1,0 +1,184 @@
+/*
+ * @Author: bom
+ * @Version: V1.0
+ * @Date: 2024-12-18 17:23:09
+ * @LastEditTime: 2024-12-20 22:26:58
+ * @FilePath: \Balance_Car V3.0.1\project\code\UI.h
+ * @Description: 
+ */
+/*********************************************************************************************************************
+* 修改记录
+* 日期              作者             版本           说明
+* 2024-07-24        Bron            V1.0.0         搭建新工程
+* 2024-07-27        Bron            V1.0.2         搭建了二级菜单的框架
+********************************************************************************************************************/
+/*********************************************************************************************************************
+* 多级菜单结构描述
+*********************************************************************************************************************
+* 1. 测试外设模式 (GUI_1)
+*    - 1_1. 测试电机
+*      - 1_1_1. 电机详细信息
+*    - 1_2. 测试编码器
+*      - 1_2_1. 编码器详细信息
+*    - 1_3. 测试摄像头
+*      - 1_3_1. 摄像头详细信息
+*    - 1_4. 测试陀螺仪
+*      - 1_4_1. 陀螺仪详细信息
+*
+* 2. 调试模式 (GUI_2)
+*    - 2_1. 图像设置
+*      - 2_1_1. 原始图像 + 二值化
+*      - 2_1_2. 二值化 + 连续边线
+*      - 2_1_3. 连续边线 + 离散边线
+*    - 2_2. 速度环设置
+*      - 2_2_1. 角速度环P
+*      - 2_2_2. 角速度环I
+*      - 2_2_3. 角度环P
+*      - 2_2_4. 角速度环D
+*      - 2_2_5. 速度环P
+*      - 2_2_6. 速度环D
+*    - 2_3. 转向环设置
+*      - 2_3_1. 转向内环P
+*      - 2_3_2. 转向内环D
+*      - 2_3_3. 转向外环P
+*      - 2_3_4. 转向外环D
+*    - 2_4. 速度设置
+*    - 2_5. 更新Flash参数
+*    - 2_6. 清空FLASH缓存区
+*
+* 3. 运行模式 (GUI_3)
+*    - 3_1. 预留参数设置1
+*    - 3_2. 预留参数设置2
+*    - 3_3. 预留参数设置3
+*********************************************************************************************************************/
+#ifndef __UI_H__
+#define __UI_H__
+
+#include "small_driver_uart_control.h"
+#include "zf_common_typedef.h"
+
+#define PENCOLOR    RGB565_GREEN
+#define BGCOLOR     RGB565_BLACK
+
+#define ROW_1   0       //0*16
+#define ROW_2   16      //1*16
+#define ROW_3   32      //2*16
+#define ROW_4   48      //3*16
+#define ROW_5   64      //4*16
+#define ROW_6   80      //5*16
+#define ROW_7   96      //6*16
+#define ROW_8   112     //7*16
+#define ROW_9   128     //8*16
+#define ROW_10  144     //9*16
+#define ROW_11  160     //10*16
+#define ROW_12  176     //11*16
+#define ROW_13  192     //12*16
+#define ROW_14  208     //13*16
+#define ROW_15  224     //14*16
+#define ROW_16  240     //15*16
+#define ROW_17  256     //16*16
+#define ROW_18  272     //17*16
+#define ROW_19  288     //18*16
+#define ROW_20  304     //19*16
+
+extern void GUI_1();
+extern void ACT_1();
+
+extern void GUI_2();
+extern void ACT_2();
+
+extern void GUI_3();
+extern void ACT_3();
+
+extern void GUI_1_1();
+extern void ACT_1_1();
+
+extern void GUI_1_2();
+extern void ACT_1_2();  
+
+extern void GUI_1_3();
+extern void ACT_1_3();
+
+extern void GUI_1_4();
+extern void ACT_1_4();
+
+extern void GUI_2_1();
+extern void ACT_2_1();
+
+extern void GUI_2_2();
+extern void ACT_2_2();
+
+extern void GUI_2_3();
+extern void ACT_2_3();
+
+extern void GUI_2_4();
+extern void ACT_2_4();
+
+extern void GUI_2_5();
+extern void ACT_2_5();
+
+extern void GUI_2_6();
+extern void ACT_2_6();
+
+extern void GUI_3_1();
+extern void ACT_3_1();
+
+extern void GUI_3_2();
+extern void ACT_3_2();
+
+extern void GUI_3_3();
+extern void ACT_3_3();
+
+extern void GUI_1_1_1();
+extern void ACT_1_1_1();
+
+extern void GUI_1_2_1();
+extern void ACT_1_2_1();
+
+extern void GUI_1_3_1();
+extern void ACT_1_3_1();
+
+extern void GUI_1_4_1();
+extern void ACT_1_4_1();
+
+extern void GUI_2_1_1();
+extern void ACT_2_1_1();
+
+extern void GUI_2_1_2();
+extern void ACT_2_1_2();
+
+extern void GUI_2_1_3();
+extern void ACT_2_1_3();
+
+extern void GUI_2_2_1();
+extern void ACT_2_2_1();
+
+extern void GUI_2_2_2();
+extern void ACT_2_2_2();
+
+extern void GUI_2_2_3();
+extern void ACT_2_2_3();
+
+extern void GUI_2_2_4();
+extern void ACT_2_2_4();
+
+extern void GUI_2_2_5();
+extern void ACT_2_2_5();
+
+extern void GUI_2_2_6();
+extern void ACT_2_2_6();
+
+extern void GUI_2_3_1();
+extern void ACT_2_3_1();
+
+extern void GUI_2_3_2();
+extern void ACT_2_3_2();
+
+extern void GUI_2_3_3();
+extern void ACT_2_3_3();
+
+extern void GUI_2_3_4();
+extern void ACT_2_3_4();
+
+
+#endif
