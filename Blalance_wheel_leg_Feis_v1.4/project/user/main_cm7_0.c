@@ -3,6 +3,12 @@
 
 #include "zf_common_headfile.h"
 
+// 外部全局PWM参数变量
+extern int16 pwm_ph1;
+extern int16 pwm_ph2;
+extern int16 pwm_ph3;
+extern int16 pwm_ph4;
+
 uint16 jump_test = 1;
 
 int main(void)
@@ -38,8 +44,19 @@ int main(void)
     // printf("\r\npitch=%f, roll=%f", euler_angle.pitch,  euler_angle.roll);
      //printf("\r\npitch=%f, roll=%f, speed=%d\r\n", euler_angle.pitch, euler_angle.roll,((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data)/2));
     //printf("\r\npwm_ph4=%d, pwm_ph1=%d\r\n", pwm_4, pwm_1);
-     SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,(float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,(float)Motor_Switch);
+     // 计算四个舵机的PWM输出值
+    
      
+     // 发送数据到VOFA，包括原有的6个数据和4个舵机PWM值
+    //  SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed, 
+    //                      (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data, 
+    //                      (float)Motor_Switch); 
+     int16 servo1_value = SERVO1_MID + pwm_ph1;
+     int16 servo2_value = SERVO2_MID - pwm_ph2;
+     int16 servo3_value = SERVO3_MID - pwm_ph3;
+     int16 servo4_value = SERVO4_MID + pwm_ph4;
+     SendDataStreamToVOFA(4, (float)servo1_value, (float)servo2_value, (float)servo3_value, (float)servo4_value);
+   
 
      //printf("left speed:%d, right speed:%d，car_speed:%f\r\n", motor_value.receive_left_speed_data, motor_value.receive_right_speed_data,car_speed);
 

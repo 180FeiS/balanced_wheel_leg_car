@@ -5,6 +5,12 @@
 uint16 pwm_4 = 0;
 uint16 pwm_1 = 0;
 
+// 全局PWM参数变量
+int16 pwm_ph1 = 0;
+int16 pwm_ph2 = 0;
+int16 pwm_ph3 = 0;
+int16 pwm_ph4 = 0;
+
 // LQR的增益矩阵K, 修改参数使用matlab
 const float LQR_K[8] = {
     // -0.0281 ,  -0.8067 ,  -1.6867 ,  -0.1745,
@@ -267,6 +273,7 @@ void leg_control(void)
     left_leg_control(leg_long - leg_high_integral, 0);
     right_leg_control(leg_long + leg_high_integral, 0);
 
+
     // 控制跳跃
 }
 
@@ -390,21 +397,18 @@ void dead_compensate(int16 *input_L, int16 *input_R)
 -------------------------------------------------------------------------------------------------------------------*/
 void left_leg_control(float p, float angle)
 {
-    int16 pwm_ph1, pwm_ph4;
-
-    servo_control_table(p, -angle, &pwm_ph1, &pwm_ph4);
-
-    if (10000 == pwm_ph4 || 10000 == pwm_ph1)
+    // 调用五连杆姿态解算函数
+    //servo_control_table(p, -angle, &pwm_ph4, &pwm_ph3);
+    
+    // 边界检查，确保PWM值在合理范围内
+      if(10000 == pwm_ph3 || 10000 == pwm_ph4)
     {
-        ASSERT(10000 == pwm_ph4 || 10000 == pwm_ph1);
+        ASSERT(10000 == pwm_ph4 || 10000 == pwm_ph3);   
         return;
     }
 
-    pwm_set_duty(SERVO_1, SERVO1_MID + pwm_ph4);
-    pwm_set_duty(SERVO_2, SERVO2_MID - pwm_ph1);
-
-    pwm_4 = pwm_ph4; // 测试中值
-    pwm_1 = pwm_ph1;
+    pwm_set_duty(SERVO_3, SERVO3_MID - pwm_ph3);
+    pwm_set_duty(SERVO_4, SERVO4_MID + pwm_ph4);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -417,16 +421,19 @@ void left_leg_control(float p, float angle)
 -------------------------------------------------------------------------------------------------------------------*/
 void right_leg_control(float p, float angle)
 {
-    int16 pwm_ph1, pwm_ph4;
-
-    servo_control_table(p, -angle, &pwm_ph1, &pwm_ph4);
-
-    if (10000 == pwm_ph4 || 10000 == pwm_ph1)
+    // 调用五连杆姿态解算函数
+    //servo_control_table(p, -angle, &pwm_ph1, &pwm_ph2);
+    
+    // 边界检查，确保PWM值在合理范围内
+   if(10000 == pwm_ph1 || 10000 == pwm_ph2)
     {
-        ASSERT(10000 == pwm_ph4 || 10000 == pwm_ph1);
+        ASSERT(10000 == pwm_ph2 || 10000 == pwm_ph1);
         return;
     }
 
-    pwm_set_duty(SERVO_3, SERVO3_MID - pwm_ph4);
-    pwm_set_duty(SERVO_4, SERVO4_MID + pwm_ph1);
+    pwm_set_duty(SERVO_1, SERVO1_MID + pwm_ph1);
+    pwm_set_duty(SERVO_2, SERVO2_MID - pwm_ph2);
+
+    pwm_4 = pwm_ph2; // 测试中值
+    pwm_1 = pwm_ph1;
 }

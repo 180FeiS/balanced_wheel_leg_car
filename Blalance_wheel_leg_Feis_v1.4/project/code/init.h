@@ -6,18 +6,23 @@
 /*********************************************************************参数*********************************************************************/
 #define BUZZER_PIN              (P19_4)                 //定义主板上蜂鸣器对应引脚
 
-#define SERVO_1                 (TCPWM_CH30_P10_2)      // 定义主板上舵机1对应引脚 左前 TCPWM_CH17_P00_1
-#define SERVO_2                 (TCPWM_CH31_P10_3)      // 定义主板上舵机2对应引脚 左后 TCPWM_CH18_P00_0
-#define SERVO_3                 (TCPWM_CH58_P17_3)      // 定义主板上舵机3对应引脚 右前 TCPWM_CH13_P00_3
-#define SERVO_4                 (TCPWM_CH57_P17_4)      // 定义主板上舵机4对应引脚 右后 TCPWM_CH14_P00_2       
+#define SERVO_1                 (TCPWM_CH58_P17_3)      // 定义主板上舵机1对应引脚 左前 TCPWM_CH17_P00_1
+#define SERVO_2                 (TCPWM_CH57_P17_4)      // 定义主板上舵机2对应引脚 左后 TCPWM_CH18_P00_0
+#define SERVO_3                 (TCPWM_CH31_P10_3)      // 定义主板上舵机3对应引脚 右前 TCPWM_CH13_P00_3
+#define SERVO_4                 (TCPWM_CH30_P10_2)      // 定义主板上舵机4对应引脚 右后 TCPWM_CH14_P00_2  
+
+// #define SERVO_1                 (TCPWM_CH30_P10_2)      // 定义主板上舵机1对应引脚 左前 TCPWM_CH17_P00_1
+// #define SERVO_2                 (TCPWM_CH31_P10_3)      // 定义主板上舵机2对应引脚 左后 TCPWM_CH18_P00_0
+// #define SERVO_3                 (TCPWM_CH58_P17_3)      // 定义主板上舵机3对应引脚 右前 TCPWM_CH13_P00_3
+// #define SERVO_4                 (TCPWM_CH57_P17_4)      // 定义主板上舵机4对应引脚 右后 TCPWM_CH14_P00_2       
                                                         // 引脚定义错误，现象也会错误
 #define SERVO_FREQ              (300)                   //定义主板上舵机频率
 #define SERVO_LEFT              (55)                    //左极限值 待测
 #define SERVO_RIGHT             (170)                   //右极限值 待测
-#define SERVO1_MID              (4457)//(4633)          //舵机1中值     左下 待测
-#define SERVO2_MID              (4509)//(4333)          //舵机2中值     左上 待测
-#define SERVO3_MID              (4367)//(5588)          //舵机3中值     右上 待测
-#define SERVO4_MID              (4533)//(3300)          //舵机4中值     右下 待测
+#define SERVO1_MID              (4451)//(4457)          //舵机1中值     右下 待测
+#define SERVO2_MID              (4512)//(4509)          //舵机2中值     右上 待测
+#define SERVO3_MID              (4963)//(4367)          //舵机3中值     左上 待测
+#define SERVO4_MID              (4124)//(4533)          //舵机4中值     左下 待测
 
 
 

@@ -1,19 +1,26 @@
 #include "vofa.h"
+#include "init.h"
 
 const uint8_t vofa_justfloat_frame_tail[4] = {0x00, 0x00, 0x80, 0x7f};
-#define Wired_Mode 1 // 0-ÓĞÏß´®¿Ú    1-ÎŞÏß´®¿Ú
+#define Wired_Mode 1 // 0-æ— çº¿æ¨¡å¼    1-æœ‰çº¿æ¨¡å¼
 float ReadBuf_Pid = 0;
 
+// å¤–éƒ¨å…¨å±€PWMå‚æ•°å˜é‡
+extern int16 pwm_ph1;
+extern int16 pwm_ph2;
+extern int16 pwm_ph3;
+extern int16 pwm_ph4;
+
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êı¼ò½é     ½«Ò»×éÊı¾İÒÔjustfloat¸ñÊ½·¢ËÍµ½VOFA
-// ²ÎÊıËµÃ÷     uart_index_enum * UARTx     ´®¿ÚºÅ
-// ²ÎÊıËµÃ÷     uint32_t Count              ·¢ËÍÊı¾İ¸öÊı
-// ²ÎÊıËµÃ÷     float Data                  ·¢ËÍÊı¾İ
-// ·µ»Ø²ÎÊı     void
-// Ê¹ÓÃÊ¾Àı     SendDataStreamToVOFA(1,Car_AimSpeed);
+// å‡½æ•°ç®€ä»‹     ä»¥ä¸€ä¸ªæ•°æ®justfloatæ ¼å¼å‘é€åˆ°VOFA
+// å‚æ•°è¯´æ˜     uart_index_enum * UARTx     ä¸²å£å·
+// å‚æ•°è¯´æ˜     uint32_t Count              å‘é€æ•°æ®ä¸ªæ•°
+// å‚æ•°è¯´æ˜     float Data                  å‘é€æ•°æ®
+// è¿”å›å‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     SendDataStreamToVOFA(1,Car_AimSpeed);
 //             SendDataStreamToVOFA(3,data1,data2,data3);
-// ±¸×¢ĞÅÏ¢     V1.0.0  µ÷ÓÃÊ±´«ÈëµÄÊı¾İÒªÇ¿×ª³ÉfloatÀàĞÍ
-//             V1.0.1  ÓÅÏÈĞ´ºÃÓĞÏß´®¿Úµ÷ÊÔº¯Êı         2024Äê7ÔÂ26ÈÕ
+// å¤‡æ³¨ä¿¡æ¯     V1.0.0  å‘é€æ—¶æ•°æ®éœ€è¦å¼ºåˆ¶è½¬æ¢floatç±»å‹
+//             V1.0.1  ä¿®å¤å†™å…¥æœ‰çº¿ä¸²å£çš„bug             2024å¹´7æœˆ26æ—¥
 //-------------------------------------------------------------------------------------------------------------------
 void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
 {
@@ -44,21 +51,31 @@ void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
     va_end(Args);
 }
 
-uint32 WirelessUart_ReadBuff_Count = 0;     // ¶ÁÈ¡ÎŞÏß´®¿ÚÊı¾İ³¤¶È
-uint8 WirelessUart_ReadBuff_Data[64] = {0}; // ¶ÁÈ¡ÎŞÏß´®¿Ú»º³åÊı×é
-uint8 Menu_command = 0;                     // ²Ëµ¥½øĞĞÖ¸Áî
+uint32 WirelessUart_ReadBuff_Count = 0;     // è¯»å–æ— çº¿ä¸²å£æ¥æ”¶æ•°æ®é•¿åº¦
+uint8 WirelessUart_ReadBuff_Data[64] = {0}; // è¯»å–æ— çº¿ä¸²å£æ¥æ”¶æ•°æ®
+uint8 Menu_command = 0;                     // èœå•æ§åˆ¶æŒ‡ä»¤
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êı¼ò½é     ´ÓÉÏÎ»»ú½ÓÊÜÊı¾İ
-// ²ÎÊıËµÃ÷     void
-// ·µ»Ø²ÎÊı     void
-// Ê¹ÓÃÊ¾Àı     ReadDataFromPc(WirelessUart_ReadBuff_Data,WirelessUart_ReadBuff_Count);
-// ±¸×¢ĞÅÏ¢     V1.0.0  µ÷ÓÃÊ±´«ÈëµÄÊı¾İÒªÇ¿×ª³ÉfloatÀàĞÍ
-//             V1.0.1  ÓÅÏÈĞ´ºÃÓĞÏß´®¿Úµ÷ÊÔº¯Êı         2024Äê7ÔÂ26ÈÕ
-//             V1.1.2  pid´«²Î¹¦ÄÜÍêÉÆ£¬ĞèÒª¼ÓÇ°×ºa£¬¿ÉÈÎÒâ¸ü¸Ä 2024Äê7ÔÂ31ÈÕ
+// å‡½æ•°ç®€ä»‹     ä»ç”µè„‘æ¥æ”¶æ•°æ®
+// å‚æ•°è¯´æ˜     void
+// è¿”å›å‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     ReadDataFromPc(WirelessUart_ReadBuff_Data,WirelessUart_ReadBuff_Count);
+// å¤‡æ³¨ä¿¡æ¯     V1.0.0  å‘é€æ—¶æ•°æ®éœ€è¦å¼ºåˆ¶è½¬æ¢floatç±»å‹
+//             V1.0.1  ä¿®å¤å†™å…¥æœ‰çº¿ä¸²å£çš„bug             2024å¹´7æœˆ26æ—¥
+//             V1.1.2  pidå‚æ•°è°ƒèŠ‚åŠŸèƒ½ï¼Œéœ€è¦åŠ å‰ç¼€aè¿›è¡Œè°ƒèŠ‚ 2024å¹´7æœˆ31æ—¥
+//             V1.1.3  åˆ©ç”¨ä¸²å£æ§åˆ¶pwmå‚æ•° 2026å¹´3æœˆ7æ—¥
+//                 p1+ ï¼šå·¦ä¸Šå¢åŠ 10
+//                 p1- ï¼šå·¦ä¸Šå‡å°‘10
+//                 p2+ ï¼šå·¦ä¸‹å¢åŠ 10
+//                 p2- ï¼šå·¦ä¸‹å‡å°‘10
+//                 p3+ ï¼šå³ä¸Šå¢åŠ 10
+//                 p3- ï¼šå³ä¸Šå‡å°‘10
+//                 p4+ ï¼šå³ä¸‹å¢åŠ 10
+//                 p4- ï¼šå³ä¸‹å‡å°‘10 
+//                 ä½¿ç”¨å‰éœ€è¦æ³¨é‡Šcontrol.cä¸­right_leg_controlå’Œleft_leg_controlçš„servo_control_tableå‡½æ•°.
 //-------------------------------------------------------------------------------------------------------------------
 void ReadDataFromPc()
 {
-// ÎŞÏß´®¿Ú¶ÁÈ¡Êı¾İ
+// æœ‰çº¿æ¨¡å¼ä¸‹è¯»å–æ•°æ®
 #if Wired_Mode
     WirelessUart_ReadBuff_Count = wireless_uart_read_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
 
@@ -75,12 +92,50 @@ void ReadDataFromPc()
         {
             //Car_AimSpeed = (int16)atof(&WirelessUart_ReadBuff_Data[1]);
         }
+        
+        // PWMå‚æ•°æ§åˆ¶æŒ‡ä»¤è§£æ
+        if (WirelessUart_ReadBuff_Count >= 3) {
+            if (WirelessUart_ReadBuff_Data[0] == 'p') {
+                switch (WirelessUart_ReadBuff_Data[1]) {
+                    case '1':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph1 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph1 -= 10;
+                        }
+                        break;
+                    case '2':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph2 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph2 -= 10;
+                        }
+                        break;
+                    case '3':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph3 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph3 -= 10;
+                        }
+                        break;
+                    case '4':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph4 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph4 -= 10;
+                        }
+                        break;
+                }
+                
+                // æŒ‡ä»¤å¤„ç†å®Œæˆï¼ŒPWMå‚æ•°å·²æ›´æ–°
+            }
+        }
 
-        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // Çå¿ÕÏûÏ¢Çø
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // æ¸…é™¤æ¥æ”¶ç¼“å­˜
         WirelessUart_ReadBuff_Count = 0;
     }
 
-#else // ´ÓDebug´®¿ÚÖĞ¶ÁÈ¡Êı¾İ
+#else // åœ¨Debugæ¨¡å¼ä¸‹è¯»å–æ•°æ®
     WirelessUart_ReadBuff_Count = debug_read_ring_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
     if (WirelessUart_ReadBuff_Count)
     {
@@ -92,17 +147,56 @@ void ReadDataFromPc()
             ReadBuf_Pid = atof(&WirelessUart_ReadBuff_Data[0]);
             //Flash_Read_State = FLASH_RUNNING;
         }
-        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // Çå¿ÕÏûÏ¢Çø
+        
+        // PWMå‚æ•°æ§åˆ¶æŒ‡ä»¤è§£æ
+        if (WirelessUart_ReadBuff_Count >= 3) {
+            if (WirelessUart_ReadBuff_Data[0] == 'p') {
+                switch (WirelessUart_ReadBuff_Data[1]) {
+                    case '1':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph1 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph1 -= 10;
+                        }
+                        break;
+                    case '2':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph2 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph2 -= 10;
+                        }
+                        break;
+                    case '3':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph3 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph3 -= 10;
+                        }
+                        break;
+                    case '4':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph4 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph4 -= 10;
+                        }
+                        break;
+                }
+                
+                // æŒ‡ä»¤å¤„ç†å®Œæˆï¼ŒPWMå‚æ•°å·²æ›´æ–°
+            }
+        }
+        
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // æ¸…é™¤æ¥æ”¶ç¼“å­˜
         WirelessUart_ReadBuff_Count = 0;
     }
 #endif
 }
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êı¼ò½é     ·¢ËÍÊı¾İ
-// ²ÎÊıËµÃ÷     void
-// ·µ»Ø²ÎÊı     void
-// Ê¹ÓÃÊ¾Àı     SendDataToVofa();
-// ±¸×¢ĞÅÏ¢     V1.0.0
+// å‡½æ•°ç®€ä»‹     å‘é€æ•°æ®
+// å‚æ•°è¯´æ˜     void
+// è¿”å›å‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     SendDataToVofa();
+// å¤‡æ³¨ä¿¡æ¯     V1.0.0
 //-------------------------------------------------------------------------------------------------------------------
 void SendDataToVofa()
 {
