@@ -4,7 +4,7 @@ small_device_value_struct motor_value; // 定义通讯参数结构体
 
 int16 Left_Motor_Pwm = 0;  // 左电机输出pwm
 int16 Right_Motor_Pwm = 0; // 右电机输出pwm
-uint8 Motor_Switch = 0;    // 电机开关
+uint8 Motor_Switch = 1;    // 电机开关
 uint8 Motor_OpenFlag = 0;  // 电机上电标志位
 uint8 Left_Motor_Speed = 0; // 左电机速度
 uint8 Right_Motor_Speed = 0; // 右电机速度

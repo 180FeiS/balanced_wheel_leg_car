@@ -1,4 +1,4 @@
-#include "zf_common_headfile.h"
+  #include "zf_common_headfile.h"
 
 
 
@@ -41,9 +41,9 @@ const float Rmoto_K = 4980;
 // PID初始化
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
-float angle_kd = 85.5;    // 角度环kd
-float pitch_mid = -8.615; // pitch机械中值
-float roll_mid = -1.969;  // roll机械中值
+float angle_kd = 0;    // 角度环kd
+float pitch_mid = -10.5; // pitch机械中值
+float roll_mid = -1.369;  // roll机械中值
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -55,7 +55,7 @@ float dt_pid_turn_angle = 0.003f;
 float dt_pid_turn_gyro = 0.001f;
 
 // 初始腿高
-float leg_long = 4.5f;
+float leg_long = 5.5f;
 // float leg_high_integral = 0;
 
 // 跳跃标志位
@@ -80,16 +80,16 @@ float KDD = 0; // 0.2f
 void pid_ctrl_Init(void)
 {
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
-    pid_init(&leg_hight, 0.02, 0, 0, 0.025, 0, 0, 0, 10, Position_pid);
+    //pid_init(&leg_hight, 0.02, 0, 0, 0.025, 0, 0, 0, 10, Position_pid);
     // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn_gyro, 2.087, 15, 0, 0.001, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
-    // pid_init(&gyro, 0.7423888, 9.1845288, 0, 0.002, 0, 0, 0, 10000, Position_pid);
-    // pid_init(&angle, 308.195, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-    // pid_init(&speed, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
-
-    pid_set_target(&leg_hight, roll_mid);
-    // pid_set_target(&speed, 0);
+     pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
+     pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
+     pid_init(&speed, 0.0, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);
+    //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
+    //pid_set_target(&leg_hight, roll_mid);
+     pid_set_target(&speed, 0);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -208,7 +208,7 @@ void pid_ctrl_Run(void)
 
     if (0 == timer_flag % 5) // 角度环
     {
-        pid_set_target(&angle, pitch_mid - speed.out);
+        pid_set_target(&angle, pitch_mid);  //pitch_mid - speed.out
         pid_get_observation(&angle, euler_angle.pitch);
 
         pid_set_dt(&angle, dt_pid_angle);
@@ -222,22 +222,31 @@ void pid_ctrl_Run(void)
     pid_set_dt(&gyro, dt_pid_gyro);
     pid_run(&gyro);
 
-    // 转向环
-    //    pid_set_target(&turn, mid_point);
-    pid_get_observation(&turn, imu660ra_gyro_transition(imu660ra_gyro_z));
-    pid_set_dt(&turn, dt_pid_turn);
-    pid_run(&turn);
+    // // 转向环
+    // //    pid_set_target(&turn, mid_point);
+    // pid_get_observation(&turn, imu660ra_gyro_transition(imu660ra_gyro_z));
+    // pid_set_dt(&turn, dt_pid_turn);
+    // pid_run(&turn);
 
-    if (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data > 500 || -motor_value.receive_left_speed_data + motor_value.receive_right_speed_data < -500)
+    
+
+    if(Motor_Switch)
     {
-        small_driver_set_duty(0, 0);
+        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 1500 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -1500)
+        {
+            Motor_Switch = 0;
+        }
+        else
+        {
+            small_driver_set_duty((int16) - (gyro.out + turn.out), (int16)(gyro.out - turn.out));
+        }
     }
     else
     {
-        small_driver_set_duty((int16) - (gyro.out + turn.out), (int16)(gyro.out - turn.out));
+        small_driver_set_duty(0, 0);
     }
 
-    small_driver_set_duty((int16) - (gyro.out + turn.out), (int16)(gyro.out - turn.out));
+    
     timer_flag = (timer_flag + 1) % 20;
 }
 
@@ -398,7 +407,7 @@ void dead_compensate(int16 *input_L, int16 *input_R)
 void left_leg_control(float p, float angle)
 {
     // 调用五连杆姿态解算函数
-    //servo_control_table(p, -angle, &pwm_ph4, &pwm_ph3);
+    servo_control_table(p, -angle, &pwm_ph4, &pwm_ph3);
     
     // 边界检查，确保PWM值在合理范围内
       if(10000 == pwm_ph3 || 10000 == pwm_ph4)
@@ -422,7 +431,7 @@ void left_leg_control(float p, float angle)
 void right_leg_control(float p, float angle)
 {
     // 调用五连杆姿态解算函数
-    //servo_control_table(p, -angle, &pwm_ph1, &pwm_ph2);
+    servo_control_table(p, -angle, &pwm_ph1, &pwm_ph2);
     
     // 边界检查，确保PWM值在合理范围内
    if(10000 == pwm_ph1 || 10000 == pwm_ph2)

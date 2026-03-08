@@ -1,0 +1,35 @@
+﻿# ========== IAR 构建输出 ==========
+project/iar/Debug_m7_0/
+project/iar/**/Obj/
+project/iar/**/List/
+project/iar/**/Exe/
+project/iar/**/BrowseInfo/
+*.o
+*.d
+*.dep
+*.pbi
+*.pbi.dep
+*.ninja_log
+build.ninja
+*.build_cache
+*.hex
+*.map
+*.elf
+*.bin
+
+# ========== IAR 工作区/调试生成文件 ==========
+project/iar/settings/*.wsdt
+project/iar/project_config/settings/*.dnx
+project/iar/project_config/settings/*.crun
+project/iar/project_config/settings/*.dbgdt
+project/iar/project_config/settings/*.cspy.*
+project/iar/project_config/settings/*.xcl
+
+# ========== 第三方/工具文档（不需要被索引）==========
+.trae/
+
+# ========== 通用 ==========
+.git/
+*.log
+.DS_Store
+Thumbs.db

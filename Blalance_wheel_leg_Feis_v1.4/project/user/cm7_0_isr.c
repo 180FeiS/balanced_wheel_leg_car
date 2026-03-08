@@ -44,7 +44,8 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     pit_isr_flag_clear(PIT_CH0); // 1ms
     EKF_UpData();
     EKF_V_UPData();
-    LQR_control(set_speed, pitch_mid);//实测放到10ms的效果很差，起立困难，响应速度越快越好
+    //LQR_control(set_speed, pitch_mid);//实测放到10ms的效果很差，起立困难，响应速度越快越好
+    pid_ctrl_Run();
     Left_Motor_Pwm = -motor_value.receive_left_speed_data;
     Right_Motor_Pwm = motor_value.receive_right_speed_data;
 }

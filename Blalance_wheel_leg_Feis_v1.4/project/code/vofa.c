@@ -2,7 +2,7 @@
 #include "init.h"
 
 const uint8_t vofa_justfloat_frame_tail[4] = {0x00, 0x00, 0x80, 0x7f};
-#define Wired_Mode 1 // 0-无线模式    1-有线模式
+#define Wired_Mode 1 // 0-有线模式    1-无线模式
 float ReadBuf_Pid = 0;
 
 // 外部全局PWM参数变量

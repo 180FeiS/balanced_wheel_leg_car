@@ -1,0 +1,51 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc"
+        },
+        {
+            "name": "CYT4BB (IAR)",
+            "includePath": [
+                "${workspaceFolder}/libraries/sdk/common/hdr",
+                "${workspaceFolder}/libraries/sdk/common/hdr/cmsis/include",
+                "${workspaceFolder}/libraries/sdk/common/src/drivers",
+                "${workspaceFolder}/libraries/sdk/common/src/mw",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/hdr",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/hdr/ip",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/hdr/mcureg",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/src",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/src/interrupts",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/src/mw",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/src/drivers",
+                "${workspaceFolder}/libraries/sdk/tviibh4m/src/system",
+                "${workspaceFolder}/libraries/sdk/common/hdr/cmsis/dsp",
+                "${workspaceFolder}/libraries/zf_common",
+                "${workspaceFolder}/libraries/zf_driver",
+                "${workspaceFolder}/libraries/zf_device",
+                "${workspaceFolder}/libraries/zf_components",
+                "${workspaceFolder}/project/user",
+                "${workspaceFolder}/project/code"
+            ],
+            "defines": [
+                "ARM_MATH_CM7",
+                "__FPU_PRESENT=1"
+            ],
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ],
+    "version": 4
+}
