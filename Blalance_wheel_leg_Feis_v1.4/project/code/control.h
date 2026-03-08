@@ -31,6 +31,7 @@ extern float dt_pid_turn_gyro;
 extern float set_speed;                   //腿高积分
 extern uint8 jump_flag;                   //跳跃标志位
 extern uint8 speed_flag;                  //速度标志位
+extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 
 #define L_dead_zone_correct           (140)       //左电机正死区
 #define L_dead_zone_negative          (-148)      //左电机负死区

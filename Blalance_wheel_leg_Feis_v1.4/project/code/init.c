@@ -76,7 +76,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
     pit_ms_init(PIT_CH0, 1);
     pit_ms_init(PIT_CH1, 5);
     pit_ms_init(PIT_CH2, 10);
-    pit_ms_init(PIT_CH10, 25);
+    pit_ms_init(PIT_CH10, 20);
     pit_ms_init(PIT_CH11, 50);
 
   }

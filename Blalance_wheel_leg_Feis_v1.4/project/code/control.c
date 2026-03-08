@@ -63,12 +63,25 @@ float set_speed = 0;
 uint8 jump_flag = 0;
 uint8 speed_flag = 0;
 
+// 速度环输出，供腿部倾斜角使用
+float speed_loop_leg_tilt = 0.0f;
+
 // 转向环参数
 float turn_out = 0;
 float KP = 5;  // 25.24f;
 float KPP = 0; // 0.3805;
 float KD = 0;  // 0.2f;
 float KDD = 0; // 0.2f
+
+// 舵机步进控制参数（与vmc P/A范围一致，pit0_ch10 20ms周期）
+#define LEG_STEP_P_MAX      0.2f   // 每20ms腿高最大变化
+#define LEG_STEP_ANGLE_MAX  2.0f   // 每20ms角度最大变化(度)
+#define LEG_P_MIN           2.4f
+#define LEG_P_MAX          14.5f
+#define LEG_SERVO_SPEED_TILT_EN  1   // 置0关闭速度环→舵机
+#define LEG_TILT_K        0.02f   // 缩放系数
+#define LEG_TILT_MAX      20.0f   // 限幅±20°
+#define LEG_RIGHT_ANGLE_INVERT  1    // 右腿俯仰取反(左右镜像)，若仍反则改0并对左腿取反
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     PID控制初始化
@@ -86,7 +99,7 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-     pid_init(&speed, 0.0, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);
+     pid_init(&speed, 3.0, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     //pid_set_target(&leg_hight, roll_mid);
      pid_set_target(&speed, 0);
@@ -204,6 +217,7 @@ void pid_ctrl_Run(void)
 
         pid_set_dt(&speed, dt_pid_speed);
         pid_run(&speed);
+        speed_loop_leg_tilt = speed.out;
     }
 
     if (0 == timer_flag % 5) // 角度环
@@ -251,6 +265,73 @@ void pid_ctrl_Run(void)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     舵机步进更新，根据jump_flag步进或直通
+// 备注信息     leg_control内部调用
+-------------------------------------------------------------------------------------------------------------------*/
+static void leg_servo_step_update(float desired_left_p, float desired_right_p, float desired_angle,
+                                  float *out_left_p, float *out_right_p,
+                                  float *out_left_angle, float *out_right_angle)
+{
+    static float current_left_p = 0;
+    static float current_right_p = 0;
+    static float current_left_angle = 0;
+    static float current_right_angle = 0;
+    static uint8 first_run = 1;
+
+    if (first_run)
+    {
+        current_left_p = desired_left_p;
+        current_right_p = desired_right_p;
+        current_left_angle = desired_angle;
+        current_right_angle = desired_angle;
+        first_run = 0;
+    }
+
+    if (jump_flag != 0)
+    {
+        current_left_p = desired_left_p;
+        current_right_p = desired_right_p;
+        current_left_angle = desired_angle;
+        current_right_angle = desired_angle;
+    }
+    else
+    {
+        float delta;
+        delta = desired_left_p - current_left_p;
+        current_left_p += clip2(delta, LEG_STEP_P_MAX);
+        delta = desired_right_p - current_right_p;
+        current_right_p += clip2(delta, LEG_STEP_P_MAX);
+        delta = desired_angle - current_left_angle;
+        current_left_angle += clip2(delta, LEG_STEP_ANGLE_MAX);
+        delta = desired_angle - current_right_angle;
+        current_right_angle += clip2(delta, LEG_STEP_ANGLE_MAX);
+    }
+
+    current_left_p = clip(current_left_p, LEG_P_MIN, LEG_P_MAX);
+    current_right_p = clip(current_right_p, LEG_P_MIN, LEG_P_MAX);
+
+    *out_left_p = current_left_p;
+    *out_right_p = current_right_p;
+    *out_left_angle = current_left_angle;
+    *out_right_angle = current_right_angle;
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     获取期望腿部倾斜角（速度环输出映射）
+// 备注信息     LEG_SERVO_SPEED_TILT_EN=0时恒返回0
+-------------------------------------------------------------------------------------------------------------------*/
+static float leg_servo_get_desired_tilt_angle(void)
+{
+#if LEG_SERVO_SPEED_TILT_EN
+    // 车向前→腿后倾，取反使极性正确
+    float a = -LEG_TILT_K * speed_loop_leg_tilt;
+    return clip(a, -LEG_TILT_MAX, LEG_TILT_MAX);
+#else
+    return 0.0f;
+#endif
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     控制腿高
 // 参数说明     null
 // 返回参数     null
@@ -259,31 +340,30 @@ void pid_ctrl_Run(void)
 -------------------------------------------------------------------------------------------------------------------*/
 void leg_control(void)
 {
-    // static float leg_long = 5.5f;//4.4f
-    static uint16 leg_time = 0;
-    // static uint16 flag = 40 * 2;    //2s
     static float leg_high_integral = 0;
 
     pid_get_observation(&leg_hight, euler_angle.roll);
     pid_set_dt(&leg_hight, dt_leg);
     pid_run(&leg_hight);
 
-    //    if(flag && ABS(pitch_mid - euler_angle.pitch) < 5.0f && ABS(roll_mid - euler_angle.roll) < 1.5f)
-    //    {
-    //        flag--;
-    //        leg_high_integral = 0;
-    //    }
-    //    else
-    //    {
-    //        if(!flag)leg_high_integral += leg_hight.out;
-    //    }
-
     leg_high_integral += leg_hight.out;
-    left_leg_control(leg_long - leg_high_integral, 0);
-    right_leg_control(leg_long + leg_high_integral, 0);
 
+    float desired_left_p = leg_long - leg_high_integral;
+    float desired_right_p = leg_long + leg_high_integral;
+    float desired_angle = leg_servo_get_desired_tilt_angle();
 
-    // 控制跳跃
+    float out_left_p, out_right_p, out_left_angle, out_right_angle;
+    leg_servo_step_update(desired_left_p, desired_right_p, desired_angle,
+                          &out_left_p, &out_right_p, &out_left_angle, &out_right_angle);
+
+    // 俯仰倾斜时左右腿镜像，需对一侧取反使左右同向
+#if LEG_RIGHT_ANGLE_INVERT
+    left_leg_control(out_left_p, out_left_angle);
+    right_leg_control(out_right_p, -out_right_angle);
+#else
+    left_leg_control(out_left_p, -out_left_angle);
+    right_leg_control(out_right_p, out_right_angle);
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
