@@ -379,7 +379,7 @@ void jump_set_step(int step_num)
     {
     case 0:
     {
-        leg_long = 2.4;
+        leg_long = 5.0;
     }
     break;
 
@@ -397,7 +397,7 @@ void jump_set_step(int step_num)
 
     case 3:
     {
-        leg_long = 4.5;
+        leg_long =5.5;
     }
     break;
 
