@@ -42,7 +42,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -10.5; // pitch机械中值
+float pitch_mid = -10.2; // pitch机械中值
 float roll_mid = -1.369;  // roll机械中值
 
 // 各个环节PID的运算周期
@@ -61,7 +61,10 @@ float leg_long = 5.5f;
 // 跳跃标志位
 float set_speed = 0;
 uint8 jump_flag = 0;
+uint8 jump_step_index = 0;  // 当前跳跃步 0收腿 1起跳 2缓冲 3收腿
+
 uint8 speed_flag = 0;
+
 
 // 速度环输出，供腿部倾斜角使用
 float speed_loop_leg_tilt = 0.0f;
@@ -82,6 +85,7 @@ float KDD = 0; // 0.2f
 #define LEG_TILT_K        0.02f   // 缩放系数
 #define LEG_TILT_MAX      20.0f   // 限幅±20°
 #define LEG_RIGHT_ANGLE_INVERT  1    // 右腿俯仰取反(左右镜像)，若仍反则改0并对左腿取反
+#define JUMP_PID_SCALE          0.5f // 跳跃时angle/speed的kp缩放，维持稳定
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     PID控制初始化
@@ -209,6 +213,8 @@ void pid_ctrl_Run(void)
     static uint16 pid_time_turn = 0;
     static uint32 timer_flag = 0;
     static float Angle_Out = 0;
+    static float angle_kp_normal = 500.0f;
+    static float speed_kp_normal = 0.02f;
     imu660ra_get_gyro();
 
     if (0 == timer_flag) // 速度环
@@ -287,14 +293,15 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
         first_run = 0;
     }
 
-    if (jump_flag != 0)
-    {
-        current_left_p = desired_left_p;
-        current_right_p = desired_right_p;
-        current_left_angle = desired_angle;
-        current_right_angle = desired_angle;
-    }
-    else
+    /* use_step: 1=步进逼近, 0=直通。非跳跃或缓冲(step2)用步进，其余跳跃阶段直通 */
+    uint8 use_step = 0;
+    if (jump_flag == 0)
+        use_step = 1;    /* 非跳跃：步进 */
+    else if (jump_step_index == 2)
+        use_step = 1;    /* 跳跃缓冲(step2)：步进，实现缓慢收腿 */
+    /* else: 跳跃收腿/起跳/落地收腿(step0/1/3)：直通 */
+
+    if (use_step)
     {
         float delta;
         delta = desired_left_p - current_left_p;
@@ -306,7 +313,15 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
         delta = desired_angle - current_right_angle;
         current_right_angle += clip2(delta, LEG_STEP_ANGLE_MAX);
     }
+    else
+    {
+        current_left_p = desired_left_p;
+        current_right_p = desired_right_p;
+        current_left_angle = desired_angle;
+        current_right_angle = desired_angle;
+    }
 
+    /* 腿长/倾角限幅后输出 */
     current_left_p = clip(current_left_p, LEG_P_MIN, LEG_P_MAX);
     current_right_p = clip(current_right_p, LEG_P_MIN, LEG_P_MAX);
 
@@ -427,6 +442,8 @@ void jump_control(void)
                 if (jump_time >= jump_control_config[i].min && jump_time <= jump_control_config[i].max)
                 {
                     jump_control_config[i].handler(i);
+                    jump_step_index = (uint8)i; // 更新当前跳跃步
+
                     // ips200_show_int(0,0,i,3);
                     break;
                 }
@@ -436,6 +453,7 @@ void jump_control(void)
         {
             jump_flag = 0;
             jump_time = 0;
+            jump_step_index = 0; // 重置当前跳跃步
         }
     }
 }
