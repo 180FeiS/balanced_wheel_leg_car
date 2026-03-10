@@ -83,6 +83,12 @@ float KDD = 0; // 0.2f
 #define LEG_TILT_MAX      20.0f   // 限幅±20°
 #define LEG_RIGHT_ANGLE_INVERT  1    // 右腿俯仰取反(左右镜像)，若仍反则改0并对左腿取反
 
+// 导航相关全局变量
+double victual_point_lat[] = {0};           //虚拟点纬度数组
+double victual_point_lon[] = {0};           //虚拟点经度数组
+uint8 Temp_num = 0;                       //当前目标点索引
+double Angle_Z_Quaternions = 0;           //当前航向角（四元数计算）
+
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     PID控制初始化
 // 参数说明     null
@@ -567,6 +573,48 @@ double get_fang_wei_jiao(double X_now, double Y_now, double X_next, double Y_nex
     }
     
     return 0;
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     航向角偏差归一化
+// 参数说明     angel1    当前航向角
+//              angel2    目标航向角
+// 返回参数     归一化后的角度偏差（-180°到180°）
+// 使用示例     double deviation = ange_deviation1(90, 45);
+// 备注信息     计算当前航向与目标航向的偏差并归一化
+-------------------------------------------------------------------------------------------------------------------*/
+double ange_deviation1(double angel1, double angel2)
+{
+    double x;
+    x = angel1 - angel2;  // 当前航向 - 目标航向
+    
+    // 归一化到 [-180°, 180°]
+    if(x >= 180) x = x - 360;
+    if(x <= -180) x = x + 360;
+    
+    return x;
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     获取最终角度
+// 参数说明     null
+// 返回参数     最终角度（归一化后的航向偏差）
+// 使用示例     float angle = Get_Final_Angle();
+// 备注信息     计算当前位置到目标点的航向偏差
+-------------------------------------------------------------------------------------------------------------------*/
+float Get_Final_Angle(void)
+{
+    // 步骤1：计算目标航向角
+    float direction;
+    direction = get_fang_wei_jiao(TempLat_Now, TempLon_Now,
+                                  victual_point_lat[Temp_num],
+                                  victual_point_lon[Temp_num]);
+    
+    // 步骤2：计算航向角误差
+    float final_angle = 0;
+    final_angle = ange_deviation1(Angle_Z_Quaternions, direction);
+    
+    return final_angle;
 }
 
 

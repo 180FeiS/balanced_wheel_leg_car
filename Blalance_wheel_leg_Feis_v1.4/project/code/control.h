@@ -91,7 +91,13 @@ typedef struct
 extern ins_struct ins;                      //惯性导航结构体
 extern double TempLat_Now;                   //转化坐标系后实时位置
 extern double TempLon_Now;                   //转化坐标系后实时位置
+extern double victual_point_lat[];           //虚拟点纬度数组
+extern double victual_point_lon[];           //虚拟点经度数组
+extern uint8 Temp_num;                       //当前目标点索引
+extern double Angle_Z_Quaternions;           //当前航向角（四元数计算）
 
 void get_car_xy(void);
 void ins_init(void);
+float Get_Final_Angle(void);                 //获取最终角度
+double ange_deviation1(double angel1, double angel2); //航向角偏差归一化
 #endif
