@@ -612,7 +612,7 @@ float Get_Final_Angle(void)
     
     // 步骤2：计算航向角误差
     float final_angle = 0;
-    final_angle = ange_deviation1(Angle_Z_Quaternions, direction);
+    final_angle = ange_deviation1(euler_angle.yaw, direction);
     
     return final_angle;
 }
