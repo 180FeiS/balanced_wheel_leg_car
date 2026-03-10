@@ -42,7 +42,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -10.2; // pitch机械中值
+float pitch_mid = -10.5; // pitch机械中值
 float roll_mid = -1.369;  // roll机械中值
 
 // 各个环节PID的运算周期
