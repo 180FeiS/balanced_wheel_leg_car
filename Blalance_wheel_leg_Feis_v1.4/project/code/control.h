@@ -74,4 +74,22 @@ void left_leg_control(float p, float angle);                // 控制左腿
 void right_leg_control(float p, float angle);               // 控制右腿
 
 /*********************************************************************函数*********************************************************************/
+
+
+typedef struct
+{
+    double angle;                           //方位角
+    double speed;                           //车辆的移动速度(由编码器测得)
+    double distance;                        // 移动距离
+    double distance_x,distance_y;           // X,Y轴上的移动距离
+    double ins_x[400];                      //GPS经度转换成m在x轴上的距离
+    double ins_y[400];                      //GPS纬度转换成m在y轴上的距离
+}ins_struct;
+
+extern ins_struct ins;                      //惯性导航结构体
+extern double TempLat_Now;                   //转化坐标系后实时位置
+extern double TempLon_Now;                   //转化坐标系后实时位置
+
+void get_car_xy(void);
+void ins_init(void);
 #endif
