@@ -73,6 +73,8 @@ void left_leg_control(float p, float angle);                // 控制左腿
 
 void right_leg_control(float p, float angle);               // 控制右腿
 
+double get_fang_wei_jiao(double X_now, double Y_now, double X_next, double Y_next); //计算方位角
+
 /*********************************************************************函数*********************************************************************/
 
 

@@ -527,6 +527,48 @@ void right_leg_control(float p, float angle)
     pwm_1 = pwm_ph1;
 }
 
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     计算方位角
+// 参数说明     X_now    当前X坐标
+//              Y_now    当前Y坐标
+//              X_next   目标X坐标
+//              Y_next   目标Y坐标
+// 返回参数     方位角（度）
+// 使用示例     double angle = get_fang_wei_jiao(0, 0, 1, 1);
+// 备注信息     计算从当前点到目标点的方位角
+-------------------------------------------------------------------------------------------------------------------*/
+double get_fang_wei_jiao(double X_now, double Y_now, double X_next, double Y_next)
+{
+    double X_err, Y_err, angle;
+    
+    X_err = X_next - X_now;  // X方向距离
+    Y_err = Y_next - Y_now;  // Y方向距离
+    
+    // 计算方位角（考虑四个象限）
+    if(X_err == 0)
+    {
+        if(Y_err > 0) return 90;
+        if(Y_err < 0) return 270;
+    }
+    
+    angle = atan(Y_err / X_err);  // 反正切计算角度
+    angle = angle / PI * 180;  // 弧度转角度
+    
+    // 象限判断
+    if(angle > 0)  // 1,3象限
+    {
+        if(Y_err > 0) return angle;
+        else if(Y_err < 0) return angle + 180;
+    }
+    else if(angle < 0)  // 2,4象限
+    {
+        if(Y_err > 0) return angle + 180;
+        else if(Y_err < 0) return angle + 360;
+    }
+    
+    return 0;
+}
+
 
 //*********************************************************************************************************
 //惯性导航部分代码
