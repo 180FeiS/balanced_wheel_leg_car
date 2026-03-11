@@ -1128,12 +1128,6 @@
             <name>$PROJ_DIR$\..\..\code\ekf.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\encoder.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\encoder.h</name>
-        </file>
-        <file>
             <name>$PROJ_DIR$\..\..\code\flash.c</name>
         </file>
         <file>
