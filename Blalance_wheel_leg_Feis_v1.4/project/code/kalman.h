@@ -48,8 +48,6 @@ extern float angle_Z,angle_R,angle_P;
 extern bool GyroOffset_init;
 void gyroOffset_init(void);
 
-float fast_sqrt(float x);
-
 void ICM_AHRSupdate(float gx, float gy, float gz, float ax, float ay, float az);
 
 void ICM_getValues();

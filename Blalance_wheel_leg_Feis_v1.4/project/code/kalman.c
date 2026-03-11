@@ -17,7 +17,7 @@ float param_Ki = 0.0000;  //0.001
 
 float angle_Z = 0,angle_R = 0,angle_P = 0;
 
-float fast_sqrt(float x) {
+static float fast_sqrt(float x) {
     float halfx = 0.5f * x;
     float y = x;
     long i = *(long *) &y;
