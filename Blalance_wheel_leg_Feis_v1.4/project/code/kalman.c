@@ -17,7 +17,7 @@ float param_Ki = 0.0000;  //0.001
 
 float angle_Z = 0,angle_R = 0,angle_P = 0;
 
-static float fast_sqrt(float x) {
+float fast_sqrt2(float x) {
     float halfx = 0.5f * x;
     float y = x;
     long i = *(long *) &y;
@@ -89,7 +89,7 @@ void ICM_AHRSupdate(float gx, float gy, float gz, float ax, float ay, float az) 
     float q3q3 = q3 * q3;
     float delta_2 = 0.17;
 
-    float norm = fast_sqrt(ax * ax + ay * ay + az * az);
+    float norm = fast_sqrt2(ax * ax + ay * ay + az * az);
     ax = ax * norm;
     ay = ay * norm;
     az = az * norm;
@@ -128,7 +128,7 @@ void ICM_AHRSupdate(float gx, float gy, float gz, float ax, float ay, float az) 
 
 
 
-    norm = fast_sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+    norm = fast_sqrt2(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
     Q_info.q0 = q0 * norm;
     Q_info.q1 = q1 * norm;
     Q_info.q2 = q2 * norm;
