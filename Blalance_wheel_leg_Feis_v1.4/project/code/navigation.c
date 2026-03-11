@@ -9,8 +9,6 @@
 
 #include "zf_common_headfile.h"
 #include "navigation.h"
-#include "flash.h"
-#include "kalman.h"
 
 int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 Nag N;
