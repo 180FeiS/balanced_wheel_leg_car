@@ -115,7 +115,6 @@
 #include "vofa.h"
 #include "Menu.h"
 #include "UI.h"
-#include "encoder.h"
 #include "flash.h"
 #include "kalman.h"
 #include "navigation.h"
