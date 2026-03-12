@@ -28,9 +28,9 @@ const float LQR_K[8] = {
 const jump_control_struct jump_control_config[] =
     {
         {0, 5, jump_set_step, "收腿"},
-        {5, 15, jump_set_step, "起跳"},
-        {15, 20, jump_set_step, "缓冲"},
-        {20, 25, jump_set_step, "收腿"},
+        {5, 10, jump_set_step, "起跳"},
+        {10, 13, jump_set_step, "缓冲"},
+        {13, 16, jump_set_step, "收腿"},
 }; // 一个单位是一个中断周期
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
@@ -42,7 +42,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -10.5; // pitch机械中值
+float pitch_mid = -12.0; // pitch机械中值
 float roll_mid = -1.369;  // roll机械中值
 
 // 各个环节PID的运算周期
@@ -54,8 +54,8 @@ float dt_leg = 0.025f;
 float dt_pid_turn_angle = 0.003f;
 float dt_pid_turn_gyro = 0.001f;
 
-// 初始腿高
-float leg_long = 5.5f;
+//初始腿高
+float leg_long = 5.5f; 
 // float leg_high_integral = 0;
 
 // 跳跃标志位
@@ -103,10 +103,25 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-     pid_init(&speed, 3.0, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);
+     pid_init(&speed, 2.8, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     //pid_set_target(&leg_hight, roll_mid);
      pid_set_target(&speed, 0);
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     调试模式下用 leg_long 初始化 pwm_ph1~4，使腿高从 5.5 起步
+// 参数说明     null
+// 返回参数     null
+// 使用示例     leg_debug_init_pwm();
+// 备注信息     servo_init 中调用，仅 LEG_DEBUG_MODE=1 时有效
+-------------------------------------------------------------------------------------------------------------------*/
+void leg_debug_init_pwm(void)
+{
+#if LEG_DEBUG_MODE
+    servo_control_table(leg_long, 0, &pwm_ph4, &pwm_ph3);
+    servo_control_table(leg_long, 0, &pwm_ph1, &pwm_ph2);
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -504,9 +519,10 @@ void dead_compensate(int16 *input_L, int16 *input_R)
 -------------------------------------------------------------------------------------------------------------------*/
 void left_leg_control(float p, float angle)
 {
+#if !LEG_DEBUG_MODE
     // 调用五连杆姿态解算函数
     servo_control_table(p, -angle, &pwm_ph4, &pwm_ph3);
-    
+#endif
     // 边界检查，确保PWM值在合理范围内
       if(10000 == pwm_ph3 || 10000 == pwm_ph4)
     {
@@ -528,9 +544,10 @@ void left_leg_control(float p, float angle)
 -------------------------------------------------------------------------------------------------------------------*/
 void right_leg_control(float p, float angle)
 {
+#if !LEG_DEBUG_MODE
     // 调用五连杆姿态解算函数
     servo_control_table(p, -angle, &pwm_ph1, &pwm_ph2);
-    
+#endif
     // 边界检查，确保PWM值在合理范围内
    if(10000 == pwm_ph1 || 10000 == pwm_ph2)
     {

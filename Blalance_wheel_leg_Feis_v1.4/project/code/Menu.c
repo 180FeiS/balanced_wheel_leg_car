@@ -174,10 +174,8 @@ void selectMenu(void)
     case 'i':
         jump_flag = 1;
         break;
-        
     }
     Menu_command = 0;
-    
     if(Motor_Switch == MOTOR_OFF
   //  || MOTOR_ON
     )

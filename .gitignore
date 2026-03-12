@@ -1,0 +1,29 @@
+# IAR 编译产物
+*.o
+*.d
+*.hex
+*.out
+*.sim
+*.map
+*.pbd
+*.pbi
+*.pbi.dep
+.ninja_deps
+.ninja_log
+
+# IAR 调试/配置生成文件
+*.cspy.bat
+*.cspy.ps1
+*.xcl
+*.dnx
+*.wsdt
+*.crun
+
+# IAR Debug 目录
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_0/Obj/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_0/BrowseInfo/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_1/Obj/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_1/BrowseInfo/
+
+# IAR project_config 输出
+Blalance_wheel_leg_Feis_v1.4/project/iar/project_config/**/Exe/

@@ -73,5 +73,7 @@ void left_leg_control(float p, float angle);                // 控制左腿
 
 void right_leg_control(float p, float angle);               // 控制右腿
 
+void leg_debug_init_pwm(void);                               // 调试模式腿高初始化
+
 /*********************************************************************函数*********************************************************************/
 #endif
