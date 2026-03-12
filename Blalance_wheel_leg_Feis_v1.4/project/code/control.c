@@ -238,7 +238,7 @@ void pid_ctrl_Run(void)
 
         pid_set_dt(&speed, dt_pid_speed);
         pid_run(&speed);
-        speed_loop_leg_tilt = speed.out;
+        speed_loop_leg_tilt = (jump_flag == 1) ? (speed.out * JUMP_PID_SCALE) : speed.out;
     }
 
     if (0 == timer_flag % 5) // 角度环
@@ -249,6 +249,8 @@ void pid_ctrl_Run(void)
         pid_set_dt(&angle, dt_pid_angle);
         pid_run(&angle);
         Angle_Out = angle.out + angle_kd * imu660ra_gyro_y * dt_pid_angle;
+        if (jump_flag == 1)
+            Angle_Out *= JUMP_PID_SCALE;
     }
 
     // 角速度环
@@ -273,7 +275,8 @@ void pid_ctrl_Run(void)
         }
         else
         {
-            small_driver_set_duty((int16) - (gyro.out + turn.out), (int16)(gyro.out - turn.out));
+            float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
+            small_driver_set_duty((int16)(-(gyro.out + turn.out) * scale), (int16)((gyro.out - turn.out) * scale));
         }
     }
     else
@@ -376,10 +379,21 @@ void leg_control(void)
     pid_set_dt(&leg_hight, dt_leg);
     pid_run(&leg_hight);
 
-    leg_high_integral += leg_hight.out;
+    if (jump_flag == 1)
+        leg_high_integral += leg_hight.out * JUMP_PID_SCALE;
+    else
+        leg_high_integral += leg_hight.out;
 
-    float desired_left_p = leg_long - leg_high_integral;
-    float desired_right_p = leg_long + leg_high_integral;
+    float desired_left_p, desired_right_p;
+    if (jump_flag == 1)
+    {
+        desired_left_p = desired_right_p = leg_long;
+    }
+    else
+    {
+        desired_left_p = leg_long - leg_high_integral;
+        desired_right_p = leg_long + leg_high_integral;
+    }
     float desired_angle = leg_servo_get_desired_tilt_angle();
 
     float out_left_p, out_right_p, out_left_angle, out_right_angle;
