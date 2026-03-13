@@ -33,7 +33,7 @@ pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
 float pitch_mid = -9.0; // pitch机械中值
-float roll_mid = -1.369;  // roll机械中值
+float roll_mid = -1.66;  // roll机械中值
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
