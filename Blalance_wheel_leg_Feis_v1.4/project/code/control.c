@@ -24,16 +24,6 @@ const float LQR_K[8] = {
     //        -0.0431 ,  -0.6339  , -1.5234  , -0.1616
 };
 
-// 轮腿跳跃步骤
-const jump_control_struct jump_control_config[] =
-    {
-        {0, 5, jump_set_step, "收腿"},
-        {5, 10, jump_set_step, "起跳"},
-        {10, 13, jump_set_step, "缓冲"},
-        {13, 16, jump_set_step, "收腿"},
-}; // 一个单位是一个中断周期
-const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
-
 // 无刷电机极对数, 已确定不可修改
 const float Lmoto_K = 4980;
 const float Rmoto_K = 4980;
@@ -42,7 +32,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -12.0; // pitch机械中值
+float pitch_mid = -9.0; // pitch机械中值
 float roll_mid = -1.369;  // roll机械中值
 
 // 各个环节PID的运算周期
@@ -61,7 +51,7 @@ float leg_long = 5.5f;
 // 跳跃标志位
 float set_speed = 0;
 uint8 jump_flag = 0;
-uint8 jump_step_index = 0;  // 当前跳跃步 0收腿 1起跳 2缓冲 3收腿
+uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
 
 uint8 speed_flag = 0;
 
@@ -85,7 +75,23 @@ float KDD = 0; // 0.2f
 #define LEG_TILT_K        0.02f   // 缩放系数
 #define LEG_TILT_MAX      20.0f   // 限幅±20°
 #define LEG_RIGHT_ANGLE_INVERT  1    // 右腿俯仰取反(左右镜像)，若仍反则改0并对左腿取反
-#define JUMP_PID_SCALE          0.5f // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_PID_SCALE          0.3f // 跳跃时angle/speed的kp缩放，维持稳定
+
+#define JUMP_PREPARE_P          10.0f   // 准备缓冲目标腿长
+#define JUMP_BUFFER_P           5.5f    // 执行缓冲最终腿长
+#define JUMP_BUFFER_STEP_P_MAX  0.4f    // 执行缓冲时每20ms腿高最大变化（步进单位长度），越小缓冲越柔和
+#define JUMP_BUFFER_MARGIN      2      // 缓冲周期余量（周期）
+// 自动计算：缓冲周期数 = ceil(缓冲距离/每周期步进) + 余量（与JUMP_BUFFER_STEP_P_MAX一致）
+#define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_P_MAX) + 0.999f) + JUMP_BUFFER_MARGIN)
+
+// 轮腿跳跃步骤（三阶段：起跳→准备缓冲→执行缓冲）
+const jump_control_struct jump_control_config[] =
+    {
+        {0,  5,  jump_set_step, "起跳"},
+        {5,  8, jump_set_step, "准备缓冲"},
+        {8, 8 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},
+}; // 一个单位是一个中断周期(20ms)
+const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     PID控制初始化
@@ -311,21 +317,22 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
         first_run = 0;
     }
 
-    /* use_step: 1=步进逼近, 0=直通。非跳跃或缓冲(step2)用步进，其余跳跃阶段直通 */
+    /* use_step: 1=步进逼近, 0=直通。非跳跃或执行缓冲(step2)用步进，起跳/准备缓冲直通 */
     uint8 use_step = 0;
     if (jump_flag == 0)
         use_step = 1;    /* 非跳跃：步进 */
     else if (jump_step_index == 2)
-        use_step = 1;    /* 跳跃缓冲(step2)：步进，实现缓慢收腿 */
-    /* else: 跳跃收腿/起跳/落地收腿(step0/1/3)：直通 */
+        use_step = 1;    /* 执行缓冲(step2)：步进，实现缓慢收腿 */
+    /* else: 起跳(step0)/准备缓冲(step1)：直通 */
 
     if (use_step)
     {
+        float step_p = (jump_step_index == 2) ? JUMP_BUFFER_STEP_P_MAX : LEG_STEP_P_MAX;
         float delta;
         delta = desired_left_p - current_left_p;
-        current_left_p += clip2(delta, LEG_STEP_P_MAX);
+        current_left_p += clip2(delta, step_p);
         delta = desired_right_p - current_right_p;
-        current_right_p += clip2(delta, LEG_STEP_P_MAX);
+        current_right_p += clip2(delta, step_p);
         delta = desired_angle - current_left_angle;
         current_left_angle += clip2(delta, LEG_STEP_ANGLE_MAX);
         delta = desired_angle - current_right_angle;
@@ -422,29 +429,14 @@ void jump_set_step(int step_num)
     switch (step_num)
     {
     case 0:
-    {
-        leg_long = 5.0;
-    }
-    break;
-
+        leg_long = 13.5f;           // 起跳：直接爆发伸腿
+        break;
     case 1:
-    {
-        leg_long = 12.5;
-    }
-    break;
-
+        leg_long = JUMP_PREPARE_P;  // 准备缓冲：直通到中间姿态
+        break;
     case 2:
-    {
-        leg_long = 7.5;
-    }
-    break;
-
-    case 3:
-    {
-        leg_long =5.5;
-    }
-    break;
-
+        leg_long = JUMP_BUFFER_P;   // 执行缓冲：步进收腿到落地
+        break;
     default:
         break;
     }
