@@ -134,7 +134,7 @@ void pid_ctrl_Init(void)
 {
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
     /* 横滚角位置式PID：目标roll_mid，反馈euler_angle.roll，输出→只抬腿不收腿 */
-    pid_init(&leg_hight, 0.3f, 0.0f, 0.001, dt_leg, 50, 0, 0, 50, Position_pid);
+    pid_init(&leg_hight, 0.25f, 0.12f, 0.0, dt_leg, 500, 0, 0, 50, Position_pid);
     // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn_gyro, 2.087, 15, 0, 0.001, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
