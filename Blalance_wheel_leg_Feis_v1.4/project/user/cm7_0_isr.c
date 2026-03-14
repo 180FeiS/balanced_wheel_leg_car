@@ -53,6 +53,8 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH1);// 5ms 
+    ICM_getEulerianAngles();
+    Nag_System();
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数

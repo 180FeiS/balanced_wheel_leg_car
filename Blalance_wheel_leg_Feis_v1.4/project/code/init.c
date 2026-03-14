@@ -66,6 +66,8 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 
   // Flash初始化
   flash_init();
+  Init_Nag();
+  gyroOffset_init();//开机延迟2S    去零飘
 
   // 按键初始化
   if (key_flag == 1)
