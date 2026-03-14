@@ -174,7 +174,11 @@ void selectMenu(void)
     case 'i':
         jump_flag = 1;
         break;
+    case 'j':
+        roll_balance_en = !roll_balance_en;
+        break;
     }
+    
     Menu_command = 0;
     if(Motor_Switch == MOTOR_OFF
   //  || MOTOR_ON

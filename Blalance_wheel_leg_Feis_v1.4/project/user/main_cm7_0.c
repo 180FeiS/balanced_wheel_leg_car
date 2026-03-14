@@ -52,7 +52,16 @@ int main(void)
     int16 servo4_value = SERVO4_MID + pwm_ph4;
     SendDataStreamToVOFA(4, (float)servo1_value, (float)servo2_value, (float)servo3_value, (float)servo4_value);
 #else
-    // 正常模式：发送6路姿态/速度数据到VOFA
+    // 正常模式：6路姿态/速度 + 9路横滚调试（roll_debug_*）
+    // SendDataStreamToVOFA(15,
+    //                      (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
+    //                      (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
+    //                      (float)Motor_Switch,
+    //                      (float)roll_debug_roll, (float)roll_debug_pid_out, (float)roll_debug_pid_err,
+    //                      (float)roll_debug_desired_left, (float)roll_debug_desired_right,
+    //                      (float)roll_debug_out_left, (float)roll_debug_out_right,
+    //                      (float)roll_debug_left_offset, (float)roll_debug_right_offset);
+
     SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
                          (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
                          (float)Motor_Switch);

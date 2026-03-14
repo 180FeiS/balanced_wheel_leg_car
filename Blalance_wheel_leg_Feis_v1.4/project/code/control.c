@@ -32,19 +32,19 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -9.0; // pitch机械中值
-float roll_mid = -1.66;  // roll机械中值
+float pitch_mid = -5.0;  // pitch机械中值（俯仰平衡）
+float roll_mid = -1.866; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
 float dt_pid_angle = 0.01f;
 float dt_pid_speed = 0.02f;
 float dt_pid_turn = 0.01f;
-float dt_leg = 0.025f;
+float dt_leg = 0.005f;   // 5ms，横滚leg_hight PID周期，与pit0_ch1 leg_control一致
 float dt_pid_turn_angle = 0.003f;
 float dt_pid_turn_gyro = 0.001f;
 
-//初始腿高
+// 初始腿高（非跳跃时基准）
 float leg_long = 5.5f; 
 // float leg_high_integral = 0;
 
@@ -59,6 +59,17 @@ uint8 speed_flag = 0;
 // 速度环输出，供腿部倾斜角使用
 float speed_loop_leg_tilt = 0.0f;
 
+// 横滚控制调试变量，供VOFA查看
+float roll_debug_roll = 0;           // euler_angle.roll
+float roll_debug_pid_out = 0;        // leg_hight.out
+float roll_debug_pid_err = 0;       // leg_hight.error
+float roll_debug_desired_left = 0;  // desired_left_p
+float roll_debug_desired_right = 0; // desired_right_p
+float roll_debug_out_left = 0;      // out_left_p
+float roll_debug_out_right = 0;     // out_right_p
+float roll_debug_left_offset = 0;    // left_offset
+float roll_debug_right_offset = 0;  // right_offset
+
 // 转向环参数
 float turn_out = 0;
 float KP = 5;  // 25.24f;
@@ -66,31 +77,50 @@ float KPP = 0; // 0.3805;
 float KD = 0;  // 0.2f;
 float KDD = 0; // 0.2f
 
-// 舵机步进控制参数（与vmc P/A范围一致，pit0_ch10 20ms周期）
-#define LEG_STEP_P_MAX      0.2f   // 每20ms腿高最大变化
-#define LEG_STEP_ANGLE_MAX  2.0f   // 每20ms角度最大变化(度)
-#define LEG_P_MIN           2.4f
-#define LEG_P_MAX          14.5f
-#define LEG_SERVO_SPEED_TILT_EN  1   // 置0关闭速度环→舵机
-#define LEG_TILT_K        0.02f   // 缩放系数
-#define LEG_TILT_MAX      20.0f   // 限幅±20°
-#define LEG_RIGHT_ANGLE_INVERT  1    // 右腿俯仰取反(左右镜像)，若仍反则改0并对左腿取反
-#define JUMP_PID_SCALE          0.3f // 跳跃时angle/speed的kp缩放，维持稳定
+/*=============================================================================
+ * 舵机/腿控制参数（leg_control在pit0_ch1 5ms周期执行）
+ *
+ * 参数分类速查：
+ *   横滚角：roll_balance_en, ROLL_LEG_SCALE, ROLL_LEG_OFFSET_MAX, roll_mid, leg_hight, dt_leg
+ *   俯仰角：LEG_TILT_K, LEG_TILT_MAX, LEG_SERVO_SPEED_TILT_EN
+ *   跳跃：  JUMP_* 系列, jump_control_config
+ *   通用：  LEG_STEP_P_MAX, LEG_STEP_ANGLE_MAX, LEG_P_MIN/MAX
+ *=============================================================================*/
 
-#define JUMP_PREPARE_P          10.0f   // 准备缓冲目标腿长
-#define JUMP_BUFFER_P           5.5f    // 执行缓冲最终腿长
-#define JUMP_BUFFER_STEP_P_MAX  0.4f    // 执行缓冲时每20ms腿高最大变化（步进单位长度），越小缓冲越柔和
-#define JUMP_BUFFER_MARGIN      2      // 缓冲周期余量（周期）
-// 自动计算：缓冲周期数 = ceil(缓冲距离/每周期步进) + 余量（与JUMP_BUFFER_STEP_P_MAX一致）
-#define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_P_MAX) + 0.999f) + JUMP_BUFFER_MARGIN)
+/*---------- 通用腿/舵机参数 ----------*/
+#define LEG_P_MIN           2.4f   // 腿长下限
+#define LEG_P_MAX          14.5f   // 腿长上限
+#define LEG_STEP_P_MAX      0.2f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
+#define LEG_STEP_ANGLE_MAX  0.5f   // 每5ms腿部倾角最大变化(度)
+#define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
-// 轮腿跳跃步骤（三阶段：起跳→准备缓冲→执行缓冲）
+/*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
+uint8 roll_balance_en = 1;  // 运行时可改：1开启横滚平衡，0关闭（左右腿保持leg_long）
+#define ROLL_LEG_SCALE          1.0f  // 横滚PID输出→腿长增量缩放，越大抬腿越猛
+#define ROLL_LEG_OFFSET_MAX      8.5f  // 单侧腿长增量上限，防止过度抬腿
+// dt_leg、leg_hight PID 见上方变量及 pid_ctrl_Init()
+
+/*---------- 俯仰角参数（速度环→腿倾角，与横滚并级）----------*/
+#define LEG_SERVO_SPEED_TILT_EN  1     // 置0关闭速度环→舵机倾角
+#define LEG_TILT_K              0.02f // 速度环输出→腿倾角缩放系数
+#define LEG_TILT_MAX             20.0f // 腿倾角限幅±20°
+
+/*---------- 跳跃参数（障碍跨越）----------*/
+#define JUMP_PID_SCALE          0.3f  // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_PREPARE_P          10.0f // 准备缓冲目标腿长（起跳后伸腿高度）
+#define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
+#define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
+#define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
+#define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
+#define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
+
+/* 跳跃时序（jump_control在pit0_ch10 20ms周期，单位=20ms）*/
 const jump_control_struct jump_control_config[] =
     {
-        {0,  5,  jump_set_step, "起跳"},
-        {5,  8, jump_set_step, "准备缓冲"},
-        {8, 8 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},
-}; // 一个单位是一个中断周期(20ms)
+        {0,  5,  jump_set_step, "起跳"},           // 0~100ms 伸腿爆发
+        {5,  8, jump_set_step, "准备缓冲"},       // 100~160ms 过渡姿态
+        {8, 8 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
+};
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -103,7 +133,8 @@ const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_st
 void pid_ctrl_Init(void)
 {
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
-    //pid_init(&leg_hight, 0.02, 0, 0, 0.025, 0, 0, 0, 10, Position_pid);
+    /* 横滚角位置式PID：目标roll_mid，反馈euler_angle.roll，输出→只抬腿不收腿 */
+    pid_init(&leg_hight, 0.3f, 0.0f, 0.001, dt_leg, 50, 0, 0, 50, Position_pid);
     // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn_gyro, 2.087, 15, 0, 0.001, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
@@ -111,8 +142,8 @@ void pid_ctrl_Init(void)
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
      pid_init(&speed, 2.8, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
-    //pid_set_target(&leg_hight, roll_mid);
-     pid_set_target(&speed, 0);
+    pid_set_target(&leg_hight, roll_mid);  // 横滚目标=机械零点
+    pid_set_target(&speed, 0);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -380,32 +411,61 @@ static float leg_servo_get_desired_tilt_angle(void)
 -------------------------------------------------------------------------------------------------------------------*/
 void leg_control(void)
 {
-    static float leg_high_integral = 0;
-
-    pid_get_observation(&leg_hight, euler_angle.roll);
-    pid_set_dt(&leg_hight, dt_leg);
-    pid_run(&leg_hight);
-
-    if (jump_flag == 1)
-        leg_high_integral += leg_hight.out * JUMP_PID_SCALE;
-    else
-        leg_high_integral += leg_hight.out;
-
     float desired_left_p, desired_right_p;
     if (jump_flag == 1)
     {
         desired_left_p = desired_right_p = leg_long;
+        roll_debug_left_offset = 0;
+        roll_debug_right_offset = 0;
+    }
+    else if (roll_balance_en)
+    {
+        /* 横滚平衡开启：只抬腿不收腿，仅抬腿侧有腿长增量 */
+        pid_get_observation(&leg_hight, euler_angle.roll);
+        pid_set_dt(&leg_hight, dt_leg);
+        pid_run(&leg_hight);
+
+        float roll_angle_out = leg_hight.out;
+        float left_offset, right_offset;
+        if (roll_angle_out > 0)
+        {
+            left_offset = 0;
+            right_offset = clip2(ROLL_LEG_SCALE * roll_angle_out, ROLL_LEG_OFFSET_MAX);
+        }
+        else
+        {
+            left_offset = clip2(ROLL_LEG_SCALE * (-roll_angle_out), ROLL_LEG_OFFSET_MAX);
+            right_offset = 0;
+        }
+        desired_left_p = leg_long + left_offset;
+        desired_right_p = leg_long + right_offset;
+        roll_debug_left_offset = left_offset;
+        roll_debug_right_offset = right_offset;
+        roll_debug_pid_out = leg_hight.out;
+        roll_debug_pid_err = leg_hight.error;
     }
     else
     {
-        desired_left_p = leg_long - leg_high_integral;
-        desired_right_p = leg_long + leg_high_integral;
+        /* 横滚平衡关闭：左右腿均保持 leg_long */
+        desired_left_p = desired_right_p = leg_long;
+        roll_debug_left_offset = 0;
+        roll_debug_right_offset = 0;
+        roll_debug_pid_out = 0;
+        roll_debug_pid_err = 0;
     }
+
+    roll_debug_roll = euler_angle.roll;
+    roll_debug_desired_left = desired_left_p;
+    roll_debug_desired_right = desired_right_p;
+
     float desired_angle = leg_servo_get_desired_tilt_angle();
 
     float out_left_p, out_right_p, out_left_angle, out_right_angle;
     leg_servo_step_update(desired_left_p, desired_right_p, desired_angle,
                           &out_left_p, &out_right_p, &out_left_angle, &out_right_angle);
+
+    roll_debug_out_left = out_left_p;
+    roll_debug_out_right = out_right_p;
 
     // 俯仰倾斜时左右腿镜像，需对一侧取反使左右同向
 #if LEG_RIGHT_ANGLE_INVERT
