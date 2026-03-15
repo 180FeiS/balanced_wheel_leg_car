@@ -1,36 +1,30 @@
-IAR编译输出
-*.out
+# IAR 编译产物
+*.o
+*.d
 *.hex
+*.out
 *.sim
-*.bin
-*.elf
-
-IAR构建缓存和临时文件
-Debug/
-Debug_m7_0/
-Debug_m7_1/
-Release/
-settings/
-*.dnx
-*.crun
-*.cspy.bat
-*.cspy.ps1
-*.driver.xcl
-*.general.xcl
+*.map
+*.pbd
 *.pbi
 *.pbi.dep
-*.xcl
 .ninja_deps
 .ninja_log
-build.ninja
-*_build_cache
 
-List/
-Obj/
-BrowseInfo/
+# IAR 调试/配置生成文件
+*.cspy.bat
+*.cspy.ps1
+*.xcl
+*.dnx
+*.wsdt
+*.crun
 
-IDE配置
-.idea/
-.vscode/
-*.uvopt
-*.uvproj
+# IAR Debug 目录
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_0/Obj/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_0/BrowseInfo/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_0/.cyt4bb7_cm_7_0_build_cache
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_1/Obj/
+Blalance_wheel_leg_Feis_v1.4/project/iar/Debug_m7_1/BrowseInfo/
+
+# IAR project_config 输出
+Blalance_wheel_leg_Feis_v1.4/project/iar/project_config/**/Exe/

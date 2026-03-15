@@ -50,6 +50,19 @@ extern uint16 pwm_1;
 extern int16 LO_S;
 extern int16 RO_S;
 
+extern uint8 roll_balance_en;  // 1开启横滚平衡，0关闭，运行时可改
+
+/* 横滚控制调试变量，供VOFA查看 */
+extern float roll_debug_roll;
+extern float roll_debug_pid_out;
+extern float roll_debug_pid_err;
+extern float roll_debug_desired_left;
+extern float roll_debug_desired_right;
+extern float roll_debug_out_left;
+extern float roll_debug_out_right;
+extern float roll_debug_left_offset;
+extern float roll_debug_right_offset;
+
 /*********************************************************************参数*********************************************************************/
 
 /*********************************************************************函数*********************************************************************/
@@ -73,7 +86,7 @@ void left_leg_control(float p, float angle);                // 控制左腿
 
 void right_leg_control(float p, float angle);               // 控制右腿
 
-double get_fang_wei_jiao(double X_now, double Y_now, double X_next, double Y_next); //计算方位角
+void leg_debug_init_pwm(void);                               // 调试模式腿高初始化
 
 /*********************************************************************函数*********************************************************************/
 

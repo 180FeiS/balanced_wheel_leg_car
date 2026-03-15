@@ -183,4 +183,8 @@ void servo_init(void)
   pwm_init(SERVO_2, SERVO_FREQ, SERVO2_MID);
   pwm_init(SERVO_3, SERVO_FREQ, SERVO3_MID);
   pwm_init(SERVO_4, SERVO_FREQ, SERVO4_MID);
+
+#if LEG_DEBUG_MODE
+  leg_debug_init_pwm();
+#endif
 }

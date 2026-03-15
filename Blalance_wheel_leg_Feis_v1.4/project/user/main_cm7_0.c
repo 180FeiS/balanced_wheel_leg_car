@@ -44,27 +44,28 @@ int main(void)
     // printf("\r\npitch=%f, roll=%f", euler_angle.pitch,  euler_angle.roll);
      //printf("\r\npitch=%f, roll=%f, speed=%d\r\n", euler_angle.pitch, euler_angle.roll,((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data)/2));
     //printf("\r\npwm_ph4=%d, pwm_ph1=%d\r\n", pwm_4, pwm_1);
-     // 计算四个舵机的PWM输出值
-            if(!gpio_get_level(P20_3)) N.Nag_SystemRun_Index=1;//1读取
-        if(!gpio_get_level(P20_2)) N.Nag_SystemRun_Index=2;//2复现
-        if(!gpio_get_level(P20_1) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
-        if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
-        //如果需要重置圈数把这个加进去
-        // if(N.Nag_Stop_f)
-        // {
-        //   N.Nag_Stop_f=0;
-        //   N.Run_index=0;
-        // }
-     
-     // 发送数据到VOFA，包括原有的6个数据和4个舵机PWM值
-      SendDataStreamToVOFA(6, (float)N.Nag_SystemRun_Index, (float)N.End_f, (float)car_speed, 
-                        (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data, 
-                         (float)N.Final_Out); 
-    //  int16 servo1_value = SERVO1_MID + pwm_ph1;
-    //  int16 servo2_value = SERVO2_MID - pwm_ph2;
-    //  int16 servo3_value = SERVO3_MID - pwm_ph3;
-    //  int16 servo4_value = SERVO4_MID + pwm_ph4;
-    //  SendDataStreamToVOFA(4, (float)servo1_value, (float)servo2_value, (float)servo3_value, (float)servo4_value);
+#if LEG_DEBUG_MODE
+    // 调试模式：发送4路舵机PWM到VOFA
+    int16 servo1_value = SERVO1_MID + pwm_ph1;
+    int16 servo2_value = SERVO2_MID - pwm_ph2;
+    int16 servo3_value = SERVO3_MID - pwm_ph3;
+    int16 servo4_value = SERVO4_MID + pwm_ph4;
+    SendDataStreamToVOFA(4, (float)servo1_value, (float)servo2_value, (float)servo3_value, (float)servo4_value);
+#else
+    // 正常模式：6路姿态/速度 + 9路横滚调试（roll_debug_*）
+    // SendDataStreamToVOFA(15,
+    //                      (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
+    //                      (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
+    //                      (float)Motor_Switch,
+    //                      (float)roll_debug_roll, (float)roll_debug_pid_out, (float)roll_debug_pid_err,
+    //                      (float)roll_debug_desired_left, (float)roll_debug_desired_right,
+    //                      (float)roll_debug_out_left, (float)roll_debug_out_right,
+    //                      (float)roll_debug_left_offset, (float)roll_debug_right_offset);
+
+    SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
+                         (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
+                         (float)Motor_Switch);
+#endif
    
 
      //printf("left speed:%d, right speed:%d，car_speed:%f\r\n", motor_value.receive_left_speed_data, motor_value.receive_right_speed_data,car_speed);

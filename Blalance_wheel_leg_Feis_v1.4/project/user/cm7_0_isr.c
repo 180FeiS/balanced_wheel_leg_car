@@ -52,9 +52,8 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 
 void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
-    pit_isr_flag_clear(PIT_CH1);// 5ms 
-    ICM_getEulerianAngles();
-    Nag_System();
+    pit_isr_flag_clear(PIT_CH1);// 5ms 横滚/俯仰腿控制（与俯仰角5ms同频）
+    leg_control();
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
@@ -69,8 +68,7 @@ void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
 
 void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 {
-    pit_isr_flag_clear(PIT_CH10); // 20ms
-    leg_control();
+    pit_isr_flag_clear(PIT_CH10); // 20ms 跳跃/菜单（leg_control已移至5ms）
     jump_control();
     selectMenu();
     
