@@ -62,7 +62,7 @@ int main(void)
     //                      (float)roll_debug_out_left, (float)roll_debug_out_right,
     //                      (float)roll_debug_left_offset, (float)roll_debug_right_offset);
 
-    SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
+    SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw,
                          (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
                          (float)Motor_Switch);
 #endif

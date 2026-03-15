@@ -120,7 +120,7 @@ static inline void quaternion_to_euler(void)
       atan2f(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) *
       DEG_TO_RAD; // roll
   euler_angle.yaw =
-      atan2f(2 * q1 * q2 + 2 * q0 * q3, -2 * q2 * q2 - 2 * q3 * q3 + 1) *
+      atan2f(2 * q1 * q2 + 2 * q0 * q3, -2 * q1 * q1 - 2 * q3 * q3 + 1) *
       DEG_TO_RAD; // yaw
 }
 

@@ -20,7 +20,7 @@
 
 #define Nag_Set_mileage 2100 //里程计//5cm
 #define Nag_Prev 200    //前包
-#define Nag_Yaw angle_Z //航向角度取偏航角
+#define Nag_Yaw euler_angle.yaw //航向角度取偏航角
 
 #define L_Mileage motor_value.receive_left_speed_data   //左轮里程计
 #define R_Mileage motor_value.receive_right_speed_data //右轮里程计
