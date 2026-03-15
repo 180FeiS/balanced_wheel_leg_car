@@ -39,6 +39,13 @@ float x_hat = 0;
 
 float acc_x_lpf = 0;
 const float K_V = 0.05;
+
+/* gyro_z 零偏观测：静止 10s 内累积 imu_data.gyro_z，输出均值供 VOFA 查看 */
+float gyro_z_bias_mean = 0.0f;
+#define GYRO_Z_BIAS_SAMPLES 10000u  /* 1ms * 10000 = 10s */
+
+/* gyro_z 固定零偏补偿，单位 rad/s，静止测得后直接减去，无需上电标定 */
+#define GYRO_Z_BIAS_COMPENSATION 0.005f
 // SOS 系数（根据给定的 Numerator 和 Denominator）
 float numerator[3][3] = {
     {1.0, -1.4180, 1.0}, // 第一个二阶节的分子系数 (b0, b1, b2)
@@ -148,6 +155,7 @@ void imu_get_values(void)
   imu_data.gyro_x = (imu660ra_gyro_x)*PI / 180 / 16.384f;
   imu_data.gyro_y = (imu660ra_gyro_y)*PI / 180 / 16.384f;
   imu_data.gyro_z = (imu660ra_gyro_z)*PI / 180 / 16.384f;
+  imu_data.gyro_z += GYRO_Z_BIAS_COMPENSATION;  // 固定零偏补偿
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -160,11 +168,23 @@ void imu_get_values(void)
 void EKF_UpData(void)
 {
   static uint16 time_now = 0;
+  static float gyro_z_sum = 0.0f;
+  static uint32_t gyro_z_count = 0u;
   float gx, gy, gz;
   imu_get_values();
   gx = imu_data.gyro_x;
   gy = imu_data.gyro_y;
   gz = imu_data.gyro_z;
+
+  /* gyro_z 零偏观测：每 10s 计算一次均值 */
+  gyro_z_sum += gz;
+  gyro_z_count++;
+  if (gyro_z_count >= GYRO_Z_BIAS_SAMPLES)
+  {
+    gyro_z_bias_mean = gyro_z_sum / (float)GYRO_Z_BIAS_SAMPLES;
+    gyro_z_sum = 0.0f;
+    gyro_z_count = 0u;
+  }
 
   matrix_t Z;
 
