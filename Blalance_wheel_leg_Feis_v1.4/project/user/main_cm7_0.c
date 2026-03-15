@@ -9,6 +9,9 @@ extern int16 pwm_ph2;
 extern int16 pwm_ph3;
 extern int16 pwm_ph4;
 
+// gyro_z ÁãÆ«¹Û²â£¨ekf.h ÖÐÉùÃ÷£©
+extern float gyro_z_bias_mean;
+
 uint16 jump_test = 1;
 
 int main(void)
@@ -62,9 +65,7 @@ int main(void)
     //                      (float)roll_debug_out_left, (float)roll_debug_out_right,
     //                      (float)roll_debug_left_offset, (float)roll_debug_right_offset);
 
-    SendDataStreamToVOFA(6, (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
-                         (float)-motor_value.receive_left_speed_data, (float)motor_value.receive_right_speed_data,
-                         (float)Motor_Switch);
+    SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll,(float)euler_angle.yaw, (float)gyro_z_bias_mean);
 #endif
    
 
