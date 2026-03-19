@@ -20,7 +20,7 @@
 #define SERVO_LEFT              (55)                    //左极限值 待测
 #define SERVO_RIGHT             (170)                   //右极限值 待测
 #define SERVO1_MID              (4501)//(4457)          //舵机1中值     左上 待测
-#define SERVO2_MID              (4712)//(4512)          //舵机2中值     左下 待测
+#define SERVO2_MID              (5112)//(4512)          //舵机2中值     左下 待测
 #define SERVO3_MID              (4104)//(4963)          //舵机3中值     右上 待测 小 下
 #define SERVO4_MID              (4163)//(4533)          //舵机4中值     右 下 待测大 下
 
@@ -34,7 +34,7 @@
 
 
 /*********************************************************************函数*********************************************************************/
-void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag, uint8 imu_flag, uint8 servo_flag, uint8 foc_flag, uint8 pid_flag, uint8 ekf_flag, uint8 key_flag, uint8 pit_flag, uint8 time_flag);   //总初始化
+void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag, uint8 imu_flag, uint8 servo_flag, uint8 foc_flag, uint8 pid_flag,uint8 guandao_flag, uint8 ekf_flag, uint8 key_flag, uint8 pit_flag, uint8 time_flag);   //总初始化
 
 void buzzer_init(void);                     //蜂鸣器初始化
 

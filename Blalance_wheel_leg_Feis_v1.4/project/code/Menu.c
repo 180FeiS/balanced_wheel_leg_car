@@ -177,6 +177,18 @@ void selectMenu(void)
     case 'j':
         roll_balance_en = !roll_balance_en;
         break;
+    case 'k':
+        N.Nag_SystemRun_Index=1;
+        break;
+    case 'l':
+        N.Nag_SystemRun_Index=2;
+        break;
+    case 'm':
+        if(N.Nag_SystemRun_Index == 1)
+        {
+            N.End_f=1;
+        }
+        break;
     }
     
     Menu_command = 0;

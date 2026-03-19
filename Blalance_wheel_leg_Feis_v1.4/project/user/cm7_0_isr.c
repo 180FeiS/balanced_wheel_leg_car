@@ -54,6 +54,7 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH1);// 5ms 横滚/俯仰腿控制（与俯仰角5ms同频）
     leg_control();
+    Nag_System();
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数

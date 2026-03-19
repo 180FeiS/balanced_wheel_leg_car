@@ -141,7 +141,7 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
     /* 横滚角位置式PID：目标roll_mid，反馈euler_angle.roll，输出→只抬腿不收腿 */
     pid_init(&leg_hight, 0.25f, 0.12f, 0.0, dt_leg, 500, 0, 0, 50, Position_pid);
-    // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
+     // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn_gyro, 2.087, 15, 0, 0.001, 0, 0, 0, 10000, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
@@ -303,7 +303,7 @@ void pid_ctrl_Run(void)
     pid_run(&gyro);
 
     // // 转向环
-    // //    pid_set_target(&turn, mid_point);
+    //  pid_set_target(&turn, mid_point);
     // pid_get_observation(&turn, imu660ra_gyro_transition(imu660ra_gyro_z));
     // pid_set_dt(&turn, dt_pid_turn);
     // pid_run(&turn);
@@ -319,7 +319,7 @@ void pid_ctrl_Run(void)
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
-            small_driver_set_duty((int16)(-(gyro.out + turn.out) * scale), (int16)((gyro.out - turn.out) * scale));
+            small_driver_set_duty((int16)((gyro.out + turn.out) * scale), (int16)( -(gyro.out - turn.out) * scale));
         }
     }
     else

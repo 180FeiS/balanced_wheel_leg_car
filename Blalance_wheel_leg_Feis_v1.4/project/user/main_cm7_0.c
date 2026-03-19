@@ -27,6 +27,7 @@ int main(void)
            1,  // 是否开启舵机初始化标志位          //0:关闭          1:开启
            1,  // 是否开启无刷电机初始化标志位       //0:关闭          1:开启
            1,  // 是否开启PID标志位              //0:关闭          1:开启
+           1,  // 是否开启惯导标志位              //0:关闭          1:开启
            1,  // 是否开启姿态解算标志位           //0:关闭          1:开启
            1,  // 是否开启按键初始化标志位           //0:关闭          1:开启
            1,  // 是否开启中断标志位              //0:关闭          1:开启
@@ -64,8 +65,11 @@ int main(void)
     //                      (float)roll_debug_desired_left, (float)roll_debug_desired_right,
     //                      (float)roll_debug_out_left, (float)roll_debug_out_right,
     //                      (float)roll_debug_left_offset, (float)roll_debug_right_offset);
-
-    SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll,(float)euler_angle.yaw, (float)gyro_z_bias_mean);
+        // if(!gpio_get_level(KEY_1)) N.Nag_SystemRun_Index=1;//1读取
+        // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
+        // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
+        if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
+    SendDataStreamToVOFA(7, (float)euler_angle.pitch, (float)euler_angle.roll,(float)euler_angle.yaw, (float)N.Mileage_All,(float)N.Save_index,(float)R_Mileage,(float)L_Mileage);
 #endif
    
 

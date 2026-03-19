@@ -9,7 +9,7 @@
 // 备注信息     主函数中调用
 -------------------------------------------------------------------------------------------------------------------*/
 void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
-              uint8 imu_flag, uint8 servo_flag, uint8 foc_flag, uint8 pid_flag,
+              uint8 imu_flag, uint8 servo_flag, uint8 foc_flag, uint8 pid_flag,uint8 guandao_flag,
               uint8 ekf_flag, uint8 key_flag, uint8 pit_flag, uint8 menu_flag)
 {
   // 屏幕初始化
@@ -57,7 +57,11 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
   {
     pid_ctrl_Init();
   }
-
+  if (guandao_flag == 1)
+  {
+    flash_init();//CYT系列独有的Flash初始化。!!!!!!!!!
+    Init_Nag();
+  }
   // 姿态解算初始化
   if (ekf_flag == 1)
   {
