@@ -95,7 +95,7 @@ float KDD = 0; // 0.2f
 #define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
 /*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
-uint8 roll_balance_en = 1;  // 运行时可改：1开启横滚平衡，0关闭（左右腿保持leg_long）
+uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭（左右腿保持leg_long）
 #define ROLL_LEG_SCALE          1.0f  // 横滚PID输出→腿长增量缩放，越大抬腿越猛
 #define ROLL_LEG_OFFSET_MAX      8.5f  // 单侧腿长增量上限，防止过度抬腿
 // dt_leg、leg_hight PID 见上方变量及 pid_ctrl_Init()
@@ -302,8 +302,6 @@ void pid_ctrl_Run(void)
     // pid_set_dt(&turn, dt_pid_turn);
     // pid_run(&turn);
 
-    
-
     if(Motor_Switch)
     {
         if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 1500 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -1500)
@@ -313,7 +311,7 @@ void pid_ctrl_Run(void)
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
-            small_driver_set_duty((int16)(-(gyro.out + turn.out) * scale), (int16)((gyro.out - turn.out) * scale));
+            small_driver_set_duty((int16)((gyro.out + turn.out) * scale), (int16)(-(gyro.out - turn.out) * scale));
         }
     }
     else
