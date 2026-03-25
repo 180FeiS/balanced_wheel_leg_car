@@ -36,10 +36,10 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
     wireless_uart_init();
   }
 
-  // IMU传感器初始化
+  // IMU传感器初始化（660RC：关闭片内四元数输出，姿态由 EKF 解算）
   if (imu_flag == 1)
   {
-    imu660ra_init();
+    imu660rc_init(IMU660RC_QUARTERNION_DISABLE);
   }
 
   if (servo_flag == 1)

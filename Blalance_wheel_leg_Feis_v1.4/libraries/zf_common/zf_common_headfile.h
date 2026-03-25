@@ -81,7 +81,7 @@
 #include "zf_device_dl1b.h"
 #include "zf_device_gnss.h"
 #include "zf_device_icm20602.h"
-#include "zf_device_imu660ra.h"
+#include "zf_device_imu660rc.h"
 #include "zf_device_imu963ra.h"
 #include "zf_device_ips114.h"
 #include "zf_device_ips200.h"

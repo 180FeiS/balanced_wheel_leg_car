@@ -177,7 +177,7 @@ void LQR_control(float V_target, float th)
     static float x_hat_last = 0;
     static float last_image_error = 0;
     float Tangle = -(euler_angle.pitch - th) / DEG_TO_RAD;
-    float gy = -imu660ra_gyro_transition(imu660ra_gyro_y) / DEG_TO_RAD;
+    float gy = -imu660rc_gyro_transition(imu660rc_gyro_y) / DEG_TO_RAD;
 
     float v_t = (v_hat - V_target);
 
@@ -193,13 +193,13 @@ void LQR_control(float V_target, float th)
     //    pid_set_target(&turn_gyro, 0);
     //
     //    // 设置角速度环观测值(Z轴角速度)
-    //    pid_get_observation(&turn_gyro, imu660ra_gyro_transition(imu660ra_gyro_z));
+    //    pid_get_observation(&turn_gyro, imu660rc_gyro_transition(imu660rc_gyro_z));
     //    get_timer(TOM0_CH4, &pid_time_turn, &dt_pid_turn_gyro);
     //    pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
     //    pid_run(&turn_gyro);
     //    Err = 0.5;
 
-    // float turn_out = KP * image_error + ABS(image_error) * image_error * KPP + KD * (image_error - last_image_error) - imu660ra_gyro_z * KDD;
+    // float turn_out = KP * image_error + ABS(image_error) * image_error * KPP + KD * (image_error - last_image_error) - imu660rc_gyro_z * KDD;
     // last_image_error = image_error;
 
     //   turn_out = 0;
@@ -267,7 +267,7 @@ void pid_ctrl_Run(void)
     static float Angle_Out = 0;
     static float angle_kp_normal = 500.0f;
     static float speed_kp_normal = 0.02f;
-    imu660ra_get_gyro();
+    imu660rc_get_gyro();
 
     if (0 == timer_flag) // 速度环
     {
@@ -285,20 +285,20 @@ void pid_ctrl_Run(void)
 
         pid_set_dt(&angle, dt_pid_angle);
         pid_run(&angle);
-        Angle_Out = angle.out + angle_kd * imu660ra_gyro_y * dt_pid_angle;
+        Angle_Out = angle.out + angle_kd * imu660rc_gyro_y * dt_pid_angle;
         if (jump_flag == 1)
             Angle_Out *= JUMP_PID_SCALE;
     }
 
     // 角速度环
     pid_set_target(&gyro, Angle_Out);
-    pid_get_observation(&gyro, imu660ra_gyro_y);
+    pid_get_observation(&gyro, imu660rc_gyro_y);
     pid_set_dt(&gyro, dt_pid_gyro);
     pid_run(&gyro);
 
     // // 转向环
     // //    pid_set_target(&turn, mid_point);
-    // pid_get_observation(&turn, imu660ra_gyro_transition(imu660ra_gyro_z));
+    // pid_get_observation(&turn, imu660rc_gyro_transition(imu660rc_gyro_z));
     // pid_set_dt(&turn, dt_pid_turn);
     // pid_run(&turn);
 
