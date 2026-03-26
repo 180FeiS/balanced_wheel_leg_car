@@ -118,5 +118,9 @@
 #include "flash.h"
 #include "kalman.h"
 #include "navigation.h"
+#include "GPS_deal.h"
+#include "GPS_flash.h"
+#include "self_math.h"
+
 //=====================================================”√ªßcode=====================================================
 #endif

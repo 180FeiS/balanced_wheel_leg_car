@@ -1134,6 +1134,18 @@
             <name>$PROJ_DIR$\..\..\code\flash.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\GPS_deal.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\GPS_deal.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\GPS_flash.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\GPS_flash.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\init.c</name>
         </file>
         <file>
@@ -1168,6 +1180,12 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\pid.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\self_math.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\self_math.h</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\small_driver_uart_control.c</name>
