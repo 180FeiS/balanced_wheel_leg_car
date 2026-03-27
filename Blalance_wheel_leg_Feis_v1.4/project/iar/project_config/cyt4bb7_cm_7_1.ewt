@@ -2257,10 +2257,10 @@
             <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_icm20602.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_imu660ra.c</name>
+            <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_imu660rc.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_imu660ra.h</name>
+            <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_imu660rc.h</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\..\libraries\zf_device\zf_device_imu963ra.c</name>

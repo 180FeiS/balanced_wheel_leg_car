@@ -26,9 +26,9 @@ static matrix_t R;
 static matrix_t P;
 
 // 加速度低通滤波
-static int16 imu660ra_acc_x_l = 0;
-static int16 imu660ra_acc_y_l = 0;
-static int16 imu660ra_acc_z_l = 0;
+static int16 imu660rc_acc_x_l = 0;
+static int16 imu660rc_acc_y_l = 0;
+static int16 imu660rc_acc_z_l = 0;
 
 static float PK[4] = {1000, 100, 100, 1000};
 static float Kk[2] = {0, 0};
@@ -45,7 +45,7 @@ float gyro_z_bias_mean = 0.0f;
 #define GYRO_Z_BIAS_SAMPLES 10000u  /* 1ms * 10000 = 10s */
 
 /* gyro_z 固定零偏补偿，单位 rad/s，静止测得后直接减去，无需上电标定 */
-#define GYRO_Z_BIAS_COMPENSATION 0.005f
+#define GYRO_Z_BIAS_COMPENSATION 0.0062f
 // SOS 系数（根据给定的 Numerator 和 Denominator）
 float numerator[3][3] = {
     {1.0, -1.4180, 1.0}, // 第一个二阶节的分子系数 (b0, b1, b2)
@@ -76,10 +76,10 @@ void EKF_Init(void)
   Matrix_From_Array(&R, (const matrix_type *)r, 3, 3);
   Matrix_From_Array(&P, (const matrix_type *)p, 4, 4);
 
-  imu660ra_get_acc();
-  float ax = imu660ra_acc_x;
-  float ay = imu660ra_acc_y;
-  float az = imu660ra_acc_z;
+  imu660rc_get_acc();
+  float ax = imu660rc_acc_x;
+  float ay = imu660rc_acc_y;
+  float az = imu660rc_acc_z;
   float norm = fast_invsqrt((float)ax * ax + ay * ay + az * az);
 
   ax *= norm;
@@ -116,9 +116,9 @@ static inline void quaternion_to_euler(void)
   float q1 = (exf_x.data[1][0]);
   float q2 = (exf_x.data[2][0]);
   float q3 = (exf_x.data[3][0]);
-  float ax = imu660ra_acc_transition(imu_data.acc_x) * 9.8f;
-  float ay = imu660ra_acc_transition(imu_data.acc_y) * 9.8f;
-  float az = imu660ra_acc_transition(imu_data.acc_z) * 9.8f;
+  float ax = imu660rc_acc_transition(imu_data.acc_x) * 9.8f;
+  float ay = imu660rc_acc_transition(imu_data.acc_y) * 9.8f;
+  float az = imu660rc_acc_transition(imu_data.acc_z) * 9.8f;
   acc_b[0] = ax - (2 * G * q1 * q3 - 2 * G * q0 * q2);
   acc_b[1] = ay - (2 * G * q0 * q1 + 2 * G * q2 * q3);
   acc_b[2] = az - (G * q0 * q0 - G * q1 * q1 - G * q2 * q2 + G * q3 * q3);
@@ -140,22 +140,22 @@ static inline void quaternion_to_euler(void)
 -------------------------------------------------------------------------------------------------------------------*/
 void imu_get_values(void)
 {
-  imu660ra_get_gyro();
-  imu660ra_get_acc();
+  imu660rc_get_gyro();
+  imu660rc_get_acc();
 
   // 一阶低通滤波，单位g/s
-  imu_data.acc_x = K * (imu660ra_acc_x) + (1 - K) * imu660ra_acc_x_l;
-  imu_data.acc_y = K * (imu660ra_acc_y) + (1 - K) * imu660ra_acc_y_l;
-  imu_data.acc_z = K * (imu660ra_acc_z) + (1 - K) * imu660ra_acc_z_l;
-  imu660ra_acc_x_l = imu_data.acc_x;
-  imu660ra_acc_y_l = imu_data.acc_y;
-  imu660ra_acc_z_l = imu_data.acc_z;
+  imu_data.acc_x = K * (imu660rc_acc_x) + (1 - K) * imu660rc_acc_x_l;
+  imu_data.acc_y = K * (imu660rc_acc_y) + (1 - K) * imu660rc_acc_y_l;
+  imu_data.acc_z = K * (imu660rc_acc_z) + (1 - K) * imu660rc_acc_z_l;
+  imu660rc_acc_x_l = imu_data.acc_x;
+  imu660rc_acc_y_l = imu_data.acc_y;
+  imu660rc_acc_z_l = imu_data.acc_z;
 
-  // 陀螺仪角度转弧度
-  imu_data.gyro_x = (imu660ra_gyro_x)*PI / 180 / 16.384f;
-  imu_data.gyro_y = (imu660ra_gyro_y)*PI / 180 / 16.384f;
-  imu_data.gyro_z = (imu660ra_gyro_z)*PI / 180 / 16.384f;
-  imu_data.gyro_z += GYRO_Z_BIAS_COMPENSATION;  // 固定零偏补偿
+  /* 陀螺仪：驱动宏得到 °/s，再转 rad/s（量程由 imu660rc_transition_factor[1] 决定） */
+  imu_data.gyro_x = imu660rc_gyro_transition(imu660rc_gyro_x) * PI / 180.0f;
+  imu_data.gyro_y = imu660rc_gyro_transition(imu660rc_gyro_y) * PI / 180.0f;
+  imu_data.gyro_z = imu660rc_gyro_transition(imu660rc_gyro_z) * PI / 180.0f;
+  imu_data.gyro_z -= GYRO_Z_BIAS_COMPENSATION;  // 固定零偏补偿
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
