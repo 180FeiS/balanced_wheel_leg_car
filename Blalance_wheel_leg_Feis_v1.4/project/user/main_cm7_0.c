@@ -2,6 +2,7 @@
 
 
 #include "zf_common_headfile.h"
+#include "step_detection.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -20,6 +21,7 @@ int main(void)
   debug_init();                  // 调试串口信息初始化
   // 此处编写用户代码 例如外设初始化代码等
   // 此处编写用户代码 例如外设初始化代码等
+  step_detection_init();
   all_init(1,  // 是否开启屏幕显示标志位           //0:关闭          1:IPS200显示    （默认开启摄像头初始化）
            0,  // 是否开启逐飞助手标志位           //0:关闭          1:开启
            1,  // 是否开启vofa初始化标志位         //0:关闭          1:开启
@@ -48,6 +50,27 @@ int main(void)
     // printf("\r\npitch=%f, roll=%f", euler_angle.pitch,  euler_angle.roll);
      //printf("\r\npitch=%f, roll=%f, speed=%d\r\n", euler_angle.pitch, euler_angle.roll,((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data)/2));
     //printf("\r\npwm_ph4=%d, pwm_ph1=%d\r\n", pwm_4, pwm_1);
+
+    // ?????
+    step_detect();
+    
+    // ??IPS200??????????????
+    ips200_show_string(0, 0, "Step Detection");
+    if (step_data.detected)
+    {
+        ips200_show_string(0, 16, "Distance:");
+        ips200_show_float(70, 16, step_data.distance_cm, 3, 1);  // ???????3λ??????1λС??
+        ips200_show_string(110, 16, "cm");
+        
+        ips200_show_string(0, 32, "Height:");
+        ips200_show_uint(55, 32, step_data.step_height_pix, 3);  // ??????????????
+        ips200_show_string(80, 32, "pix");
+    }
+    else
+    {
+        ips200_show_string(0, 16, "No Step Found");
+    }
+
 #if LEG_DEBUG_MODE
     // 调试模式：发送4路舵机PWM到VOFA
     int16 servo1_value = SERVO1_MID + pwm_ph1;

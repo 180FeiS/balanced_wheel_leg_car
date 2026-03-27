@@ -121,6 +121,6 @@
 #include "GPS_deal.h"
 #include "GPS_flash.h"
 #include "self_math.h"
-
+#include "step_detection.h"
 //=====================================================”√ªßcode=====================================================
 #endif
