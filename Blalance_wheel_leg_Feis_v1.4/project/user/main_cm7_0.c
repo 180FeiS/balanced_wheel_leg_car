@@ -51,25 +51,28 @@ int main(void)
      //printf("\r\npitch=%f, roll=%f, speed=%d\r\n", euler_angle.pitch, euler_angle.roll,((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data)/2));
     //printf("\r\npwm_ph4=%d, pwm_ph1=%d\r\n", pwm_4, pwm_1);
 
-    // ?????
+    // 台阶检测
     step_detect();
     
-    // ??IPS200??????????????
+    // 在IPS200屏幕上显示台阶距离
     ips200_show_string(0, 0, "Step Detection");
     if (step_data.detected)
     {
         ips200_show_string(0, 16, "Distance:");
-        ips200_show_float(70, 16, step_data.distance_cm, 3, 1);  // ???????3λ??????1λС??
+        ips200_show_float(70, 16, step_data.distance_cm, 3, 1);
         ips200_show_string(110, 16, "cm");
         
         ips200_show_string(0, 32, "Height:");
-        ips200_show_uint(55, 32, step_data.step_height_pix, 3);  // ??????????????
+        ips200_show_uint(55, 32, step_data.step_height_pix, 3);
         ips200_show_string(80, 32, "pix");
     }
-    else
-    {
-        ips200_show_string(0, 16, "No Step Found");
-    }
+    // else
+    // {
+    //     ips200_show_string(0, 16, "No Step Found");
+    // }
+    
+    // 显示二值化处理后的图像
+    ips200_show_binary_image(0, 50, step_get_binary_image(), MT9V03X_W, MT9V03X_H, 160, 120);
 
 #if LEG_DEBUG_MODE
     // 调试模式：发送4路舵机PWM到VOFA
