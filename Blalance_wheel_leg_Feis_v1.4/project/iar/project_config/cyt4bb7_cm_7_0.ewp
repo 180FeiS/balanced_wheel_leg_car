@@ -1152,12 +1152,6 @@
             <name>$PROJ_DIR$\..\..\code\init.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\kalman.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\kalman.h</name>
-        </file>
-        <file>
             <name>$PROJ_DIR$\..\..\code\matrix.c</name>
         </file>
         <file>
@@ -1192,6 +1186,12 @@
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\small_driver_uart_control.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\step_detection.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\step_detection.h</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\UI.c</name>

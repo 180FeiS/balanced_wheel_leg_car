@@ -49,7 +49,7 @@ void Nag_Run()
     N.Final_Out=0;
     return;
   }
-    N.Final_Out=angle_Z-N.Angle_Run;
+    N.Final_Out=euler_angle.yaw-N.Angle_Run;
     
 }
 //-------------------------------------------------------------------------------------------------------------------

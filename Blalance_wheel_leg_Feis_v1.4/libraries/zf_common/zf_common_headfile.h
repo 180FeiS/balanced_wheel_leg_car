@@ -116,7 +116,6 @@
 #include "Menu.h"
 #include "UI.h"
 #include "flash.h"
-#include "kalman.h"
 #include "navigation.h"
 #include "GPS_deal.h"
 #include "GPS_flash.h"
