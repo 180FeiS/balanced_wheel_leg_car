@@ -2,7 +2,6 @@
 
 
 #include "zf_common_headfile.h"
-#include "step_detection.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -72,7 +71,7 @@ int main(void)
     // }
     
     // 显示二值化处理后的图像
-    ips200_show_binary_image(0, 50, step_get_binary_image(), MT9V03X_W, MT9V03X_H, 160, 120);
+    ips200_show_binary_image(0, 50, step_get_binary_image(), MT9V03X_W, MT9V03X_H, MT9V03X_W, MT9V03X_H);
 
 #if LEG_DEBUG_MODE
     // 调试模式：发送4路舵机PWM到VOFA

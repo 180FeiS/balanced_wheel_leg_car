@@ -1,5 +1,4 @@
 #include "zf_common_headfile.h"
-#include "step_detection.h"
 
 step_info_t step_data = {0, 0, 0, 0, 0.0f, 0.0f};
 
