@@ -51,12 +51,12 @@ int main(void)
     //printf("\r\npwm_ph4=%d, pwm_ph1=%d\r\n", pwm_4, pwm_1);
 
     // 台阶检测
-    step_detect();
+    // step_detect();
     
     // 在IPS200屏幕上显示台阶距离
     ips200_show_string(0, 0, "Step Detection");
-    if (step_data.detected)
-    {
+    // if (step_data.detected)
+    // {
         ips200_show_string(0, 16, "Distance:");
         ips200_show_float(70, 16, step_data.distance_cm, 3, 1);
         ips200_show_string(110, 16, "cm");
@@ -64,7 +64,7 @@ int main(void)
         ips200_show_string(0, 32, "Height:");
         ips200_show_uint(55, 32, step_data.step_height_pix, 3);
         ips200_show_string(80, 32, "pix");
-    }
+    // }
     // else
     // {
     //     ips200_show_string(0, 16, "No Step Found");

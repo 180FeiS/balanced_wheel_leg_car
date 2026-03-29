@@ -82,6 +82,7 @@ void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 void pit0_ch11_isr() // 定时器通道 11 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH11); // 50ms
+    step_detect();
    
 }
 
