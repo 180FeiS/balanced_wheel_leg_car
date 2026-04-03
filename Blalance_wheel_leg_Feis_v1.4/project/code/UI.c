@@ -48,9 +48,9 @@
 *
 * 2. 调试模式 (GUI_2)
 *    - 2_1. 图像设置
-*      - 2_1_1. 原始图像 + 二值化
-*      - 2_1_2. 二值化 + 连续边线
-*      - 2_1_3. 连续边线 + 离散边线
+*      - 2_1_1. 台阶检测
+*      - 2_1_2. 单边桥检测
+*      - 2_1_3. 颠簸路段检测
 *    - 2_2. 速度环设置
 *      - 2_2_1. 角速度环P
 *      - 2_2_2. 角速度环I
@@ -95,6 +95,7 @@ static void GUI_Display_Level2_Common2(void)__attribute__((unused));
 static void GUI_Display_Level2_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common1(void)__attribute__((unused));
 static void GUI_Display_Level3_Common2(void)__attribute__((unused));
+static void GUI_Display_Level3_ImageDetect(uint8 current_idx)__attribute__((unused));
 static void GUI_Display_Level3_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common4(void)__attribute__((unused));
 static void GUI_Display_Level3_Common5(void)__attribute__((unused));
@@ -563,6 +564,102 @@ void ACT_1_2_1()
     ReadPos[2] = '2';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
+}
+
+static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
+{
+    GUI_Display_Level3_Common1();
+    ips200_show_string(0,ROW_1,"Image");
+
+    ips200_show_string(24,ROW_3,"Step Detection");
+    ips200_show_string(24,ROW_4,"Single Bridge");
+    ips200_show_string(24,ROW_5,"Bumpy Road");
+
+    switch(current_idx)
+    {
+        case 1:
+            ips200_show_string(0,ROW_3,"->");
+            break;
+        case 2:
+            ips200_show_string(0,ROW_4,"->");
+            break;
+        case 3:
+            ips200_show_string(0,ROW_5,"->");
+            break;
+        default:
+            break;
+    }
+}
+
+void GUI_2_1_1(void) // 台阶检测
+{
+    static uint8 image_refresh_div = 0;
+
+    GUI_Display_Level3_ImageDetect(1);
+
+    ips200_show_string(0,ROW_7,"Detected:");
+    ips200_show_string(88,ROW_7,step_data.detected ? "Yes" : "No ");
+
+    ips200_show_string(0,ROW_8,"Distance:");
+    ips200_show_float(88,ROW_8,step_data.distance_cm,3,1);
+    ips200_show_string(136,ROW_8,"cm");
+
+    ips200_show_string(0,ROW_9,"Height:");
+    ips200_show_uint(88,ROW_9,step_data.step_height_pix,3);
+    ips200_show_string(136,ROW_9,"pix");
+
+    // 菜单显示运行在 20ms 中断里，二值图降低到约 10Hz 刷新以避免阻塞串口和按键响应。
+    if(image_refresh_div == 0)
+    {
+        ips200_show_gray_image(0,ROW_10,step_get_binary_image(),MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
+    }
+    image_refresh_div = (image_refresh_div + 1) % 5;
+}
+void ACT_2_1_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+}
+
+void GUI_2_1_2(void) // 单边桥检测
+{
+    GUI_Display_Level3_ImageDetect(2);
+
+    ips200_show_string(0,ROW_8,"Single Bridge");
+    ips200_show_string(0,ROW_9,"Reserved Page");
+    ips200_show_string(0,ROW_11,"Use this page");
+    ips200_show_string(0,ROW_12,"for future image");
+    ips200_show_string(0,ROW_13,"detection logic.");
+}
+void ACT_2_1_2()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '2';
+}
+
+void GUI_2_1_3(void) // 颠簸路段检测
+{
+    GUI_Display_Level3_ImageDetect(3);
+
+    ips200_show_string(0,ROW_8,"Bumpy Road");
+    ips200_show_string(0,ROW_9,"Reserved Page");
+    ips200_show_string(0,ROW_11,"Use this page");
+    ips200_show_string(0,ROW_12,"for future image");
+    ips200_show_string(0,ROW_13,"detection logic.");
+}
+void ACT_2_1_3()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '3';
 }
 
 // void GUI_1_3_1(void) // 测试摄像头

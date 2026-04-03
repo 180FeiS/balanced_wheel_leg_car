@@ -32,7 +32,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = -5.0;  // pitch机械中值（俯仰平衡）
+float pitch_mid = 3.5;  // pitch机械中值（俯仰平衡）
 float roll_mid = -1.866; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
@@ -146,7 +146,7 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-     pid_init(&speed, 2.8, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
+     pid_init(&speed, 2.9, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     pid_set_target(&leg_hight, roll_mid);  // 横滚目标=机械零点
     pid_set_target(&speed, 0);
@@ -317,7 +317,7 @@ void pid_ctrl_Run(void)
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
-            small_driver_set_duty((int16)((gyro.out + turn.out) * scale), (int16)(-(gyro.out - turn.out) * scale));
+            small_driver_set_duty((int16)(-(gyro.out + turn.out) * scale), (int16)(-(gyro.out - turn.out) * scale));
         }
     }
     else
@@ -399,7 +399,7 @@ static float leg_servo_get_desired_tilt_angle(void)
 {
 #if LEG_SERVO_SPEED_TILT_EN
     // 车向前→腿后倾，取反使极性正确
-    float a = -LEG_TILT_K * speed_loop_leg_tilt;
+    float a = LEG_TILT_K * speed_loop_leg_tilt;
     return clip(a, -LEG_TILT_MAX, LEG_TILT_MAX);
 #else
     return 0.0f;
