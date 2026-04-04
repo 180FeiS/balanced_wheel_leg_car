@@ -593,7 +593,6 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
 
 void GUI_2_1_1(void) // 台阶检测
 {
-    static uint8 image_refresh_div = 0;
 
     GUI_Display_Level3_ImageDetect(1);
 
@@ -607,13 +606,9 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(0,ROW_9,"Height:");
     ips200_show_uint(88,ROW_9,step_data.step_height_pix,3);
     ips200_show_string(136,ROW_9,"pix");
+    // 二值图数据由主循环中的软任务更新，这里只负责把最新结果显示到菜单页。
+    ips200_show_gray_image(0,ROW_10,step_get_binary_image(),MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
 
-    // 菜单显示运行在 20ms 中断里，二值图降低到约 10Hz 刷新以避免阻塞串口和按键响应。
-    if(image_refresh_div == 0)
-    {
-        ips200_show_gray_image(0,ROW_10,step_get_binary_image(),MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
-    }
-    image_refresh_div = (image_refresh_div + 1) % 5;
 }
 void ACT_2_1_1()
 {

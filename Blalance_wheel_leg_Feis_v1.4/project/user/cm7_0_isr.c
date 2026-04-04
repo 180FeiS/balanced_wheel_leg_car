@@ -36,7 +36,22 @@
 
 #include "zf_common_headfile.h"
 
-#include "small_driver_uart_control.h"
+vuint8 task_5ms_nav_pending = 0;
+vuint8 task_10ms_menu_key_pending = 0;
+vuint8 task_20ms_menu_pending = 0;
+vuint8 task_50ms_step_pending = 0;
+
+/* ISR 侧统一用这个函数累加软任务计数。
+ * 以后如果新增软任务，优先复用这里，不要在中断里直接写复杂逻辑。
+ * 使用计数而不是单 bit 标志，能避免主循环偶尔来不及处理时直接丢任务。
+ */
+static void task_pending_push(vuint8 *task_pending)
+{
+    if (*task_pending < 0xFF)
+    {
+        (*task_pending)++;
+    }
+}
 
 // **************************** PIT中断函数 ****************************
 void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
@@ -54,24 +69,23 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH1);// 5ms 横滚/俯仰腿控制（与俯仰角5ms同频）
     leg_control();
-    Nag_System();
+    /* 导航函数可能走到 Flash/慢路径，因此这里只挂任务，真正执行放到主循环。 */
+    task_pending_push(&task_5ms_nav_pending);
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH2); // 10ms
-    selectMenu_Key();
-    
-    
-    
-    
+    /* 菜单按键扫描不是硬实时任务，只在中断中登记待执行次数。 */
+    task_pending_push(&task_10ms_menu_key_pending);
 }
 
 void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH10); // 20ms 跳跃/菜单（leg_control已移至5ms）
     jump_control();
-    selectMenu();
+    /* 跳跃控制保留在 ISR，菜单解析迁到主循环。 */
+    task_pending_push(&task_20ms_menu_pending);
     
     Left_Motor_Speed = -motor_value.receive_left_speed_data;
     Right_Motor_Speed = motor_value.receive_right_speed_data;
@@ -82,7 +96,8 @@ void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 void pit0_ch11_isr() // 定时器通道 11 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH11); // 50ms
-    step_detect();
+    /* 台阶检测会遍历图像，耗时不稳定，因此只挂任务。 */
+    task_pending_push(&task_50ms_step_pending);
    
 }
 

@@ -331,7 +331,7 @@ void MenuInit()
         //     strcpy(menuMember.pos,"1.5.1");
         //     hashMenu.vPtr->insert(&hashMenu,&menuMember);
         //
-
+*/
         menuMember.gui = GUI_2_1_1;
         menuMember.act = ACT_2_1_1;
         strcpy(menuMember.pos, "2.1.1");
@@ -346,7 +346,7 @@ void MenuInit()
         menuMember.act = ACT_2_1_3;
         strcpy(menuMember.pos, "2.1.3");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
-
+/*
         menuMember.gui = GUI_2_2_1;
         menuMember.act = ACT_2_2_1;
         strcpy(menuMember.pos, "2.2.1");

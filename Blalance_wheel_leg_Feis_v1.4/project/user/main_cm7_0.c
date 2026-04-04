@@ -14,13 +14,66 @@ extern float gyro_z_bias_mean;
 
 uint16 jump_test = 1;
 
+/* 主循环侧统一用这个函数“取走一次待执行任务”。
+ * 这里短暂关中断是为了避免与 ISR 同时修改 pending 计数。
+ * 如果以后增加新的软任务，通常不需要改这个函数，直接在 run_soft_tasks() 里复用即可。
+ */
+static uint8 task_pending_take(vuint8 *task_pending)
+{
+  uint8 has_task = 0;
+  uint32 interrupt_status = interrupt_global_disable();
+
+  if (*task_pending > 0)
+  {
+    (*task_pending)--;
+    has_task = 1;
+  }
+
+  interrupt_global_enable(interrupt_status);
+  return has_task;
+}
+
+/* 软任务统一入口。
+ * 新增任务时，建议按“控制相关优先、UI/显示靠后”的顺序往下添加。
+ * 典型新增方法：
+ *   1. 在 task_schedule.h 增加 extern pending 变量
+ *   2. 在对应 PIT ISR 中调用 task_pending_push()
+ *   3. 在这里增加 if (task_pending_take(...)) { your_task(); }
+ *
+ * 如果某个任务明显变重，可以：
+ * - 降低它的周期
+ * - 把它拆成多个小步骤分多次执行
+ * - 或继续保留在主循环，但放到更靠后的位置
+ */
+static void run_soft_tasks(void)
+{
+  if (task_pending_take(&task_5ms_nav_pending))
+  {
+    Nag_System();
+  }
+
+  if (task_pending_take(&task_10ms_menu_key_pending))
+  {
+    selectMenu_Key();
+  }
+
+  if (task_pending_take(&task_20ms_menu_pending))
+  {
+    selectMenu();
+  }
+
+  if (task_pending_take(&task_50ms_step_pending))
+  {
+    step_detect();
+  }
+}
+
 int main(void)
 {
   clock_init(SYSTEM_CLOCK_250M); // 时钟配置及系统初始化<务必保留>
   debug_init();                  // 调试串口信息初始化
   // 此处编写用户代码 例如外设初始化代码等
   // 此处编写用户代码 例如外设初始化代码等
-  //step_detection_init();
   all_init(1,  // 是否开启屏幕显示标志位           //0:关闭          1:IPS200显示    （默认开启摄像头初始化）
            0,  // 是否开启逐飞助手标志位           //0:关闭          1:开启
            1,  // 是否开启vofa初始化标志位         //0:关闭          1:开启
@@ -34,10 +87,13 @@ int main(void)
            1,  // 是否开启中断标志位              //0:关闭          1:开启
            1); // 是否开启菜单初始化标志位        //0:关闭          1:开启
 
+
   // 此处编写用户代码 例如外设初始化代码等
 
   while (true)
   {
+    /* 先处理由中断挂起的软任务，再做主循环中的显示/调试输出。 */
+    run_soft_tasks();
      
 
 #if LEG_DEBUG_MODE
@@ -61,7 +117,8 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
-    SendDataStreamToVOFA(7, (float)euler_angle.pitch, (float)euler_angle.roll,(float)euler_angle.yaw, (float)N.Mileage_All,(float)N.Save_index,(float)R_Mileage,(float)L_Mileage);
+    SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
+    //SendDataStreamToVOFA(4, (float)N.Mileage_All,(float)N.Save_index,(float)R_Mileage,(float)L_Mileage);
 #endif
    
 

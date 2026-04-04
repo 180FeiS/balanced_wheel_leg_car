@@ -16,6 +16,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
   if (camera_flag == 1)
   {
     camera_init_ips200();
+    step_detection_init(); //台阶检测初始化
   }
   else
   {
