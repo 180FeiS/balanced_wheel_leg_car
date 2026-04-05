@@ -70,12 +70,21 @@ float roll_debug_out_right = 0;     // out_right_p
 float roll_debug_left_offset = 0;    // left_offset
 float roll_debug_right_offset = 0;  // right_offset
 
-// 转向环参数
+// 旧版 LQR 转向实验参数，当前普通转向/自旋互斥链路不依赖这些量
 float turn_out = 0;
 float KP = 5;  // 25.24f;
 float KPP = 0; // 0.3805;
 float KD = 0;  // 0.2f;
 float KDD = 0; // 0.2f
+
+/* 普通转向/自旋共用的差速输出通道拆分：
+ * steer_cmd 由外部模块写入普通转向量；
+ * spin_cmd  由自旋任务生成；
+ * turn_mix_cmd 是最终实际送往左右轮的差速。
+ */
+float steer_cmd = 0.0f;
+float spin_cmd = 0.0f;
+float turn_mix_cmd = 0.0f;
 
 /* 自旋任务参数与调试变量 */
 #define SPIN_ANGLE_OUT_MAX_DPS      250.0f  // 单层匀速方案下的固定巡航角速度
@@ -123,7 +132,8 @@ static void spin_finish(uint8 done)
     spin_settle_count = 0;
     spin_timeout_ms = 0;
     spin_brake_phase = 0;
-    turn.out = 0;
+    spin_cmd = 0.0f;
+    turn_mix_cmd = 0.0f;
     spin_reset_pid_state(&turn_angle);
     spin_reset_pid_state(&turn_gyro);
 }
@@ -155,7 +165,10 @@ void spin_task_start(float turns, int8 dir)
     spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + (uint32)(turns * SPIN_TIMEOUT_PER_TURN_MS);
     spin_reset_pid_state(&turn_angle);
     spin_reset_pid_state(&turn_gyro);
-    turn.out = 0;
+    /* 自旋与普通转向互斥：开始自旋时清空普通转向量。 */
+    steer_cmd = 0.0f;
+    spin_cmd = 0.0f;
+    turn_mix_cmd = 0.0f;
 }
 
 /* 手动停止自旋任务，保留平衡控制但清空本次自旋目标。 */
@@ -165,6 +178,12 @@ void spin_task_stop(void)
     spin_accum_deg = 0.0f;
     spin_angle_err = 0.0f;
     spin_finish(0);
+}
+
+/* 设置普通转向差速；自旋开启时该值会被暂时忽略。 */
+void set_steer_cmd(float cmd)
+{
+    steer_cmd = cmd;
 }
 
 /*=============================================================================
@@ -231,7 +250,10 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
     /* 横滚角位置式PID：目标roll_mid，反馈euler_angle.roll，输出→只抬腿不收腿 */
     pid_init(&leg_hight, 0.25f, 0.12f, 0.0, dt_leg, 500, 0, 0, 50, Position_pid);
-    /* 自旋双环：外环角度->目标角速度，内环角速度->左右轮差速 */
+    /* 自旋控制当前采用单层固定巡航角速度；
+     * turn_gyro 用于跟踪目标角速度；
+     * turn_angle 暂时保留初始化，便于后续恢复按角度误差生成目标角速度的方案。
+     */
     pid_init(&turn_angle, 1.2f, 0.0f, 0.02f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS, Position_pid);
     pid_init(&turn_gyro, 10.0f, 0.0f, 0.0f, dt_pid_turn_gyro, 0, 0, 0, 2200, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
@@ -286,7 +308,7 @@ void LQR_control(float V_target, float th)
 
     x_hat_last = x_hat;
 
-    // 更新角度环目标时间为角速度环提供设定值
+    // 下面这段是旧版 LQR 转向实验残留，当前 pid_ctrl_Run() 主链路不使用
     //    pid_set_target(&turn_gyro, 0);
     //
     //    // 设置角速度环观测值(Z轴角速度)
@@ -335,16 +357,16 @@ void LQR_control(float V_target, float th)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
-// 函数简介     转向环控制
-// 参数说明     image_error    图像误差
-// 返回参数     null
-// 使用示例     turn_control(93 - mid_point);
-// 备注信息     isr中断调用
+// 函数简介     获取当前普通转向差速指令
+// 参数说明     image_error    当前未使用，仅为兼容旧接口保留
+// 返回参数     steer_cmd      当前普通转向差速指令
+// 使用示例     float cmd = turn_control(0);
+// 备注信息     普通转向的实际写入口为 set_steer_cmd()，自旋开启时该返回值不会参与最终差速输出
 -------------------------------------------------------------------------------------------------------------------*/
 float turn_control(float image_error)
 {
-
-    return turn_gyro.out;
+    (void)image_error;
+    return steer_cmd;
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -442,7 +464,7 @@ void pid_ctrl_Run(void)
             pid_get_observation(&turn_gyro, spin_rate_meas_dps);
             pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
             pid_run(&turn_gyro);
-            turn.out = turn_gyro.out;
+            spin_cmd = turn_gyro.out;
 
             spin_timeout_ms++;
             if (ABS(euler_angle.pitch - pitch_mid) > SPIN_PITCH_ABORT_DEG || spin_timeout_ms > spin_timeout_limit_ms)
@@ -465,15 +487,21 @@ void pid_ctrl_Run(void)
         {
             spin_last_yaw = (float)euler_angle.yaw;
             spin_rate_target_dps = 0.0f;
-            turn.out = 0.0f;
+            spin_cmd = 0.0f;
         }
     }
     else
     {
         spin_angle_err = spin_target_deg - spin_accum_deg;
         spin_rate_target_dps = 0.0f;
-        turn.out = 0.0f;
+        spin_cmd = 0.0f;
     }
+
+    /* 互斥选择最终差速：
+     * - 自旋开启时只允许 spin_cmd 生效；
+     * - 非自旋时只允许 steer_cmd 生效。
+     */
+    turn_mix_cmd = spin_enable ? spin_cmd : steer_cmd;
 
     if(Motor_Switch)
     {
@@ -484,7 +512,7 @@ void pid_ctrl_Run(void)
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
-            small_driver_set_duty((int16)(-(gyro.out + turn.out) * scale), (int16)(-(gyro.out - turn.out) * scale));
+            small_driver_set_duty((int16)(-(gyro.out + turn_mix_cmd) * scale), (int16)(-(gyro.out - turn_mix_cmd) * scale));
         }
     }
     else

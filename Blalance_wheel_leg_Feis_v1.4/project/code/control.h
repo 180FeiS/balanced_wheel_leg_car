@@ -38,6 +38,7 @@ extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 #define R_dead_zone_correct           (140)       //右电机正死区
 #define R_dead_zone_negative          (-140)      //右电机负死区
 
+/* 旧版 LQR 转向实验参数，当前普通转向/自旋互斥链路不依赖这些量 */
 extern float turn_out;
 extern float KP;
 extern float KPP;
@@ -63,6 +64,11 @@ extern float roll_debug_out_right;
 extern float roll_debug_left_offset;
 extern float roll_debug_right_offset;
 
+/* 转向/自旋差速指令 */
+extern float steer_cmd;      // 普通转向写入的差速指令，仅在 spin_enable==0 时生效
+extern float spin_cmd;       // 自旋任务生成的差速指令，仅在 spin_enable==1 时生效
+extern float turn_mix_cmd;   // 最终送往左右轮的差速指令，按互斥规则在 steer_cmd/spin_cmd 间选择
+
 /* 自旋任务调试变量 */
 extern uint8 spin_enable;
 extern uint8 spin_done;
@@ -80,7 +86,9 @@ void pid_ctrl_Init(void);                                   //PID控制初始化
 
 void LQR_control(float V_target, float th);                 //LQR控制平衡和行驶
 
-float turn_control(float image_error);                      //转向环控制
+float turn_control(float image_error);                      // 兼容旧接口，返回当前普通转向差速指令
+
+void set_steer_cmd(float cmd);                              // 设置普通转向差速，自旋开启时该值会被忽略
 
 void pid_ctrl_Run(void);                                    //PID控制平衡和行驶
 
