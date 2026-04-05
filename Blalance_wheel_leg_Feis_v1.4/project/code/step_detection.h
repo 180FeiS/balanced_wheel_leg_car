@@ -29,8 +29,6 @@ extern step_info_t step_data;
 void step_detection_init(void);
 uint8 step_detect(void);
 float calculate_step_distance(uint16 step_height_pix);
-void step_set_threshold(uint8 new_threshold);
 void step_reset_distance_tracking(void);
-uint8* step_get_binary_image(void);
 
 #endif /* CODE_STEP_DETECTION_H_ */

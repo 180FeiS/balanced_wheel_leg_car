@@ -77,6 +77,96 @@ float KPP = 0; // 0.3805;
 float KD = 0;  // 0.2f;
 float KDD = 0; // 0.2f
 
+/* 自旋任务参数与调试变量 */
+#define SPIN_ANGLE_OUT_MAX_DPS      250.0f  // 单层匀速方案下的固定巡航角速度
+#define SPIN_ANGLE_SETTLE_DEG         2.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
+#define SPIN_RATE_SETTLE_DPS         6.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
+#define SPIN_SETTLE_COUNT_MAX        80u
+#define SPIN_TIMEOUT_BASE_MS       3000u
+#define SPIN_TIMEOUT_PER_TURN_MS   4000u
+#define SPIN_PITCH_ABORT_DEG         20.0f
+
+uint8 spin_enable = 0;
+uint8 spin_done = 0;
+int8 spin_dir = 1;
+float spin_target_deg = 0.0f;
+float spin_accum_deg = 0.0f;
+float spin_angle_err = 0.0f;
+float spin_rate_target_dps = 0.0f;
+float spin_rate_meas_dps = 0.0f;
+
+static float spin_last_yaw = 0.0f;
+static uint8 spin_brake_phase = 0;
+static uint8 spin_settle_count = 0;
+static uint32 spin_timeout_ms = 0;
+static uint32 spin_timeout_limit_ms = 0;
+
+static void spin_reset_pid_state(pid_t *pid)
+{
+    pid->target = 0;
+    pid->observation = 0;
+    pid->error = 0;
+    pid->last_error = 0;
+    pid->prev_error = 0;
+    pid->integral = 0;
+    pid->differential = 0;
+    pid->last_differential = 0;
+    pid->out = 0;
+}
+
+/* 统一收尾：结束自旋任务并清空双环内部状态。 */
+static void spin_finish(uint8 done)
+{
+    spin_enable = 0;
+    spin_done = done;
+    spin_rate_target_dps = 0.0f;
+    spin_settle_count = 0;
+    spin_timeout_ms = 0;
+    spin_brake_phase = 0;
+    turn.out = 0;
+    spin_reset_pid_state(&turn_angle);
+    spin_reset_pid_state(&turn_gyro);
+}
+
+/* 启动自旋任务：turns 为圈数，dir 为方向（正数=沿 yaw 正方向）。 */
+void spin_task_start(float turns, int8 dir)
+{
+    if (turns <= 0.0f)
+    {
+        spin_finish(0);
+        spin_target_deg = 0.0f;
+        spin_accum_deg = 0.0f;
+        spin_angle_err = 0.0f;
+        return;
+    }
+
+    spin_dir = (dir >= 0) ? 1 : -1;
+    spin_enable = 1;
+    spin_done = 0;
+    spin_target_deg = turns * 360.0f * (float)spin_dir;
+    spin_accum_deg = 0.0f;
+    spin_angle_err = spin_target_deg;
+    spin_rate_target_dps = 0.0f;
+    spin_rate_meas_dps = 0.0f;
+    spin_last_yaw = (float)euler_angle.yaw;
+    spin_brake_phase = 0;
+    spin_settle_count = 0;
+    spin_timeout_ms = 0;
+    spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + (uint32)(turns * SPIN_TIMEOUT_PER_TURN_MS);
+    spin_reset_pid_state(&turn_angle);
+    spin_reset_pid_state(&turn_gyro);
+    turn.out = 0;
+}
+
+/* 手动停止自旋任务，保留平衡控制但清空本次自旋目标。 */
+void spin_task_stop(void)
+{
+    spin_target_deg = 0.0f;
+    spin_accum_deg = 0.0f;
+    spin_angle_err = 0.0f;
+    spin_finish(0);
+}
+
 /*=============================================================================
  * 舵机/腿控制参数（leg_control在pit0_ch1 5ms周期执行）
  *
@@ -141,8 +231,9 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.0087, 15, 0, 0.01, 0, 0, 0, 5000, Position_pid);
     /* 横滚角位置式PID：目标roll_mid，反馈euler_angle.roll，输出→只抬腿不收腿 */
     pid_init(&leg_hight, 0.25f, 0.12f, 0.0, dt_leg, 500, 0, 0, 50, Position_pid);
-     // pid_init(&turn_angle, 2.045, 0, 0.15, 0.003, 0, 0, 0, 10000, Position_pid);
-    // pid_init(&turn_gyro, 2.087, 15, 0, 0.001, 0, 0, 0, 10000, Position_pid);
+    /* 自旋双环：外环角度->目标角速度，内环角速度->左右轮差速 */
+    pid_init(&turn_angle, 1.2f, 0.0f, 0.02f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS, Position_pid);
+    pid_init(&turn_gyro, 10.0f, 0.0f, 0.0f, dt_pid_turn_gyro, 0, 0, 0, 2200, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
@@ -284,6 +375,13 @@ void pid_ctrl_Run(void)
         speed_loop_leg_tilt = (jump_flag == 1) ? (speed.out * JUMP_PID_SCALE) : speed.out;
     }
 
+    if (spin_enable)
+    {
+        /* 自旋时不再使用速度环输出驱动腿部前后倾，避免和原地旋转任务打架。 */
+        pid_set_target(&speed, 0);
+        speed_loop_leg_tilt = 0.0f;
+    }
+
     if (0 == timer_flag % 5) // 角度环
     {
         pid_set_target(&angle, pitch_mid);  //pitch_mid - speed.out
@@ -302,11 +400,80 @@ void pid_ctrl_Run(void)
     pid_set_dt(&gyro, dt_pid_gyro);
     pid_run(&gyro);
 
-    // // 转向环
-    // //    pid_set_target(&turn, mid_point);
-    // pid_get_observation(&turn, imu660rc_gyro_transition(imu660rc_gyro_z));
-    // pid_set_dt(&turn, dt_pid_turn);
-    // pid_run(&turn);
+    /* 自旋控制：
+     * 1. 用相邻yaw增量累计总角度，跨 ±180° 时靠 ange_deviation1 解包。
+     * 2. 远离目标时固定角速度巡航，接近目标后直接把目标角速度收为 0。
+     * 3. 内环只负责把实际 gyro_z 跟踪到目标角速度。
+     */
+    spin_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+    if (spin_enable)
+    {
+        if (Motor_Switch)
+        {
+            float curr_yaw = (float)euler_angle.yaw;
+            float delta_yaw = (float)ange_deviation1(curr_yaw, spin_last_yaw);
+            float abs_spin_err = 0.0f;
+            spin_last_yaw = curr_yaw;
+            spin_accum_deg += delta_yaw;
+            spin_angle_err = spin_target_deg - spin_accum_deg;
+            abs_spin_err = ABS(spin_angle_err);
+
+            if (!spin_brake_phase)
+            {
+                if ((spin_target_deg >= 0.0f && spin_angle_err <= 0.0f) ||
+                    (spin_target_deg < 0.0f && spin_angle_err >= 0.0f) ||
+                    abs_spin_err <= SPIN_ANGLE_SETTLE_DEG)
+                {
+                    spin_brake_phase = 1;
+                }
+            }
+
+            if (spin_brake_phase)
+            {
+                spin_rate_target_dps = 0.0f;
+            }
+            else
+            {
+                float spin_err_sign = (spin_angle_err >= 0.0f) ? 1.0f : -1.0f;
+                spin_rate_target_dps = spin_err_sign * SPIN_ANGLE_OUT_MAX_DPS;
+            }
+
+            pid_set_target(&turn_gyro, spin_rate_target_dps);
+            pid_get_observation(&turn_gyro, spin_rate_meas_dps);
+            pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
+            pid_run(&turn_gyro);
+            turn.out = turn_gyro.out;
+
+            spin_timeout_ms++;
+            if (ABS(euler_angle.pitch - pitch_mid) > SPIN_PITCH_ABORT_DEG || spin_timeout_ms > spin_timeout_limit_ms)
+            {
+                spin_finish(0);
+            }
+            else if (spin_brake_phase && ABS(spin_rate_meas_dps) < SPIN_RATE_SETTLE_DPS)
+            {
+                if (++spin_settle_count >= SPIN_SETTLE_COUNT_MAX)
+                {
+                    spin_finish(1);
+                }
+            }
+            else
+            {
+                spin_settle_count = 0;
+            }
+        }
+        else
+        {
+            spin_last_yaw = (float)euler_angle.yaw;
+            spin_rate_target_dps = 0.0f;
+            turn.out = 0.0f;
+        }
+    }
+    else
+    {
+        spin_angle_err = spin_target_deg - spin_accum_deg;
+        spin_rate_target_dps = 0.0f;
+        turn.out = 0.0f;
+    }
 
     if(Motor_Switch)
     {

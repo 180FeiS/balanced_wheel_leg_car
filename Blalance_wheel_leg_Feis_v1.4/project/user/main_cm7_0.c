@@ -14,6 +14,7 @@ extern float gyro_z_bias_mean;
 
 uint16 jump_test = 1;
 
+
 /* 主循环侧统一用这个函数“取走一次待执行任务”。
  * 这里短暂关中断是为了避免与 ISR 同时修改 pending 计数。
  * 如果以后增加新的软任务，通常不需要改这个函数，直接在 run_soft_tasks() 里复用即可。
@@ -66,6 +67,7 @@ static void run_soft_tasks(void)
   {
     step_detect();
   }
+  
 }
 
 int main(void)
@@ -117,10 +119,12 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
-    SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
+    // SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
+    /* 单层自旋调试：累计角度 / 剩余角度 / 目标角速度 / 实测角速度。 */
+    // SendDataStreamToVOFA(4, (float)spin_accum_deg, (float)spin_angle_err, (float)spin_rate_target_dps, (float)spin_rate_meas_dps);
     //SendDataStreamToVOFA(4, (float)N.Mileage_All,(float)N.Save_index,(float)R_Mileage,(float)L_Mileage);
 #endif
-   
+
 
     
 

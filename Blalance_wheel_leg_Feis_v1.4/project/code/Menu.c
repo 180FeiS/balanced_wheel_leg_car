@@ -189,6 +189,11 @@ void selectMenu(void)
             N.End_f=1;
         }
         break;
+    case 'o':
+        /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。 */
+        spin_task_start(2.0f, 1);
+        
+        break;
     }
     
     Menu_command = 0;
@@ -347,6 +352,7 @@ void MenuInit()
         strcpy(menuMember.pos, "2.1.3");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
 /*
+
         menuMember.gui = GUI_2_2_1;
         menuMember.act = ACT_2_2_1;
         strcpy(menuMember.pos, "2.2.1");
@@ -356,6 +362,7 @@ void MenuInit()
         menuMember.act = ACT_2_2_2;
         strcpy(menuMember.pos, "2.2.2");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
+/*
 
             menuMember.gui=GUI_2_2_3;
             menuMember.act=ACT_2_2_3;
@@ -400,7 +407,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.1.1");
 #endif
 }
 

@@ -4,7 +4,7 @@ step_info_t step_data = {0, 0, 0, 0, 0.0f, 0.0f};
 
 static uint8 image_binary[MT9V03X_H][MT9V03X_W];
 static uint16 edge_histogram[MT9V03X_H];
-static uint8 threshold = 80;
+static uint8 threshold;
 
 #define HISTORY_SIZE 10
 static float distance_history[HISTORY_SIZE] = {0};
@@ -36,20 +36,6 @@ void step_detection_init(void)
     last_valid_distance = 0;
     min_distance_recorded = 9999.0f;
     fail_counter = 0;
-}
-
-static void image_threshold(void)
-{
-    for (int i = 0; i < MT9V03X_H; i++)
-    {
-        for (int j = 0; j < MT9V03X_W; j++)
-        {
-            if (mt9v03x_image[i][j] > threshold)
-                image_binary[i][j] = 255;
-            else
-                image_binary[i][j] = 0;
-        }
-    }
 }
 
 static void compute_horizontal_edge_histogram(void)
@@ -154,9 +140,7 @@ uint8 step_detect(void)
     if (mt9v03x_finish_flag)
     {
         mt9v03x_finish_flag = 0;
-        
-        image_threshold();
-        
+
         compute_horizontal_edge_histogram();
         
         int step_bottom = find_step_bottom_edge();
@@ -245,23 +229,10 @@ uint8 step_detect(void)
     return 0;
 }
 
-void step_set_threshold(uint8 new_threshold)
-{
-    if (new_threshold > 0 && new_threshold < 255)
-    {
-        threshold = new_threshold;
-    }
-}
-
 void step_reset_distance_tracking(void)
 {
     min_distance_recorded = 9999.0f;
     last_valid_distance = 0;
     last_valid_height = 0;
     fail_counter = 0;
-}
-
-uint8* step_get_binary_image(void)
-{
-    return (uint8*)image_binary;
 }

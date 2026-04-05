@@ -63,6 +63,16 @@ extern float roll_debug_out_right;
 extern float roll_debug_left_offset;
 extern float roll_debug_right_offset;
 
+/* 自旋任务调试变量 */
+extern uint8 spin_enable;
+extern uint8 spin_done;
+extern int8 spin_dir;
+extern float spin_target_deg;
+extern float spin_accum_deg;
+extern float spin_angle_err;
+extern float spin_rate_target_dps;
+extern float spin_rate_meas_dps;
+
 /*********************************************************************参数*********************************************************************/
 
 /*********************************************************************函数*********************************************************************/
@@ -87,6 +97,10 @@ void left_leg_control(float p, float angle);                // 控制左腿
 void right_leg_control(float p, float angle);               // 控制右腿
 
 void leg_debug_init_pwm(void);                               // 调试模式腿高初始化
+
+void spin_task_start(float turns, int8 dir);                 // 启动自旋任务，dir>0沿yaw正方向
+
+void spin_task_stop(void);                                   // 停止自旋任务
 
 /*********************************************************************函数*********************************************************************/
 
