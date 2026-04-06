@@ -606,7 +606,7 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(0,ROW_9,"Height:");
     ips200_show_uint(88,ROW_9,step_data.step_height_pix,3);
     ips200_show_string(136,ROW_9,"pix");
-    /* 与台阶检测算法一致：显示当前灰度帧（mt9v03x_image），由 50ms 软任务 step_detect 拉取新帧后更新。 */
+    /* 与台阶检测算法一致：显示当前灰度帧（mt9v03x_image），由 10ms 软任务 step_detect 拉取新帧后更新。 */
     ips200_show_gray_image(0,ROW_10,mt9v03x_image[0],MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
 
 }

@@ -16,10 +16,10 @@
 
 //存储范围 <0 - 47>
 #define Nag_End_Page 1      //flash结束页数
-#define Nag_Start_Page 45   //flash开始页数
+#define Nag_Start_Page 85   //flash开始页数
 
 #define Nag_Set_mileage 2100 //里程计//5cm
-#define Nag_Prev 200    //前包
+#define Nag_Prev 200    //前瞻
 #define Nag_Yaw euler_angle.yaw //航向角度取偏航角
 
 #define L_Mileage motor_value.receive_left_speed_data   //左轮里程计

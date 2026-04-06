@@ -27,6 +27,6 @@
 extern vuint8 task_5ms_nav_pending;
 extern vuint8 task_10ms_menu_key_pending;
 extern vuint8 task_20ms_menu_pending;
-extern vuint8 task_50ms_step_pending;
+extern vuint8 task_10ms_step_pending;
 
 #endif /* CODE_TASK_SCHEDULE_H_ */

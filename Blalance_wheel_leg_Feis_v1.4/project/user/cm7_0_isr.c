@@ -39,7 +39,7 @@
 vuint8 task_5ms_nav_pending = 0;
 vuint8 task_10ms_menu_key_pending = 0;
 vuint8 task_20ms_menu_pending = 0;
-vuint8 task_50ms_step_pending = 0;
+vuint8 task_10ms_step_pending = 0;
 
 /* ISR 侧统一用这个函数累加软任务计数。
  * 以后如果新增软任务，优先复用这里，不要在中断里直接写复杂逻辑。
@@ -63,6 +63,7 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
      * - 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()。
      */
+     steer_request_target_yaw(0.0f);
     if (steer_yaw_request_pending)
     {
         if (spin_enable)
@@ -111,9 +112,9 @@ void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 
 void pit0_ch11_isr() // 定时器通道 11 周期中断服务函数
 {
-    pit_isr_flag_clear(PIT_CH11); // 50ms
+    pit_isr_flag_clear(PIT_CH11); // 10ms
     /* 台阶检测会遍历图像，耗时不稳定，因此只挂任务。 */
-    task_pending_push(&task_50ms_step_pending);
+    task_pending_push(&task_10ms_step_pending);
    
 }
 
