@@ -74,6 +74,7 @@ extern char ReadPos[HASH_KEY_LEN];
 extern void MenuInit(void);
 extern void selectMenu(void);
 extern void selectMenu_Key(void);
+extern void menu_key_capture_event(void);
 
 
 #endif /* CODE_LOGIC_MENU_H_ */

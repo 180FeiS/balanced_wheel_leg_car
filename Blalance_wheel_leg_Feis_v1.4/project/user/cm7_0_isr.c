@@ -63,7 +63,7 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
      * - 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()。
      */
-     steer_request_target_yaw(0.0f);
+     steer_request_target_yaw(steer_yaw_request_deg);
     if (steer_yaw_request_pending)
     {
         if (spin_enable)
@@ -93,7 +93,10 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH2); // 10ms
-    /* 菜单按键扫描不是硬实时任务，只在中断中登记待执行次数。 */
+    /* key_init(10) 要求约每 10ms 调用一次 key_scanner；若仅随主循环调用，主循环慢时短按无法累计到 KEY_MAX_SHOCK_PERIOD。 */
+    key_scanner();
+    /* 短按事件先在这里缓存，避免主循环忙时被下一次 key_scanner() 覆盖掉；真正的菜单切换和显示刷新仍放主循环。 */
+    menu_key_capture_event();
     task_pending_push(&task_10ms_menu_key_pending);
 }
 

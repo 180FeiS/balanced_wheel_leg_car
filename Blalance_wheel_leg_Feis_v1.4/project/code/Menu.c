@@ -58,6 +58,21 @@ HASH_TABLE_t hashMenu;    // 储存菜单项的哈希表
 MENU_MEMBER_t menuMember; // 当前选中的菜单项信息
 char ReadPos[HASH_KEY_LEN] = {'1', 0, 0, 0, 0};
 
+#define MENU_KEY_EVENT_QUEUE_LEN 8
+
+typedef enum
+{
+    MENU_KEY_NAV_NONE = 0,
+    MENU_KEY_NAV_LEFT,
+    MENU_KEY_NAV_RIGHT,
+    MENU_KEY_NAV_DOWN,
+    MENU_KEY_NAV_UP,
+} menu_key_nav_enum;
+
+static volatile uint8 menu_key_nav_queue[MENU_KEY_EVENT_QUEUE_LEN];
+static volatile uint8 menu_key_nav_head = 0;
+static volatile uint8 menu_key_nav_tail = 0;
+
 /* 内部函数声明 */
 static void HashTableCtor(HASH_TABLE_t *const This);                                                // 哈希表初始化
 static uint16_t CreatHashKey(const char *skey);                                                     // 生成哈希值
@@ -69,6 +84,8 @@ static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
 static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);             // 切换到左侧同级菜单
 static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);            // 切换到右侧同级菜单
 static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str); // 查找菜单项
+static void MenuKeyEventPush(menu_key_nav_enum nav);
+static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 
 /*-------------------------------------------------------------------------
  * 菜单接口函数-用户只需更改此部分
@@ -82,33 +99,94 @@ static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
  * @Example: selectMenu();
  */
 
-void selectMenu_Key(void)
+void menu_key_capture_event(void)
 {
-   key_scanner();
    if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
    {
-        hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
-        ips200_clear();
+        MenuKeyEventPush(MENU_KEY_NAV_LEFT);
         key_clear_state(KEY_1);
    }
    if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
    {
-        hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
-        ips200_clear();
+        MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
         key_clear_state(KEY_2);
    }
    if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
    {
-        hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
-        ips200_clear();
+        MenuKeyEventPush(MENU_KEY_NAV_DOWN);
         key_clear_state(KEY_3);
    }
    if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
    {
-        hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
-        ips200_clear();
+        MenuKeyEventPush(MENU_KEY_NAV_UP);
         key_clear_state(KEY_4);
    }
+}
+
+void selectMenu_Key(void)
+{
+   uint8 menu_nav = 0;
+   menu_key_nav_enum nav = MENU_KEY_NAV_NONE;
+
+   while(MenuKeyEventPop(&nav))
+   {
+        switch(nav)
+        {
+        case MENU_KEY_NAV_LEFT:
+             hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
+             menu_nav = 1;
+             break;
+        case MENU_KEY_NAV_RIGHT:
+             hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
+             menu_nav = 1;
+             break;
+        case MENU_KEY_NAV_DOWN:
+             hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
+             menu_nav = 1;
+             break;
+        case MENU_KEY_NAV_UP:
+             hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
+             menu_nav = 1;
+             break;
+        default:
+             break;
+        }
+   }
+
+   /* 与 selectMenu() 一致：导航后立刻重绘，且须在主循环内完成，避免与 ips200 SPI 冲突。 */
+   if(menu_nav && (Motor_Switch == MOTOR_OFF))
+   {
+        ips200_clear();
+        menuMember.gui();
+        menuMember.act();
+   }
+}
+
+static void MenuKeyEventPush(menu_key_nav_enum nav)
+{
+    uint8 next_head = (uint8)((menu_key_nav_head + 1U) % MENU_KEY_EVENT_QUEUE_LEN);
+
+    if(next_head != menu_key_nav_tail)
+    {
+        menu_key_nav_queue[menu_key_nav_head] = (uint8)nav;
+        menu_key_nav_head = next_head;
+    }
+}
+
+static uint8 MenuKeyEventPop(menu_key_nav_enum *nav)
+{
+    uint8 has_event = 0;
+    uint32 interrupt_status = interrupt_global_disable();
+
+    if(menu_key_nav_head != menu_key_nav_tail)
+    {
+        *nav = (menu_key_nav_enum)menu_key_nav_queue[menu_key_nav_tail];
+        menu_key_nav_tail = (uint8)((menu_key_nav_tail + 1U) % MENU_KEY_EVENT_QUEUE_LEN);
+        has_event = 1;
+    }
+
+    interrupt_global_enable(interrupt_status);
+    return has_event;
 }
 
 /*
@@ -202,7 +280,7 @@ void selectMenu(void)
          * 当前航向 + 相对角度 的换算由 control.c 统一处理，
          * 真正的 steer_set_target_yaw() 会在下一拍 1ms ISR 里安全执行。
          */
-        steer_request_relative_yaw(30.0f);
+        steer_yaw_request_deg+=30;
         break;
     case 'q':
         set_speed += 500;
