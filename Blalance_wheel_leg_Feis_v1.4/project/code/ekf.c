@@ -45,7 +45,7 @@ float gyro_z_bias_mean = 0.0f;
 #define GYRO_Z_BIAS_SAMPLES 10000u  /* 1ms * 10000 = 10s */
 
 /* gyro_z 固定零偏补偿，单位 rad/s，静止测得后直接减去，无需上电标定 */
-#define GYRO_Z_BIAS_COMPENSATION 0.0008f
+#define GYRO_Z_BIAS_COMPENSATION 0.0006f
 // SOS 系数（根据给定的 Numerator 和 Denominator）
 float numerator[3][3] = {
     {1.0, -1.4180, 1.0}, // 第一个二阶节的分子系数 (b0, b1, b2)

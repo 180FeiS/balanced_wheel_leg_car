@@ -190,9 +190,28 @@ void selectMenu(void)
         }
         break;
     case 'o':
-        /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。 */
+        /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。
+         * 自旋保持独立任务，不走 steer_request_target_yaw() 请求链，
+         * 否则会变成持续重置普通转向目标，破坏当前的自旋收尾与互斥逻辑。
+         */
         spin_task_start(2.0f, 1);
         
+        break;
+    case 'p':
+        /* 调试入口：发送字符 p 后，登记一次相对转角请求。
+         * 当前航向 + 相对角度 的换算由 control.c 统一处理，
+         * 真正的 steer_set_target_yaw() 会在下一拍 1ms ISR 里安全执行。
+         */
+        steer_request_relative_yaw(30.0f);
+        break;
+    case 'q':
+        set_speed += 500;
+        break;
+    case 'r':
+        set_speed -= 500;
+        break;
+    case 's':
+        set_speed  = 0;
         break;
     }
     

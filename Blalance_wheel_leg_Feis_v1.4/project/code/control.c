@@ -32,8 +32,8 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 3.5;  // pitch机械中值（俯仰平衡）
-float roll_mid = -1.866; // roll机械中值（横滚平衡，leg_hight PID目标）
+float pitch_mid = 5;  // pitch机械中值（俯仰平衡）
+float roll_mid = 2.95; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -41,15 +41,20 @@ float dt_pid_angle = 0.01f;
 float dt_pid_speed = 0.02f;
 float dt_pid_turn = 0.01f;
 float dt_leg = 0.005f;   // 5ms，横滚leg_hight PID周期，与pit0_ch1 leg_control一致
-float dt_pid_turn_angle = 0.003f;
+/* 航向外环（turn_angle）周期：须与 pid_ctrl_Run() 实际调用周期一致。
+ * pit0_ch0_isr 为 1ms 一次，普通转向里每拍都跑外环，故 dt=0.001。
+ * 若改为“每 3ms 只算一次外环”，应在此处保持 dt=0.003，并在 pid_ctrl_Run 里用计数器包一层，内环仍每 1ms 跑。
+ */
+float dt_pid_turn_angle = 0.001f;
 float dt_pid_turn_gyro = 0.001f;
 
 // 初始腿高（非跳跃时基准）
 float leg_long = 5.5f; 
 // float leg_high_integral = 0;
 
+
+float set_speed = 0; //设置速度
 // 跳跃标志位
-float set_speed = 0;
 uint8 jump_flag = 0;
 uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
 
@@ -86,6 +91,35 @@ float steer_cmd = 0.0f;
 float spin_cmd = 0.0f;
 float turn_mix_cmd = 0.0f;
 
+/* 普通转向任务的最小状态：
+ * steer_enable         标记当前是否正在执行“转到指定航向”的闭环任务；
+ * steer_target_yaw_deg 用绝对航向存目标，后续无论菜单测试还是导航都能复用；
+ * steer_angle_err      仅用于观察当前还差多少角度，不需要频繁手调。
+ */
+uint8 steer_enable = 0;
+float steer_target_yaw_deg = 0.0f;
+float steer_angle_err = 0.0f;
+float steer_rate_target_dps = 0.0f;   // 普通转向外环生成的目标角速度，供 VOFA 观察
+float steer_rate_meas_dps = 0.0f;     // 普通转向内环的实际角速度反馈，供 VOFA 观察
+
+/* 1ms 控制中断边沿下发：
+ * - steer_yaw_request_deg 始终保存最新绝对航向目标；
+ * - steer_yaw_request_pending 表示该目标尚未真正进入 steer_set_target_yaw()；
+ * - steer_yaw_delayed_by_spin 表示当前因 spin_enable==1 而暂缓，等自旋结束后下一拍再执行。
+ */
+vuint8 steer_yaw_request_pending = 0;
+vuint8 steer_yaw_delayed_by_spin = 0;
+volatile float steer_yaw_request_deg = 0.0f;
+
+/* 普通转向参数先固定成常量，后续确认效果后再决定是否开放到菜单。
+ * 这里故意比自旋保守，避免“点一下转向”变成类似原地甩尾的激烈动作。
+ */
+#define STEER_ANGLE_SETTLE_DEG       3.0f   // 剩余角度进入该窗口后认为已经基本到位
+#define STEER_RATE_SETTLE_DPS        6.0f   // 接近目标时，实测角速度也要足够小才允许结束
+#define STEER_RATE_TARGET_MAX_DPS   200.0f   // 外环生成的目标角速度上限，限制普通转向的灵敏度
+#define STEER_CMD_MAX              1500.0f   // 最终差速限幅，防止普通转向输出过猛影响平衡
+#define STEER_SETTLE_COUNT_MAX      20u     // 连续满足收敛条件若干次再结束，避免边界抖动误判
+
 /* 自旋任务参数与调试变量 */
 #define SPIN_ANGLE_OUT_MAX_DPS      250.0f  // 单层匀速方案下的固定巡航角速度
 #define SPIN_ANGLE_SETTLE_DEG         2.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
@@ -121,6 +155,38 @@ static void spin_reset_pid_state(pid_t *pid)
     pid->differential = 0;
     pid->last_differential = 0;
     pid->out = 0;
+}
+
+/* 把任意角度包到 [-180, 180]。
+ * 绝对航向目标、相对转角换算后的目标，以及误差计算前都统一走这里，
+ * 这样跨越 ±180° 时仍能沿最短方向闭环。
+ */
+static float wrap_yaw_deg(float yaw_deg)
+{
+    while (yaw_deg > 180.0f)
+    {
+        yaw_deg -= 360.0f;
+    }
+    while (yaw_deg < -180.0f)
+    {
+        yaw_deg += 360.0f;
+    }
+    return yaw_deg;
+}
+
+/* 普通转向统一收尾：
+ * done=1 表示正常转到位，done=0 表示中途取消。
+ * 这里同时清空 turn_angle/turn_gyro，避免上一次任务残留状态影响下一次转向。
+ */
+static void steer_finish(uint8 done)
+{
+    (void)done;
+    steer_enable = 0;
+    steer_angle_err = 0.0f;
+    steer_cmd = 0.0f;
+    turn_mix_cmd = spin_enable ? spin_cmd : 0.0f;
+    spin_reset_pid_state(&turn_angle);
+    spin_reset_pid_state(&turn_gyro);
 }
 
 /* 统一收尾：结束自旋任务并清空双环内部状态。 */
@@ -166,6 +232,8 @@ void spin_task_start(float turns, int8 dir)
     spin_reset_pid_state(&turn_angle);
     spin_reset_pid_state(&turn_gyro);
     /* 自旋与普通转向互斥：开始自旋时清空普通转向量。 */
+    steer_enable = 0;
+    steer_angle_err = 0.0f;
     steer_cmd = 0.0f;
     spin_cmd = 0.0f;
     turn_mix_cmd = 0.0f;
@@ -178,6 +246,101 @@ void spin_task_stop(void)
     spin_accum_deg = 0.0f;
     spin_angle_err = 0.0f;
     spin_finish(0);
+}
+
+/* 设置绝对航向目标：
+ * 1. 这是“立即执行”接口，若当前在自旋，会直接停掉自旋并切入普通转向；
+ * 2. 约定 target_yaw_deg 使用 [-180, 180] 度，函数内部仍会做一次包角保护；
+ * 3. 不要在周期里重复调用，否则会不断刷新任务状态，影响闭环收敛。
+ */
+void steer_set_target_yaw(float target_yaw_deg)
+{
+    float curr_yaw = (float)euler_angle.yaw;
+    float target_yaw = wrap_yaw_deg(target_yaw_deg);
+    float target_err = (float)ange_deviation1(target_yaw, curr_yaw);
+
+    /* 立即执行接口优先级最高：一旦直接调用，就认为旧的请求式目标已经失效，
+     * 统一清掉 pending/delayed，避免自旋结束后又把过期请求重新执行一遍。
+     */
+    steer_yaw_request_pending = 0;
+    steer_yaw_delayed_by_spin = 0;
+
+    if (ABS(target_err) <= 0.001f)
+    {
+        steer_finish(0);
+        steer_target_yaw_deg = target_yaw;
+        return;
+    }
+
+    /* 普通转向与自旋互斥：绝对航向任务启动前先退出自旋。 */
+    if (spin_enable)
+    {
+        spin_task_stop();
+    }
+
+    steer_enable = 1;
+    steer_target_yaw_deg = target_yaw;
+    steer_angle_err = target_err;
+    steer_cmd = 0.0f;
+    turn_mix_cmd = 0.0f;
+    /* 每次新任务都清空双环内部状态，避免上次积分/微分残留导致一上电就猛打。 */
+    spin_reset_pid_state(&turn_angle);
+    spin_reset_pid_state(&turn_gyro);
+}
+
+/* 登记最新绝对航向请求：
+ * 1. steer_yaw_request_deg 始终保留最新目标，新请求会覆盖旧请求，不排队；
+ * 2. 若自旋在跑，pit0_ch0_isr 不会立刻调用 steer_set_target_yaw()，而是把它延迟到自旋结束；
+ * 3. 一旦请求真正被 1ms ISR 执行，会统一清掉 pending/delayed 标志，避免旧请求残留或重复触发。
+ */
+void steer_request_target_yaw(float target_yaw_deg)
+{
+    steer_yaw_request_deg = target_yaw_deg;
+    steer_yaw_request_pending = 1;
+    steer_yaw_delayed_by_spin = 0;
+}
+
+/* 登记相对转角请求：
+ * 1. 语义与 steer_task_start(delta_deg) 一致，仍表示“在当前朝向基础上再转多少度”；
+ * 2. 区别是这里只登记请求，真正的 steer_set_target_yaw() 由 1ms ISR 在安全时机执行；
+ * 3. 当前航向 + 相对角度 的换算统一放在控制层，避免菜单/导航各自重复实现一套。
+ */
+void steer_request_relative_yaw(float delta_deg)
+{
+    float curr_yaw = (float)euler_angle.yaw;
+
+    if (delta_deg == 0.0f)
+    {
+        steer_request_target_yaw(curr_yaw);
+        return;
+    }
+
+    steer_request_target_yaw(curr_yaw + delta_deg);
+}
+
+/* 启动相对转角任务：
+ * delta_deg 是“在当前朝向基础上再转多少度”，因此只适合触发一次。
+ * 该接口会同步调用 steer_set_target_yaw()，主要保留给旧逻辑兼容；
+ * 若希望与 1ms 控制链路时序保持一致，推荐改用 steer_request_relative_yaw()。
+ */
+void steer_task_start(float delta_deg)
+{
+    float curr_yaw = (float)euler_angle.yaw;
+
+    if (delta_deg == 0.0f)
+    {
+        steer_finish(0);
+        steer_target_yaw_deg = curr_yaw;
+        return;
+    }
+
+    steer_set_target_yaw(curr_yaw + delta_deg);
+}
+
+/* 手动停止普通转向任务，但不影响平衡控制主链路。 */
+void steer_task_stop(void)
+{
+    steer_finish(0);
 }
 
 /* 设置普通转向差速；自旋开启时该值会被暂时忽略。 */
@@ -252,10 +415,10 @@ void pid_ctrl_Init(void)
     pid_init(&leg_hight, 0.25f, 0.12f, 0.0, dt_leg, 500, 0, 0, 50, Position_pid);
     /* 自旋控制当前采用单层固定巡航角速度；
      * turn_gyro 用于跟踪目标角速度；
-     * turn_angle 暂时保留初始化，便于后续恢复按角度误差生成目标角速度的方案。
+     * turn_angle 用于普通转向外环；dt_pid_turn_angle 已与 pit0_ch0 的 1ms 周期对齐。
      */
-    pid_init(&turn_angle, 1.2f, 0.0f, 0.02f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS, Position_pid);
-    pid_init(&turn_gyro, 10.0f, 0.0f, 0.0f, dt_pid_turn_gyro, 0, 0, 0, 2200, Position_pid);
+    pid_init(&turn_angle, 20.0f, 2.0f, 0.0f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS, Position_pid);
+    pid_init(&turn_gyro, 30.0f, 2.0f, 0.0f, dt_pid_turn_gyro, 0, 0, 0, 2200, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
@@ -384,12 +547,11 @@ void pid_ctrl_Run(void)
     static uint16 pid_time_turn = 0;
     static uint32 timer_flag = 0;
     static float Angle_Out = 0;
-    static float angle_kp_normal = 500.0f;
-    static float speed_kp_normal = 0.02f;
     imu660rc_get_gyro();
 
     if (0 == timer_flag) // 速度环
     {
+        pid_set_target(&speed, -set_speed);
         pid_get_observation(&speed, -motor_value.receive_left_speed_data + motor_value.receive_right_speed_data);
 
         pid_set_dt(&speed, dt_pid_speed);
@@ -495,6 +657,57 @@ void pid_ctrl_Run(void)
         spin_angle_err = spin_target_deg - spin_accum_deg;
         spin_rate_target_dps = 0.0f;
         spin_cmd = 0.0f;
+    }
+
+    if (!spin_enable && steer_enable)
+    {
+        static uint8 steer_settle_count = 0;
+        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+        steer_rate_target_dps = 0.0f;
+
+        /* 普通转向用“目标航向 - 当前航向”的归一化误差做外环输入。 */
+        steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
+
+        /* 外环：航向误差 -> 目标角速度。 */
+        pid_set_target(&turn_angle, 0.0f);
+        pid_get_observation(&turn_angle, -steer_angle_err);
+        pid_set_dt(&turn_angle, dt_pid_turn_angle);
+        pid_run(&turn_angle);
+        steer_rate_target_dps = clip(turn_angle.out, -STEER_RATE_TARGET_MAX_DPS, STEER_RATE_TARGET_MAX_DPS);
+
+        /* 内环：目标角速度 -> 左右轮差速输出。 */
+        pid_set_target(&turn_gyro, steer_rate_target_dps);
+        pid_get_observation(&turn_gyro, steer_rate_meas_dps);
+        pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
+        pid_run(&turn_gyro);
+        set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
+
+        /* 角度和角速度都进入收敛窗口后，再连续确认若干个周期再结束，
+         * 可以避免刚到目标附近时因为摆头/噪声导致“到位-没到位”反复抖动。
+         */
+        if (ABS(steer_angle_err) <= STEER_ANGLE_SETTLE_DEG &&
+            ABS(steer_rate_meas_dps) <= STEER_RATE_SETTLE_DPS)
+        {
+            if (++steer_settle_count >= STEER_SETTLE_COUNT_MAX)
+            {
+                steer_finish(1);
+                steer_settle_count = 0;
+            }
+        }
+        else
+        {
+            steer_settle_count = 0;
+        }
+    }
+    else if (!spin_enable)
+    {
+        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+        steer_rate_target_dps = 0.0f;
+        steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
+        if (!steer_enable)
+        {
+            steer_cmd = 0.0f;
+        }
     }
 
     /* 互斥选择最终差速：
@@ -871,21 +1084,27 @@ double get_fang_wei_jiao(double X_now, double Y_now, double X_next, double Y_nex
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     航向角偏差归一化
-// 参数说明     angel1    当前航向角
-//              angel2    目标航向角
+// 参数说明     angel1    参与计算的第一个角度
+//              angel2    参与计算的第二个角度
 // 返回参数     归一化后的角度偏差（-180°到180°）
 // 使用示例     double deviation = ange_deviation1(90, 45);
-// 备注信息     计算当前航向与目标航向的偏差并归一化
+// 备注信息     返回 wrap(angel1 - angel2)
+//              普通转向里使用 ange_deviation1(target, current)，即“目标航向 - 当前航向”的最短路径误差
 -------------------------------------------------------------------------------------------------------------------*/
 double ange_deviation1(double angel1, double angel2)
 {
-    double x;
-    x = angel1 - angel2;  // 当前航向 - 目标航向
-    
+    double x = angel1 - angel2;
+
     // 归一化到 [-180°, 180°]
-    if(x >= 180) x = x - 360;
-    if(x <= -180) x = x + 360;
-    
+    while (x > 180.0)
+    {
+        x -= 360.0;
+    }
+    while (x < -180.0)
+    {
+        x += 360.0;
+    }
+
     return x;
 }
 

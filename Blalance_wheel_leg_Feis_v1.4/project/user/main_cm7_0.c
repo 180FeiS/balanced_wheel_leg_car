@@ -122,9 +122,9 @@ int main(void)
     /* VOFA 调试输出按需要二选一或三选一打开：
      * 1. 姿态/零偏观测：pitch / roll / yaw / gyro_z_bias_mean
      * 2. 单层自旋调试：spin_accum_deg / spin_angle_err / spin_rate_target_dps / spin_rate_meas_dps
-     * 3. 转向/自旋互斥调试：steer_cmd / spin_cmd / turn_mix_cmd / spin_enable
+     * 3. 普通转向双环调试：steer_angle_err / steer_rate_target_dps / steer_rate_meas_dps / turn_gyro.out
      */
-    // SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
+     SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
 
     // SendDataStreamToVOFA(4, (float)spin_accum_deg, (float)spin_angle_err, (float)spin_rate_target_dps, (float)spin_rate_meas_dps);
 
@@ -133,12 +133,16 @@ int main(void)
 
 
     //SendDataStreamToVOFA(4, (float)N.Mileage_All,(float)N.Save_index,(float)R_Mileage,(float)L_Mileage);
+
+
+    // SendDataStreamToVOFA(4, (float)set_speed, (float)car_speed, (float)Left_Motor_Speed, (float)Right_Motor_Speed);
+
+    // SendDataStreamToVOFA(4, (float)steer_angle_err, (float)steer_rate_target_dps, (float)steer_rate_meas_dps, (float)turn_gyro.out);
 #endif
 
-
-    
-
-   
+    /* 切勿在 while(true) 里每轮调用 steer_request_target_yaw()：
+     * 否则会每 1ms 触发一次 steer_set_target_yaw，持续打断自旋并反复重置转向 PID，
+     * 表现为菜单里 o/p 调试（spin_task_start / steer_task_start）“失效”。 */
   }
 }
 

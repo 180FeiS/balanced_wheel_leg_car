@@ -28,7 +28,7 @@ extern float dt_leg;
 extern float dt_pid_turn_angle;
 extern float dt_pid_turn_gyro;
 
-extern float set_speed;                   //腿高积分
+extern float set_speed;                   //设置速度
 extern uint8 jump_flag;                   //跳跃标志位
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
@@ -64,10 +64,22 @@ extern float roll_debug_out_right;
 extern float roll_debug_left_offset;
 extern float roll_debug_right_offset;
 
-/* 转向/自旋差速指令 */
+/* 转向/自旋差速指令。
+ * turn_mix_cmd 是最终真正参与左右轮差速的量：
+ * - spin_enable == 1 时，只允许 spin_cmd 生效；
+ * - spin_enable == 0 时，只允许 steer_cmd 生效。
+ */
 extern float steer_cmd;      // 普通转向写入的差速指令，仅在 spin_enable==0 时生效
 extern float spin_cmd;       // 自旋任务生成的差速指令，仅在 spin_enable==1 时生效
 extern float turn_mix_cmd;   // 最终送往左右轮的差速指令，按互斥规则在 steer_cmd/spin_cmd 间选择
+extern uint8 steer_enable;   // 普通转向任务使能，1表示当前正在闭环转向
+extern float steer_target_yaw_deg; // 普通转向的绝对航向目标（建议使用 -180~180 度）
+extern float steer_angle_err; // 普通转向当前航向误差，主要用于VOFA/调试观察
+extern float steer_rate_target_dps; // 普通转向外环生成的目标角速度，主要用于 VOFA/调试观察
+extern float steer_rate_meas_dps;   // 普通转向内环使用的实际角速度反馈，主要用于 VOFA/调试观察
+extern vuint8 steer_yaw_request_pending;   // 1：存在一条尚未真正进入 steer_set_target_yaw() 的最新航向请求
+extern vuint8 steer_yaw_delayed_by_spin;   // 1：该请求因 spin_enable==1 被延迟，等自旋结束后再应用
+extern volatile float steer_yaw_request_deg; // 最新待下发的绝对航向目标（度），新请求会覆盖旧目标
 
 /* 自旋任务调试变量 */
 extern uint8 spin_enable;
@@ -89,6 +101,16 @@ void LQR_control(float V_target, float th);                 //LQR控制平衡和
 float turn_control(float image_error);                      // 兼容旧接口，返回当前普通转向差速指令
 
 void set_steer_cmd(float cmd);                              // 设置普通转向差速，自旋开启时该值会被忽略
+
+void steer_set_target_yaw(float target_yaw_deg);            // 立即设置绝对航向目标；若当前在自旋，会直接打断自旋
+
+void steer_request_target_yaw(float target_yaw_deg);        // 登记最新绝对航向；若自旋在跑则延迟到自旋结束后，由 1ms ISR 执行一次
+
+void steer_request_relative_yaw(float delta_deg);           // 登记相对转角请求，由控制层统一换算成绝对航向后再交给 1ms ISR 执行
+
+void steer_task_start(float delta_deg);                     // 启动相对转角任务，同步执行版本，主要保留给旧调用兼容
+
+void steer_task_stop(void);                                 // 停止普通转向任务并清空本次转向输出
 
 void pid_ctrl_Run(void);                                    //PID控制平衡和行驶
 

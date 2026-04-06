@@ -59,7 +59,23 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     pit_isr_flag_clear(PIT_CH0); // 1ms
     EKF_UpData();
     EKF_V_UPData();
-    //LQR_control(set_speed, pitch_mid);//实测放到10ms的效果很差，起立困难，响应速度越快越好
+    /* 绝对航向请求统一在这里消费：
+     * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
+     * - 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()。
+     */
+    if (steer_yaw_request_pending)
+    {
+        if (spin_enable)
+        {
+            steer_yaw_delayed_by_spin = 1;
+        }
+        else
+        {
+            steer_set_target_yaw(steer_yaw_request_deg);
+            steer_yaw_request_pending = 0;
+            steer_yaw_delayed_by_spin = 0;
+        }
+    }
     pid_ctrl_Run();
     Left_Motor_Pwm = -motor_value.receive_left_speed_data;
     Right_Motor_Pwm = motor_value.receive_right_speed_data;
@@ -89,7 +105,7 @@ void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
     
     Left_Motor_Speed = -motor_value.receive_left_speed_data;
     Right_Motor_Speed = motor_value.receive_right_speed_data;
-    car_speed = (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2;
+    car_speed = (Left_Motor_Speed + Right_Motor_Speed) / 2;
 
 }
 
