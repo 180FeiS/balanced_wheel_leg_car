@@ -70,6 +70,79 @@ static void run_soft_tasks(void)
   
 }
 
+/* 惯导调试输出分组：
+ * 通过菜单里的字符 'n' 切换 Nag_Vofa_Group。
+ * 建议调试顺序：
+ * 0 -> 先确认 yaw 和速度输入是否正常
+ * 1 -> 再看录制阶段是否真的在累计路程、写入点位
+ * 2 -> 然后看复现阶段是否在推进目标点
+ * 3 -> 最后看惯导偏差和实际转向输出是否同向
+ */
+static void send_nav_debug_to_vofa(void)
+{
+  switch (Nag_Vofa_Group)
+  {
+    case 0:
+      /* 基础输入组：
+       * yaw: 当前姿态解算出来的偏航角
+       * car_speed: 当前选作惯导积分的平均车速
+       * left/right_speed: 原始左右轮速度，便于检查方向和符号
+       */
+      SendDataStreamToVOFA(5,
+                           (float)euler_angle.yaw,
+                           (float)car_speed,
+                           (float)motor_value.receive_left_speed_data,
+                           (float)motor_value.receive_right_speed_data,
+                           (float)Nag_Vofa_Group);
+      break;
+    case 1:
+      /* 录制状态组：
+       * Mileage_Debug_Total: 从开始录制到当前累计的总路程
+       * Save_index: 已经写入了多少个 yaw 点
+       * Flash_page_index: 当前正在写哪一页 Flash
+       * End_f: 录制结束标志，便于看是否进入收尾保存
+       */
+      SendDataStreamToVOFA(5,
+                           (float)N.Mileage_Debug_Total,
+                           (float)N.Save_index,
+                           (float)N.Flash_page_index,
+                           (float)N.End_f,
+                          (float)Nag_Vofa_Group);
+      break;
+    case 2:
+      /* 复现状态组：
+       * Run_index: 当前回放推进到的目标点索引
+       * Angle_Run: 当前实际采用的目标 yaw
+       * Nag_GetDebugReadYaw(): 安全读取当前目标点对应的 flash yaw
+       * Nag_Stop_f: 到达终点后会置位，可用于停车或切逻辑
+       */
+      SendDataStreamToVOFA(5,
+                           (float)N.Run_index,
+                           (float)N.Angle_Run,
+                           Nag_GetDebugReadYaw(),
+                           (float)N.Nag_Stop_f,
+                          (float)Nag_Vofa_Group);
+      break;
+    case 3:
+      /* 闭环输出组：
+       * Final_Out: 当前 yaw 与目标 yaw 的偏差
+       * euler_angle.yaw: 实时航向
+       * Angle_Run: 当前目标航向
+       * turn_mix_cmd: 最终送到转向差速链路的控制量
+       * 如果这一组里偏差方向和 turn_mix_cmd 对不上，优先检查符号方向
+       */
+      SendDataStreamToVOFA(5,
+                           (float)N.Final_Out,
+                           (float)euler_angle.yaw,
+                           (float)N.Angle_Run,
+                           (float)turn_mix_cmd,
+                          (float)Nag_Vofa_Group);
+      break;
+    default:
+      break;
+  }
+}
+
 int main(void)
 {
   clock_init(SYSTEM_CLOCK_250M); // 时钟配置及系统初始化<务必保留>
@@ -119,6 +192,7 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
+        send_nav_debug_to_vofa();
     /* VOFA 调试输出按需要二选一或三选一打开：
      * 1. 姿态/零偏观测：pitch / roll / yaw / gyro_z_bias_mean
      * 2. 单层自旋调试：spin_accum_deg / spin_angle_err / spin_rate_target_dps / spin_rate_meas_dps

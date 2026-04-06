@@ -30,7 +30,8 @@
 * 2024-08-02        Bron            V1.2.0         将重复显示的内容规整到函数中
 * 2024-12-19        Bron            V2.0.1         移植到新工程，重新整理菜单
 ********************************************************************************************************************/
-#include "small_driver_uart_control.h"
+#include "zf_common_headfile.h"
+
 
 
 /*********************************************************************************************************************
@@ -299,7 +300,7 @@ void GUI_2_1(void) // 图像设置
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
+    ips200_show_string(80,ROW_8," NavDbg ");
     ips200_show_string(80,ROW_10,"Dir__PID");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
@@ -319,20 +320,31 @@ void ACT_2_1()
 }
 
 
-void GUI_2_2(void) // 速度环设置
+void GUI_2_2(void) // 惯导调试界面
 {
     GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
-    ips200_show_string(80,ROW_10,"Dir__PID");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
 
-    ips200_show_string(48,ROW_8,"-->");
-    ips200_show_string(152,ROW_8,"<--");
+    ips200_show_string(64,ROW_3,"Nav Debug");
+    ips200_draw_line(24,ROW_5-1,215,ROW_5-1,IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24,ROW_5,"KEY1: Record");
+    ips200_show_string(24,ROW_6,"KEY2: Replay");
+    ips200_show_string(24,ROW_7,"KEY3: Stop");
+    ips200_show_string(24,ROW_8,"KEY4: Return");
+
+    ips200_draw_line(24,ROW_9 ,215,ROW_9 ,IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24,ROW_10,"Mileage:");
+    ips200_show_float(104,ROW_10,N.Mileage_Debug_Total,4,2);
+
+    ips200_show_string(24,ROW_11,"SaveIdx:");
+    ips200_show_uint(104,ROW_11,N.Save_index,5);
+
+    ips200_show_string(24,ROW_12,"FlashPg:");
+    ips200_show_uint(104,ROW_12,N.Flash_page_index,3);
+
+    ips200_show_string(24,ROW_14,"Rec  / Replay / Stop");
+    ips200_show_string(24,ROW_15,"LED1 toggles on press");
 }
 void ACT_2_2()
 {
@@ -349,7 +361,7 @@ void GUI_2_3(void) // 转向环设置
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
+    ips200_show_string(80,ROW_8," NavDbg ");
     ips200_show_string(80,ROW_10,"Dir__PID");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
@@ -373,7 +385,7 @@ void GUI_2_4(void) // 速度设置
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
+    ips200_show_string(80,ROW_8," NavDbg ");
     ips200_show_string(80,ROW_10,"Dir__PID");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
@@ -397,7 +409,7 @@ void GUI_2_5(void) // 更新Flash参数
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
+    ips200_show_string(80,ROW_8," NavDbg ");
     ips200_show_string(80,ROW_10,"Dir__PID");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
@@ -430,7 +442,7 @@ void GUI_2_6(void) // 清空FLASH缓存区
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8,"SpeedPID");
+    ips200_show_string(80,ROW_8," NavDbg ");
     ips200_show_string(80,ROW_10,"Dir__PID");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");

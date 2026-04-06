@@ -54,7 +54,6 @@
 #ifndef __UI_H__
 #define __UI_H__
 
-#include "small_driver_uart_control.h"
 #include "zf_common_typedef.h"
 
 #define PENCOLOR    RGB565_GREEN

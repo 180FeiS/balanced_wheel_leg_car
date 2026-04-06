@@ -73,6 +73,9 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
   if (key_flag == 1)
   {
     key_init (10);
+    gpio_init(LED1, GPO, GPIO_LOW, GPO_PUSH_PULL);
+    gpio_init(SWITCH1, GPI, GPIO_HIGH, GPI_PULL_UP);
+    gpio_init(SWITCH2, GPI, GPIO_HIGH, GPI_PULL_UP);
   }
 
   // 中断初始化
@@ -89,6 +92,11 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
   if (menu_flag == 1)
   {
     MenuInit();
+  }
+
+  if (key_flag == 1 && menu_flag == 1)
+  {
+    dip_switch_motor_sync_from_hw();
   }
 }
 

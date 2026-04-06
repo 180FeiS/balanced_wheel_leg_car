@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 #include "flash.h"
 
-
+static uint8 nag_flash_index_read = 0;
 
 void flash_Nag_Write(){
    
@@ -21,15 +21,19 @@ void flash_Nag_Write(){
    
 }
 
+void flash_Nag_ResetReadState(void)
+{
+    nag_flash_index_read = 0;
+}
+
 void flash_Nag_Read(){
     flash_buffer_clear();
-    static uint8 Index_R_f=0;
 
-    if( 0 == Index_R_f)
+    if(0 == nag_flash_index_read)
     {
        flash_read_page_to_buffer(0,Nag_End_Page,FLASH_PAGE_LENGTH);
         N.Save_index = flash_union_buffer[MaxSize+2].uint32_type;       
-        Index_R_f=1;
+        nag_flash_index_read = 1;
         flash_buffer_clear();
     }
     if(flash_check(0, N.Flash_page_index))

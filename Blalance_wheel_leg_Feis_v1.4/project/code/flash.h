@@ -4,6 +4,7 @@
 
 void flash_Nag_Write(void);
 void flash_Nag_Read(void);
+void flash_Nag_ResetReadState(void);
 
 
 #endif

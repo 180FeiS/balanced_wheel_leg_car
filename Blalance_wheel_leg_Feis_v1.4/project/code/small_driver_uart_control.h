@@ -37,8 +37,8 @@ extern int16 Left_Motor_Pwm ; // 左电机输出pwm
 extern int16 Right_Motor_Pwm; // 右电机输出pwm
 extern uint8 Motor_Switch ;     // 电机开关
 extern uint8 Motor_OpenFlag ;    // 电机上电标志位
-extern uint8 Left_Motor_Speed ; // 左电机速度
-extern uint8 Right_Motor_Speed ; // 右电机速度
+extern int16 Left_Motor_Speed ; // 左电机速度
+extern int16 Right_Motor_Speed ; // 右电机速度
 
 void uart_control_callback(void); // 无刷驱动 串口接收回调函数
 

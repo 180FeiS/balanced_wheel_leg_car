@@ -86,6 +86,7 @@ static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
 static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str); // 查找菜单项
 static void MenuKeyEventPush(menu_key_nav_enum nav);
 static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
+static uint8 MenuIsNavDebugPage(void);
 
 /*-------------------------------------------------------------------------
  * 菜单接口函数-用户只需更改此部分
@@ -99,8 +100,50 @@ static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
  * @Example: selectMenu();
  */
 
+/*-------------------------------------------------------------------------
+ * 拨码开关：SWITCH1 决定 Motor_Switch（电机与菜单刷新逻辑共用该标志）。
+ * 上拉输入：拨到 ON 侧通常接 GND，引脚为低电平 -> 电机开 (MOTOR_ON)；
+ * 若硬件相反，将下面 GPIO_LOW / GPIO_HIGH 对调即可。SWITCH2 仅初始化，功能预留。
+ *-------------------------------------------------------------------------*/
+void dip_switch_motor_sync_from_hw(void)
+{
+    uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
+    uint8 prev = Motor_Switch;
+
+    Motor_Switch = dip_motor;
+    if (prev != dip_motor && dip_motor == MOTOR_OFF)
+    {
+        ips200_clear();
+        menuMember.gui();
+        menuMember.act();
+    }
+}
+
 void menu_key_capture_event(void)
 {
+   if(MenuIsNavDebugPage())
+   {
+        if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
+        {
+            Nag_Begin_Record();
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_1);
+        }
+        if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
+        {
+            Nag_Begin_Replay();
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_2);
+        }
+        if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
+        {
+            Nag_Request_Stop_Record();
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_3);
+        }
+   }
+   else
+   {
    if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
    {
         MenuKeyEventPush(MENU_KEY_NAV_LEFT);
@@ -116,6 +159,7 @@ void menu_key_capture_event(void)
         MenuKeyEventPush(MENU_KEY_NAV_DOWN);
         key_clear_state(KEY_3);
    }
+   }
    if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
    {
         MenuKeyEventPush(MENU_KEY_NAV_UP);
@@ -127,6 +171,8 @@ void selectMenu_Key(void)
 {
    uint8 menu_nav = 0;
    menu_key_nav_enum nav = MENU_KEY_NAV_NONE;
+
+   dip_switch_motor_sync_from_hw();
 
    while(MenuKeyEventPop(&nav))
    {
@@ -187,6 +233,14 @@ static uint8 MenuKeyEventPop(menu_key_nav_enum *nav)
 
     interrupt_global_enable(interrupt_status);
     return has_event;
+}
+
+static uint8 MenuIsNavDebugPage(void)
+{
+    return (uint8)(menuMember.pos[0] == '2' &&
+                   menuMember.pos[1] == '.' &&
+                   menuMember.pos[2] == '2' &&
+                   menuMember.pos[3] == 0x00);
 }
 
 /*
@@ -256,16 +310,16 @@ void selectMenu(void)
         roll_balance_en = !roll_balance_en;
         break;
     case 'k':
-        N.Nag_SystemRun_Index=1;
+        Nag_Begin_Record();
         break;
     case 'l':
-        N.Nag_SystemRun_Index=2;
+        Nag_Begin_Replay();
         break;
     case 'm':
-        if(N.Nag_SystemRun_Index == 1)
-        {
-            N.End_f=1;
-        }
+        Nag_Request_Stop_Record();
+        break;
+    case 'n':
+        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % 4);
         break;
     case 'o':
         /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。
@@ -280,7 +334,7 @@ void selectMenu(void)
          * 当前航向 + 相对角度 的换算由 control.c 统一处理，
          * 真正的 steer_set_target_yaw() 会在下一拍 1ms ISR 里安全执行。
          */
-        steer_yaw_request_deg+=30;
+        steer_request_relative_yaw(30.0f);
         break;
     case 'q':
         set_speed += 500;
