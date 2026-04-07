@@ -60,6 +60,8 @@ uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓�
 
 uint8 speed_flag = 0;
 
+/* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
+uint8 Motor_Runaway_Latch = 0;
 
 // 速度环输出，供腿部倾斜角使用
 float speed_loop_leg_tilt = 0.0f;
@@ -721,7 +723,8 @@ void pid_ctrl_Run(void)
         if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 1500 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -1500)
         {
             Motor_Switch = 0;
-        }
+            Motor_Runaway_Latch = 1;
+         }
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;

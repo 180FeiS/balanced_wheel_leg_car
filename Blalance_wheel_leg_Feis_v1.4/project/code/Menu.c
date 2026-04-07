@@ -26,10 +26,10 @@
        - 调用 hashMenu.vPtr->insert() 插入菜单项
 
  4. 菜单控制接口:
-    - hashMenu.vPtr->searchUp(): 返回上级菜单
-    - hashMenu.vPtr->searchDown(): 进入下级菜单
-    - hashMenu.vPtr->searchLeft(): 切换到左侧同级菜单
-    - hashMenu.vPtr->searchRight(): 切换到右侧同级菜单
+    - hashMenu.vPtr->searchUp(): 切换到上一个同级菜单
+    - hashMenu.vPtr->searchDown(): 切换到下一个同级菜单
+    - hashMenu.vPtr->searchLeft(): 返回上级菜单
+    - hashMenu.vPtr->searchRight(): 进入下级菜单
 
  5. 注意事项:
     - 菜单位置编号格式为: "1"、"2"(一级菜单)，"1.1"、"1.2"(二级菜单)
@@ -104,12 +104,25 @@ static uint8 MenuIsNavDebugPage(void);
  * 拨码开关：SWITCH1 决定 Motor_Switch（电机与菜单刷新逻辑共用该标志）。
  * 上拉输入：拨到 ON 侧通常接 GND，引脚为低电平 -> 电机开 (MOTOR_ON)；
  * 若硬件相反，将下面 GPIO_LOW / GPIO_HIGH 对调即可。SWITCH2 仅初始化，功能预留。
+ *
+ * Motor_Runaway_Latch==1（control.c 轮速失控保护）时：不再用拨码把电机重新使能，
+ * 须先将拨码拨到 OFF 清除锁存后，再拨 ON 才能恢复。
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
-    uint8 prev = Motor_Switch;
 
+    if (Motor_Runaway_Latch)
+    {
+        Motor_Switch = MOTOR_OFF;
+        if (dip_motor == MOTOR_OFF)
+        {
+            Motor_Runaway_Latch = 0;
+        }
+        return;
+    }
+
+    uint8 prev = Motor_Switch;
     Motor_Switch = dip_motor;
     if (prev != dip_motor && dip_motor == MOTOR_OFF)
     {
@@ -141,30 +154,36 @@ void menu_key_capture_event(void)
             gpio_toggle_level(LED1);
             key_clear_state(KEY_3);
         }
+        if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
+        {
+            /* 惯导调试页保留 KEY4 返回，统一走“左返回”语义。 */
+            MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            key_clear_state(KEY_4);
+        }
    }
    else
    {
-   if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
-   {
-        MenuKeyEventPush(MENU_KEY_NAV_LEFT);
-        key_clear_state(KEY_1);
-   }
-   if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
-   {
-        MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
-        key_clear_state(KEY_2);
-   }
-   if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
-   {
-        MenuKeyEventPush(MENU_KEY_NAV_DOWN);
-        key_clear_state(KEY_3);
-   }
-   }
-   if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
-   {
-        MenuKeyEventPush(MENU_KEY_NAV_UP);
-        key_clear_state(KEY_4);
-   }
+        if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_UP);
+            key_clear_state(KEY_1);
+        }
+        if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_DOWN);
+            key_clear_state(KEY_2);
+        }
+        if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
+            key_clear_state(KEY_3);
+        }
+        if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            key_clear_state(KEY_4);
+        }
+    }
 }
 
 void selectMenu_Key(void)
@@ -179,18 +198,22 @@ void selectMenu_Key(void)
         switch(nav)
         {
         case MENU_KEY_NAV_LEFT:
+             /* 左：返回上一级 */
              hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_RIGHT:
+             /* 右：进入下一级 */
              hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_DOWN:
+             /* 下：切换到下一个同级项 */
              hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_UP:
+             /* 上：切换到上一个同级项 */
              hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
@@ -237,10 +260,7 @@ static uint8 MenuKeyEventPop(menu_key_nav_enum *nav)
 
 static uint8 MenuIsNavDebugPage(void)
 {
-    return (uint8)(menuMember.pos[0] == '2' &&
-                   menuMember.pos[1] == '.' &&
-                   menuMember.pos[2] == '2' &&
-                   menuMember.pos[3] == 0x00);
+    return (uint8)(strcmp(menuMember.pos, "2.2.1") == 0);
 }
 
 /*
@@ -258,22 +278,22 @@ void selectMenu(void)
     switch (Menu_command)
     {
     case 'a':
-        hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
+        hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
         ips200_clear();
         break;
 
     case 'b':
-        hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
-        ips200_clear();
-        break;
-
-    case 'c':
         hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
         ips200_clear();
         break;
 
+    case 'c':
+        hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
+        ips200_clear();
+        break;
+
     case 'd':
-        hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
+        hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
         ips200_clear();
         break;
         /*
@@ -502,6 +522,11 @@ void MenuInit()
         menuMember.act = ACT_2_1_3;
         strcpy(menuMember.pos, "2.1.3");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_2_1;
+        menuMember.act = ACT_2_2_1;
+        strcpy(menuMember.pos, "2.2.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
 /*
 
         menuMember.gui = GUI_2_2_1;
@@ -579,10 +604,15 @@ static void HashTableCtor(HASH_TABLE_t *const This)
 
     vTable.insert = HashInsert;
     vTable.search = FindHashValue;
-    vTable.searchDown = HashDepthDown;
-    vTable.searchUp = HashDepthUp;
-    vTable.searchLeft = HashPeerLeft;
-    vTable.searchRight = HashPeerRight;
+    /* 对外接口按按键方向语义绑定：
+     * Up/Down   -> 同级切换
+     * Left      -> 返回上级
+     * Right     -> 进入下级
+     */
+    vTable.searchDown = HashPeerRight;
+    vTable.searchUp = HashPeerLeft;
+    vTable.searchLeft = HashDepthUp;
+    vTable.searchRight = HashDepthDown;
 
     This->vPtr = &vTable;
 }
@@ -782,20 +812,23 @@ static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
  */
 static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str)
 {
-    int count = HASH_SIZE, sLen, hashKey;
+    int count = HASH_SIZE, hashKey;
     hashKey = CreatHashKey(str);
-    sLen = strlen(str);
-    sLen = (sLen > HASH_KEY_LEN) ? HASH_KEY_LEN : sLen;
-    while ((strncmp(This->hashTable[hashKey].pos, str, sLen) != 0) && count--)
+    while (count--)
     {
-        hashKey = (hashKey + 1) % HASH_SIZE; // 开放地址法则线性探测
+        if (This->hashTable[hashKey].pos[0] == '\0')
+        {
+            hashKey = (hashKey + 1) % HASH_SIZE;
+            continue;
+        }
+        if (strcmp(This->hashTable[hashKey].pos, str) == 0)
+        {
+            MemCpy(tempMember, &(This->hashTable[hashKey]), sizeof(MENU_MEMBER_t));
+            return HASH_OK;
+        }
+        hashKey = (hashKey + 1) % HASH_SIZE;
     }
-    if (count < 0)
-    {
-        return HASH_ERROR; /*遍历完这个哈希表都没有找到*/
-    }
-    MemCpy(tempMember, &(This->hashTable[hashKey]), sizeof(MENU_MEMBER_t)); // 将找到的菜单写入tempMember
-    return HASH_OK;
+    return HASH_ERROR;
 };
 
 /*----------------------------------------------------------------

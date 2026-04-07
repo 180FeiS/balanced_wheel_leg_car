@@ -50,7 +50,9 @@ static void run_soft_tasks(void)
 {
   if (task_pending_take(&task_5ms_nav_pending))
   {
-    Nag_System();
+                                                 // 启动定时
+    //Nag_System();
+
   }
 
   if (task_pending_take(&task_10ms_menu_key_pending))
@@ -192,7 +194,7 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
-        send_nav_debug_to_vofa();
+        //send_nav_debug_to_vofa();
     /* VOFA 调试输出按需要二选一或三选一打开：
      * 1. 姿态/零偏观测：pitch / roll / yaw / gyro_z_bias_mean
      * 2. 单层自旋调试：spin_accum_deg / spin_angle_err / spin_rate_target_dps / spin_rate_meas_dps

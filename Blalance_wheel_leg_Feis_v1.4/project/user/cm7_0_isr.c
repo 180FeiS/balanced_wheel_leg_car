@@ -59,6 +59,7 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     pit_isr_flag_clear(PIT_CH0); // 1ms
     EKF_UpData();
     EKF_V_UPData();
+    Nag_System();
     /* 绝对航向请求统一在这里消费：
      * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
      * - 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()。

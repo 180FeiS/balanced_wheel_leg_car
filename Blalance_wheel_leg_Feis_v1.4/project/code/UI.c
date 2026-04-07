@@ -320,7 +320,30 @@ void ACT_2_1()
 }
 
 
-void GUI_2_2(void) // 惯导调试界面
+void GUI_2_2(void) // 调试列表：NavDbg 行选中（与其它项一致为列表态；按「右」进入 GUI_2_2_1）
+{
+    GUI_Display_Level2_Common2();
+
+    ips200_show_string(80,ROW_6," Image  ");
+    ips200_show_string(80,ROW_8," NavDbg ");
+    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_12," Speed  ");
+    ips200_show_string(80,ROW_14,"W_Flash");
+    ips200_show_string(80,ROW_16,"C_Flash ");
+
+    ips200_show_string(48,ROW_8,"-->");
+    ips200_show_string(152,ROW_8,"<--");
+}
+void ACT_2_2()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '2';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_2_2_1(void) // 惯导调试界面（须从 2.2 按「右」进入）
 {
     GUI_Display_Level2_Common2();
 
@@ -346,13 +369,14 @@ void GUI_2_2(void) // 惯导调试界面
     ips200_show_string(24,ROW_14,"Rec  / Replay / Stop");
     ips200_show_string(24,ROW_15,"LED1 toggles on press");
 }
-void ACT_2_2()
+void ACT_2_2_1()
 {
     ReadPos[0] = '2';
     ReadPos[1] = '.';
     ReadPos[2] = '2';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
 }
 
 

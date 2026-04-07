@@ -53,6 +53,8 @@ extern int16 RO_S;
 
 extern uint8 roll_balance_en;  // 1开启横滚平衡，0关闭，运行时可改
 
+extern uint8 Motor_Runaway_Latch;  // 失控保护锁存；与拨码协同，见 Menu.c dip_switch_motor_sync_from_hw
+
 /* 横滚控制调试变量，供VOFA查看 */
 extern float roll_debug_roll;
 extern float roll_debug_pid_out;
