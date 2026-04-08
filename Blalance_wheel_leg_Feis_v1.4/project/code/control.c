@@ -53,7 +53,8 @@ float leg_long = 5.5f;
 // float leg_high_integral = 0;
 
 
-float set_speed = 0; //设置速度
+float set_speed = 0; //用户设定的速度上限/基准速度，导航会在此基础上做弯道限速
+float speed_target_effective = 0; //真正送入速度环的目标速度，便于 VOFA 对比“设定速度”和“导航限速后速度”
 // 跳跃标志位
 uint8 jump_flag = 0;
 uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
@@ -124,7 +125,7 @@ volatile float steer_yaw_request_deg = 0.0f;
 
 /* 自旋任务参数与调试变量 */
 #define SPIN_ANGLE_OUT_MAX_DPS      250.0f  // 单层匀速方案下的固定巡航角速度
-#define SPIN_ANGLE_SETTLE_DEG         2.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
+#define SPIN_ANGLE_SETTLE_DEG         10.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
 #define SPIN_RATE_SETTLE_DPS         6.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
 #define SPIN_SETTLE_COUNT_MAX        80u
 #define SPIN_TIMEOUT_BASE_MS       3000u
@@ -424,7 +425,7 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-     pid_init(&speed, 2.9, 0.0000, 0, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
+     pid_init(&speed, 3.3, 0.001, 0.01, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     pid_set_target(&leg_hight, roll_mid);  // 横滚目标=机械零点
     pid_set_target(&speed, 0);
@@ -551,9 +552,16 @@ void pid_ctrl_Run(void)
     static float Angle_Out = 0;
     imu660rc_get_gyro();
 
-    if (0 == timer_flag) // 速度环
+    if (0 == timer_flag) // 速度环（20ms，与 car_speed 更新节拍保持一致）
     {
-        pid_set_target(&speed, -set_speed);
+        /* 速度环入口统一使用导航给出的有效目标速度：
+         * 1. set_speed 仍然表示人工设置的“最高想跑多快”；
+         * 2. speed_target_effective 会叠加弯道减速、元素段限速等导航决策；
+         * 3. 调试时建议同时看 set_speed / speed_target_effective / car_speed，
+         *    先确认限速逻辑方向正确，再去调速度环 PID。
+         */
+        speed_target_effective = Nag_GetControlSpeedTarget();
+        pid_set_target(&speed, -speed_target_effective);
         pid_get_observation(&speed, -motor_value.receive_left_speed_data + motor_value.receive_right_speed_data);
 
         pid_set_dt(&speed, dt_pid_speed);
@@ -720,7 +728,7 @@ void pid_ctrl_Run(void)
 
     if(Motor_Switch)
     {
-        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 1500 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -1500)
+        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 2000 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -2000)
         {
             Motor_Switch = 0;
             Motor_Runaway_Latch = 1;
@@ -1146,13 +1154,15 @@ float Get_Final_Angle(void)
 //-------------------------------------------------------------------------------------------------------------------
 void get_car_xy(void)
 {
-
-                //获取车子的速度
+        /* 若后续重新启用二维惯导，这里的积分周期和速度单位必须与 navigation.c 保持一致，
+         * 不要再单独使用另一套“经验 dt/比例系数”，否则会出现导航里程和 xy 位置各算各的。
+         * 当前仍保留旧式速度投影，仅把 dt 改成与 Nag_System() 相同的 1ms 节拍。
+         */
         double speed_x = 0 , speed_y = 0;
         speed_x = car_speed * cos(euler_angle.yaw/180.0*3.1415926);
         speed_y = car_speed * sin(euler_angle.yaw/180.0*3.1415926);
-        ins.distance_x += speed_x * 0.005*1.9;
-        ins.distance_y += speed_y * 0.005*1.9;
+        ins.distance_x += speed_x * Nag_Sample_Dt * 1.9;
+        ins.distance_y += speed_y * Nag_Sample_Dt * 1.9;
         TempLat_Now=ins.distance_x;                                         //卡尔曼滤波过滤获得的xy轴上的移动距离
         TempLon_Now=ins.distance_y;
     

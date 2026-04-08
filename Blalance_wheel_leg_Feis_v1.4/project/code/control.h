@@ -29,6 +29,7 @@ extern float dt_pid_turn_angle;
 extern float dt_pid_turn_gyro;
 
 extern float set_speed;                   //设置速度
+extern float speed_target_effective;      //真正送入速度环的目标速度，已叠加导航限速/元素限速
 extern uint8 jump_flag;                   //跳跃标志位
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角

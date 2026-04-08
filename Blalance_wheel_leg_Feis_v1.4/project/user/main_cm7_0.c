@@ -50,8 +50,9 @@ static void run_soft_tasks(void)
 {
   if (task_pending_take(&task_5ms_nav_pending))
   {
-                                                 // 启动定时
-    //Nag_System();
+    /* 导航已经固定在 pit0_ch0_isr 的 1ms 中断里跑，这里故意不再重复调用 Nag_System()。
+     * 保留这个 pending 只是为了以后若要把 flash 慢路径彻底迁出 ISR，可以继续沿用 5ms 软任务框架。
+     */
 
   }
 
@@ -82,7 +83,7 @@ static void run_soft_tasks(void)
  */
 static void send_nav_debug_to_vofa(void)
 {
-  switch (Nag_Vofa_Group)
+  switch (4)
   {
     case 0:
       /* 基础输入组：
@@ -90,11 +91,10 @@ static void send_nav_debug_to_vofa(void)
        * car_speed: 当前选作惯导积分的平均车速
        * left/right_speed: 原始左右轮速度，便于检查方向和符号
        */
-      SendDataStreamToVOFA(5,
+      SendDataStreamToVOFA(4,
                            (float)euler_angle.yaw,
+                           (float)gyro_z_bias_mean,
                            (float)car_speed,
-                           (float)motor_value.receive_left_speed_data,
-                           (float)motor_value.receive_right_speed_data,
                            (float)Nag_Vofa_Group);
       break;
     case 1:
@@ -114,12 +114,14 @@ static void send_nav_debug_to_vofa(void)
     case 2:
       /* 复现状态组：
        * Run_index: 当前回放推进到的目标点索引
-       * Angle_Run: 当前实际采用的目标 yaw
-       * Nag_GetDebugReadYaw(): 安全读取当前目标点对应的 flash yaw
+       * Prospect_index: 当前前瞻点索引；高速时应大于 Run_index
+       * Angle_Run: 当前实际采用的目标 yaw（来自前瞻点）
+       * Nag_GetDebugReadYaw(): 安全读取当前前瞻点对应的 flash yaw
        * Nag_Stop_f: 到达终点后会置位，可用于停车或切逻辑
        */
       SendDataStreamToVOFA(5,
                            (float)N.Run_index,
+                           (float)Nag_GetDebugProspectIndex(),
                            (float)N.Angle_Run,
                            Nag_GetDebugReadYaw(),
                            (float)N.Nag_Stop_f,
@@ -128,17 +130,49 @@ static void send_nav_debug_to_vofa(void)
     case 3:
       /* 闭环输出组：
        * Final_Out: 当前 yaw 与目标 yaw 的偏差
-       * euler_angle.yaw: 实时航向
-       * Angle_Run: 当前目标航向
-       * turn_mix_cmd: 最终送到转向差速链路的控制量
-       * 如果这一组里偏差方向和 turn_mix_cmd 对不上，优先检查符号方向
+       * Curve_Strength: 根据前方 yaw 变化量估算的弯道强度
+       * nav_speed: 导航最终给速度环的目标速度
+       * event_active: 1 表示当前已切出惯导，由元素状态机接管
+       * event_state: 当前元素状态机状态（IDLE/ENTERED/RUNNING/DONE/ABORT）
        */
       SendDataStreamToVOFA(5,
                            (float)N.Final_Out,
-                           (float)euler_angle.yaw,
-                           (float)N.Angle_Run,
-                           (float)turn_mix_cmd,
+                           (float)N.Curve_Strength,
+                           (float)Nag_GetControlSpeedTarget(),
+                           (float)N.Event_Active,
+                           (float)N.Event_State,
                           (float)Nag_Vofa_Group);
+      break;
+    case 4:
+      /* 调速/元素组：
+       * set_speed: SWITCH2 或 q/r/s 选中的基础速度；旁路调试时可直接设成 1000 做阶跃
+       * speed_target_effective: 真正送给速度环的目标速度，是 PID 调参最该盯住的“目标值”
+       * car_speed: 当前实际车速，用来和 speed_target_effective 对比响应快慢、超调和拖尾
+       * Nag_SystemRun_Index: 导航状态机。正常回放时 2=正在读 flash，3=正式回放运行
+       * 调试顺序建议：
+       *   1. 先把 SWITCH1 拨到 OFF，只看 set_speed 是否能随 SWITCH2 在 1000/1500 间切换；
+       *   2. 正常模式下若未回放，speed_target_effective 应保持 0；
+       *   3. 若打开速度调试旁路，则不进回放也能直接观察 speed_target_effective 与 car_speed 的阶跃响应；
+       *   4. 建议 VOFA 第 4 组按顺序看：set_speed / speed_target_effective / car_speed / Nag_SystemRun_Index / group。
+       */
+      SendDataStreamToVOFA(5,
+                           (float)set_speed,
+                           (float)speed_target_effective,
+                           (float)-car_speed,
+                           (float)N.Nag_SystemRun_Index,
+                           (float)Nag_Vofa_Group);
+      break;
+    case 5:
+      /* 自旋排障组：
+       * spin_enable: 1=自旋任务正在运行
+       * spin_done: 1=自旋完成并退出（会触发元素状态机继续）
+       * spin_target_deg/spin_accum_deg/spin_angle_err: 目标角度、累计角度、剩余误差
+       * spin_rate_target_dps/spin_rate_meas_dps: 自旋内环目标角速度与实测角速度
+       */
+      SendDataStreamToVOFA(2,
+                           (float)spin_enable,
+                           (float)spin_done
+          );
       break;
     default:
       break;
@@ -194,7 +228,7 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
-        //send_nav_debug_to_vofa();
+        send_nav_debug_to_vofa();
     /* VOFA 调试输出按需要二选一或三选一打开：
      * 1. 姿态/零偏观测：pitch / roll / yaw / gyro_z_bias_mean
      * 2. 单层自旋调试：spin_accum_deg / spin_angle_err / spin_rate_target_dps / spin_rate_meas_dps

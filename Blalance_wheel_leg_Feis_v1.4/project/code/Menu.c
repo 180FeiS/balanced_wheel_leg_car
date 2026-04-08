@@ -101,16 +101,35 @@ static uint8 MenuIsNavDebugPage(void);
  */
 
 /*-------------------------------------------------------------------------
- * 拨码开关：SWITCH1 决定 Motor_Switch（电机与菜单刷新逻辑共用该标志）。
- * 上拉输入：拨到 ON 侧通常接 GND，引脚为低电平 -> 电机开 (MOTOR_ON)；
- * 若硬件相反，将下面 GPIO_LOW / GPIO_HIGH 对调即可。SWITCH2 仅初始化，功能预留。
+ * 拨码开关分工：
+ * 1. SWITCH1 决定 Motor_Switch，只负责“允不允许电机真正出力”；
+ * 2. SWITCH2 决定速度档位：慢速=1000，快速=1500，只负责“准备跑多快”；
+ * 3. 导航未正式进入回放执行态前，速度环会被强制锁成 0，因此即便 SWITCH2 已选好档位，
+ *    车也不会因为 set_speed 非 0 而一上电就跑。
+ *
+ * 上拉输入：拨到 ON 侧通常接 GND，引脚为低电平；若硬件相反，将 GPIO_LOW / GPIO_HIGH 对调即可。
+ *
+ * 调试说明：
+ * - 串口 q/r/s 仍保留为备用调试入口，但 SWITCH2 是日常使用的主速度源；
+ * - 这里仅在“上电首次同步”或“SWITCH2 状态发生变化”时刷新 set_speed，
+ *   因此 q/r/s 可临时改速；再次拨动 SWITCH2 后，会重新同步回 1000/1500 档位。
  *
  * Motor_Runaway_Latch==1（control.c 轮速失控保护）时：不再用拨码把电机重新使能，
  * 须先将拨码拨到 OFF 清除锁存后，再拨 ON 才能恢复。
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
+    static uint8 speed_dip_inited = 0;
+    static uint8 last_speed_fast = 0;
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
+    uint8 dip_speed_fast = (gpio_get_level(SWITCH2) == GPIO_LOW) ? 1 : 0;
+
+    if (!speed_dip_inited || (last_speed_fast != dip_speed_fast))
+    {
+        set_speed = dip_speed_fast ? 1500.0f : 1000.0f;
+        last_speed_fast = dip_speed_fast;
+        speed_dip_inited = 1;
+    }
 
     if (Motor_Runaway_Latch)
     {
@@ -144,20 +163,49 @@ void menu_key_capture_event(void)
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
-            Nag_Begin_Replay();
+            Nag_Request_Stop_Record();
             gpio_toggle_level(LED1);
             key_clear_state(KEY_2);
         }
+        /* 录制态统一门控：
+         * 1. Nag_SystemRun_Index == 1 表示仍处于录制流程；
+         * 2. End_f == 0 表示尚未进入停止录制后的收尾写 flash 阶段。
+         * 这样 KEY3/KEY4 不会在录制收尾窗口里继续改元素类型或打点。
+         */
+        uint8 nav_recording_active = (N.Nag_SystemRun_Index == 1 && N.End_f == 0);
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
-            Nag_Request_Stop_Record();
+            if (nav_recording_active)
+            {
+                Nag_Cycle_Record_Event_Type();
+            }
+            else
+            {
+                Nag_Begin_Replay();
+            }
             gpio_toggle_level(LED1);
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
-            /* 惯导调试页保留 KEY4 返回，统一走“左返回”语义。 */
-            MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            /* KEY4 优先级：
+             * 1. 录制中：标记元素 enter/exit；
+             * 2. 非录制且元素接管中：手动通知元素完成，恢复导航；
+             * 3. 其它情况：返回上一级菜单。
+             */
+            if (nav_recording_active)
+            {
+                Nag_Request_Event_Mark();
+            }
+            else if (N.Event_Active)
+            {
+                Nag_Notify_Event_Done();
+            }
+            else
+            {
+                MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            }
+            gpio_toggle_level(LED1);
             key_clear_state(KEY_4);
         }
    }
@@ -166,21 +214,25 @@ void menu_key_capture_event(void)
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_UP);
+            gpio_toggle_level(LED1);
             key_clear_state(KEY_1);
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_DOWN);
+            gpio_toggle_level(LED1);
             key_clear_state(KEY_2);
         }
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
+            gpio_toggle_level(LED1);
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            gpio_toggle_level(LED1);
             key_clear_state(KEY_4);
         }
     }
@@ -339,7 +391,7 @@ void selectMenu(void)
         Nag_Request_Stop_Record();
         break;
     case 'n':
-        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % 4);
+        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % 6);
         break;
     case 'o':
         /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。
@@ -357,13 +409,35 @@ void selectMenu(void)
         steer_request_relative_yaw(30.0f);
         break;
     case 'q':
+        /* 备用调试入口：在不拨动 SWITCH2 的前提下，临时把基准速度上调 500。 */
         set_speed += 500;
         break;
     case 'r':
+        /* 备用调试入口：在不拨动 SWITCH2 的前提下，临时把基准速度下调 500。 */
         set_speed -= 500;
         break;
     case 's':
+        /* 备用调试入口：紧急把基础速度清零。
+         * 若之后重新拨动 SWITCH2，会再次恢复到 1000/1500 两档之一。
+         */
         set_speed  = 0;
+        break;
+    case 't':
+        /* 录制阶段手动标记元素 enter/exit：
+         * 第一次按下记录 enter_index，第二次按下记录 exit_index；
+         * 当前版本先只写 RAM，不写 flash，方便先把“切出/接回”链路跑通。
+         */
+        Nag_Request_Event_Mark();
+        break;
+    case 'u':
+        /* 切换下一条待录元素类型。
+         * 建议录制时先固定一种元素把流程跑通，再逐步区分 STEP/JUMP 等类型。
+         */
+        Nag_Cycle_Record_Event_Type();
+        break;
+    case 'v':
+        /* 回放或人工调试时，手动通知“当前元素已完成”，导航将从 exit_index 继续。 */
+        Nag_Notify_Event_Done();
         break;
     }
     
@@ -583,7 +657,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.1.1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
 #endif
 }
 

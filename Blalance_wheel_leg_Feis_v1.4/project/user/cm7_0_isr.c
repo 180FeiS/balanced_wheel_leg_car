@@ -59,6 +59,11 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     pit_isr_flag_clear(PIT_CH0); // 1ms
     EKF_UpData();
     EKF_V_UPData();
+    /* 导航当前固定在 1ms 中断里运行：
+     * 1. navigation.h 中 Nag_Sample_Dt 必须与这里保持一致；
+     * 2. 不要再在 main 或 5ms 软任务里重复调用 Nag_System()，否则里程会被重复积分；
+     * 3. 若以后真的迁到 5ms 软任务，必须同时修改 Nag_Sample_Dt 和实车标定系数。
+     */
     Nag_System();
     /* 绝对航向请求统一在这里消费：
      * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
@@ -66,6 +71,10 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      * 注意：这里只消费 pending 请求，不要在每拍重新登记同一个请求，
      * 否则会持续重置普通转向任务，导致闭环无法收敛。
      */
+     if(Nag_Debug_Speed_Bypass_Enable)
+     {
+        steer_request_target_yaw(steer_yaw_request_deg);
+     }      
     if (steer_yaw_request_pending)
     {
         if (spin_enable)
