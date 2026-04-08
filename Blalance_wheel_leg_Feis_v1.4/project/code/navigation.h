@@ -47,18 +47,18 @@
  * 3. 低速时前瞻短，高速时前瞻长；若前瞻过大容易切弯过早，过小则高速左右摆头明显。
  */
 #define Nag_Lookahead_Base_Points 3u
-#define Nag_Lookahead_Speed_Gain 0.010f
-#define Nag_Lookahead_Max_Points 24u
-#define Nag_Curve_Lookahead_Extra 10u
+#define Nag_Lookahead_Speed_Gain 0.010f     // 前向速度 -> 额外前瞻点增益（速度越快前瞻越远）
+#define Nag_Lookahead_Max_Points 24u        // 前瞻点上限，避免高速时前瞻过大导致切弯过早
+#define Nag_Curve_Lookahead_Extra 10u       // 弯道强度估计时额外向前看的点数（用于比较 yaw 变化）
 
 /* 基于“前方 yaw 变化量”的简单弯道强度估计。
  * 当前先不把 curvature 持久化到 flash，而是直接用 Nav_read[] 前后点的 yaw 差来限速。
  */
-#define Nag_Curve_Threshold_Straight 6.0f
-#define Nag_Curve_Threshold_Sharp 16.0f
-#define Nag_Speed_Ratio_Curve 0.72f
-#define Nag_Speed_Ratio_Sharp 0.50f
-#define Nag_Event_Speed_Ratio 0.35f
+#define Nag_Curve_Threshold_Straight 6.0f   // 进入“普通弯道”判定阈值（deg）
+#define Nag_Curve_Threshold_Sharp 16.0f     // 进入“急弯”判定阈值（deg）
+#define Nag_Speed_Ratio_Curve 0.82f         // 普通弯道目标速度倍率（基于 set_speed）
+#define Nag_Speed_Ratio_Sharp 0.72f         // 急弯目标速度倍率（基于 set_speed）
+#define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
 
 /* 元素前预减速：
  * 1. 这层逻辑挂在 Nag_GetControlSpeedTarget() 里，只在“尚未真正切入元素前”生效；
@@ -98,23 +98,29 @@
 #define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
 //********************************************************//
 
+/* 元素类型枚举：
+ * 与录制到 flash 的事件表 type 字段一一对应。
+ */
 typedef enum
 {
-       NAG_EVENT_TYPE_GENERIC = 0,
-       NAG_EVENT_TYPE_TURNAROUND = 1,
-       NAG_EVENT_TYPE_SPIN = 2,
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3,
-       NAG_EVENT_TYPE_BUMP = 4,
-       NAG_EVENT_TYPE_JUMP = 5,
+       NAG_EVENT_TYPE_GENERIC = 0,       // 通用占位类型（默认未接入动作）
+       NAG_EVENT_TYPE_TURNAROUND = 1,    // 掉头元素
+       NAG_EVENT_TYPE_SPIN = 2,          // 原地自旋元素
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3, // 独木桥元素
+       NAG_EVENT_TYPE_BUMP = 4,          // 减速带/颠簸元素
+       NAG_EVENT_TYPE_JUMP = 5,          // 跳跃元素
 } Nag_Event_Type;
 
+/* 元素状态机枚举：
+ * 由 Nag_Element_StateMachine() 周期驱动。
+ */
 typedef enum
 {
-       NAG_EVENT_STATE_IDLE = 0,
-       NAG_EVENT_STATE_ENTERED = 1,
-       NAG_EVENT_STATE_RUNNING = 2,
-       NAG_EVENT_STATE_DONE = 3,
-       NAG_EVENT_STATE_ABORT = 4,
+       NAG_EVENT_STATE_IDLE = 0,      // 空闲态：当前没有元素接管
+       NAG_EVENT_STATE_ENTERED = 1,   // 刚切入元素，等待 Start 钩子启动
+       NAG_EVENT_STATE_RUNNING = 2,   // 元素运行中，周期执行 Run 并检查完成
+       NAG_EVENT_STATE_DONE = 3,      // 元素完成，准备从 exit_index 接回导航
+       NAG_EVENT_STATE_ABORT = 4,     // 元素中止，执行 Stop 清理现场
 } Nag_Event_State;
 
 typedef struct
