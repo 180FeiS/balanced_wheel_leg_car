@@ -56,8 +56,8 @@
  */
 #define Nag_Curve_Threshold_Straight 6.0f   // 进入“普通弯道”判定阈值（deg）
 #define Nag_Curve_Threshold_Sharp 16.0f     // 进入“急弯”判定阈值（deg）
-#define Nag_Speed_Ratio_Curve 0.82f         // 普通弯道目标速度倍率（基于 set_speed）
-#define Nag_Speed_Ratio_Sharp 0.72f         // 急弯目标速度倍率（基于 set_speed）
+#define Nag_Speed_Ratio_Curve 0.85f         // 普通弯道目标速度倍率（基于 set_speed）
+#define Nag_Speed_Ratio_Sharp 0.75f         // 急弯目标速度倍率（基于 set_speed）
 #define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
 
 /* 元素前预减速：
@@ -96,6 +96,19 @@
 #define Nag_Spin_Demo_Dir 1
 #define Nag_Spin_Stop_Speed_Threshold 80.0f // 当前速度低于该值时视为进入低速区
 #define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
+
+/* 元素航向保持配置：
+ * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw；
+ * 2. ISR 会在 steer_yaw_request_pending 消费前，按需重新登记该固定目标；
+ * 3. 自旋元素推荐只在“减速等待起转”的阶段保持，真正 spin_task_start() 前解除；
+ * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
+ */
+#define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
+#define Nag_HeadingHold_Spin_Enable 1u          // 自旋元素在减速等待阶段保持进入元素时的航向
+#define Nag_HeadingHold_Turnaround_Enable 0u    // 掉头元素需要主动改航向，默认不保持
+#define Nag_HeadingHold_SingleBridge_Enable 1u  // 单边桥默认整段保持进入元素时的航向
+#define Nag_HeadingHold_Bump_Enable 1u          // 颠簸/减速带默认整段保持进入元素时的航向
+#define Nag_HeadingHold_Jump_Enable 1u          // 跳跃元素默认整段保持进入元素时的航向
 //********************************************************//
 
 /* 元素类型枚举：
@@ -106,7 +119,7 @@ typedef enum
        NAG_EVENT_TYPE_GENERIC = 0,       // 通用占位类型（默认未接入动作）
        NAG_EVENT_TYPE_TURNAROUND = 1,    // 掉头元素
        NAG_EVENT_TYPE_SPIN = 2,          // 原地自旋元素
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3, // 独木桥元素
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3, // 单边桥元素
        NAG_EVENT_TYPE_BUMP = 4,          // 减速带/颠簸元素
        NAG_EVENT_TYPE_JUMP = 5,          // 跳跃元素
 } Nag_Event_Type;
@@ -171,6 +184,11 @@ typedef struct{
        uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
        uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
        uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 set_speed，退出时需恢复
+       uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
+       uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
+       uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
+       uint8 HeadingHold_Event_Allowed; //1表示当前元素类型配置允许启用航向保持
+       float HeadingHold_Target_Yaw; //当前锁定的绝对航向目标，默认取进入元素瞬间的 euler_angle.yaw
        //临时未使用参数
        int Prev_mile[Nag_Prev]; //前包
 }Nag;
@@ -197,6 +215,8 @@ void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态�
 float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
 float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，自动叠加弯道限速和元素限速
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
+bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
+float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标
 bool Nag_Element_Start(uint8 event_type); //统一元素 Start 分发，默认钩子返回 false 表示“未接入具体动作”
 void Nag_Element_Run(uint8 event_type); //统一元素 Run 分发
 bool Nag_Element_IsDone(uint8 event_type); //统一元素完成判定

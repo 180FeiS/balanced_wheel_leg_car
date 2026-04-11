@@ -15,6 +15,63 @@ Nag N;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
 
+static bool Nag_GetHeadingHoldConfig(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_SPIN: return (Nag_HeadingHold_Spin_Enable != 0u);
+        case NAG_EVENT_TYPE_TURNAROUND: return (Nag_HeadingHold_Turnaround_Enable != 0u);
+        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
+        case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
+        case NAG_EVENT_TYPE_JUMP: return (Nag_HeadingHold_Jump_Enable != 0u);
+        case NAG_EVENT_TYPE_GENERIC:
+        default: return false;
+    }
+}
+
+static void Nag_HeadingHold_Enable(float target_yaw)
+{
+    N.HeadingHold_Target_Yaw = target_yaw;
+    N.HeadingHold_Target_Latched = 1u;
+    N.HeadingHold_Enable = 1u;
+    /* 这里不直接反复调用 steer_set_target_yaw()。
+     * 统一通过 ISR 前置登记请求，再走现有 pending -> consume 链路，
+     * 可以继续复用 spin_enable 的互斥保护，避免普通转向与自旋直接抢控制权。
+     */
+    N.HeadingHold_Request_Armed = 1u;
+}
+
+static void Nag_HeadingHold_Disable(void)
+{
+    N.HeadingHold_Enable = 0u;
+    N.HeadingHold_Request_Armed = 0u;
+    N.HeadingHold_Target_Latched = 0u;
+    N.HeadingHold_Target_Yaw = 0.0f;
+    steer_yaw_request_pending = 0;
+    steer_yaw_delayed_by_spin = 0;
+}
+
+static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
+{
+    N.HeadingHold_Event_Allowed = Nag_GetHeadingHoldConfig(event_type) ? 1u : 0u;
+    if (!N.HeadingHold_Event_Allowed)
+    {
+        Nag_HeadingHold_Disable();
+        return;
+    }
+
+    /* 当前先统一锁定“进入元素瞬间的实测 yaw”，这样元素里即使暂停导航前瞻推进，
+     * 也仍能把车头稳在切入该元素前的方向。
+     */
+    Nag_HeadingHold_Enable((float)euler_angle.yaw);
+}
+
+static void Nag_HeadingHold_OnEventExit(void)
+{
+    N.HeadingHold_Event_Allowed = 0u;
+    Nag_HeadingHold_Disable();
+}
+
 static void Nag_Spin_RestoreSetSpeed(void)
 {
     if (N.Spin_Speed_Latched)
@@ -84,6 +141,10 @@ void Nag_Hook_Spin_Run(void)
         return;
     }
 
+    /* 自旋真正启动前先解除“保持进入元素航向”。
+     * 否则普通转向可能继续把车头往锁定方向拉，和 spin_task_start() 抢同一套差速控制。
+     */
+    Nag_HeadingHold_Disable();
     spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
     N.Spin_Task_Started = 1;
 }
@@ -170,6 +231,7 @@ void Nag_Element_Stop(uint8 event_type)
     /* 统一 Stop 分发：
      * 用于异常/人工中止元素，给每个元素一个清理现场的出口。
      */
+    Nag_HeadingHold_OnEventExit();
     switch (event_type)
     {
         case NAG_EVENT_TYPE_TURNAROUND: Nag_Hook_Turnaround_Stop(); break;
@@ -253,6 +315,7 @@ static void Nag_UpdatePreviewAndSpeedTarget(void)
 
 static void Nag_ClearEventRuntimeState(void)
 {
+    Nag_HeadingHold_OnEventExit();
     N.Event_Active = 0;
     N.Event_Active_Index = 0xFFu;
     N.Active_Event_Enter = 0;
@@ -503,6 +566,7 @@ static void Nag_TryEnterEvent(void)
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
     steer_task_stop();
+    Nag_HeadingHold_OnEventEnter(N.Event_Active_Type);
 }
 
 static float Nag_GetMileageStep(void)
@@ -544,6 +608,56 @@ float Nag_GetDebugReadYaw(void)
         return 0.0f;
     }
     return (float)(Nav_read[read_index] / 100.0f);
+}
+
+float Nag_HeadingHold_GetTargetYaw(void)
+{
+    if (!N.HeadingHold_Target_Latched)
+    {
+        return (float)euler_angle.yaw;
+    }
+    return N.HeadingHold_Target_Yaw;
+}
+
+bool Nag_HeadingHold_ShouldRequest(void)
+{
+    float yaw_err = 0.0f;
+
+    if (!N.HeadingHold_Enable ||
+        !N.HeadingHold_Target_Latched ||
+        !N.HeadingHold_Event_Allowed)
+    {
+        return false;
+    }
+
+    if (spin_enable)
+    {
+        return false;
+    }
+
+    if (N.HeadingHold_Request_Armed)
+    {
+        N.HeadingHold_Request_Armed = 0u;
+        return true;
+    }
+
+    if (steer_yaw_request_pending)
+    {
+        return false;
+    }
+
+    if (!steer_enable)
+    {
+        return true;
+    }
+
+    if (fabsf((float)ange_deviation1(N.HeadingHold_Target_Yaw, steer_target_yaw_deg)) > 0.01f)
+    {
+        return true;
+    }
+
+    yaw_err = fabsf((float)ange_deviation1(N.HeadingHold_Target_Yaw, euler_angle.yaw));
+    return (yaw_err > Nag_HeadingHold_Reissue_Error);
 }
 
 uint16 Nag_GetDebugProspectIndex(void)
@@ -654,6 +768,10 @@ void Nag_Run()
 
     if (N.Event_Active)
     {
+        /* 元素期间导航不再用前瞻点刷新目标航向；
+         * 若该元素配置了“保持航向”，则改由 1ms ISR 在 steer_yaw_request_pending 消费前，
+         * 按锁存的 HeadingHold_Target_Yaw 重新登记请求。
+         */
         N.Final_Out = 0.0f;
         return;
     }

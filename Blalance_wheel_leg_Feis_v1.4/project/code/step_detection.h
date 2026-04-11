@@ -10,7 +10,7 @@
 #define CAMERA_HEIGHT_MM  200     // 摄像头安装高度（mm），根据实际调整
 #define CAMERA_ANGLE_DEG  30      // 摄像头俯仰角度（度），根据实际调整
 #define FOCAL_LENGTH_MM   2.5     // 摄像头焦距（mm），根据实际调整
-#define PIXEL_SIZE_MM     0.004   // 像素尺寸（mm），根据实际调整
+#define PIXEL_SIZE_MM     0.00375   // 像素尺寸（mm），根据实际调整
 
 #define MIN_STEP_HEIGHT_PIX   5   // 最小台阶高度（像素）
 #define MAX_STEP_HEIGHT_PIX   150 // 最大台阶高度（像素）

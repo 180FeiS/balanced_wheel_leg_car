@@ -66,15 +66,18 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      */
     Nag_System();
     /* 绝对航向请求统一在这里消费：
-     * - 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
-     * - 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()。
-     * 注意：这里只消费 pending 请求，不要在每拍重新登记同一个请求，
-     * 否则会持续重置普通转向任务，导致闭环无法收敛。
+     * 1. 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
+     * 2. 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()；
+     * 3. 元素锁航向模块也在这里前置补登请求，但仍复用同一套 pending 消费链路。
      */
      if(Nag_Debug_Speed_Bypass_Enable)
      {
         steer_request_target_yaw(steer_yaw_request_deg);
-     }      
+     }
+    if (Nag_HeadingHold_ShouldRequest())
+    {
+        steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());
+    }
     if (steer_yaw_request_pending)
     {
         if (spin_enable)
