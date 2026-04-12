@@ -35,11 +35,11 @@
 #define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 3.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 /* 速度调试旁路：
- * 1. 置 1 后，即使导航未进入回放态，也允许速度环直接使用 set_speed；
+ * 1. 置 1 后，即使导航未进入回放态，也允许速度环直接使用 motor_user_speed_cmd；
  * 2. 仅用于直道阶跃调 PID，比赛/正式回放前务必改回 0；
  * 3. 打开后 Nag_GetControlSpeedTarget() 会绕过 Nag_SystemRun_Index==3 的门控。
  */
-#define Nag_Debug_Speed_Bypass_Enable 0u
+#define Nag_Debug_Speed_Bypass_Enable 1u
 
 /* 速度自适应前瞻参数：
  * 1. Run_index 代表“已经沿轨迹推进到的里程点”；
@@ -56,8 +56,8 @@
  */
 #define Nag_Curve_Threshold_Straight 6.0f   // 进入“普通弯道”判定阈值（deg）
 #define Nag_Curve_Threshold_Sharp 16.0f     // 进入“急弯”判定阈值（deg）
-#define Nag_Speed_Ratio_Curve 0.85f         // 普通弯道目标速度倍率（基于 set_speed）
-#define Nag_Speed_Ratio_Sharp 0.75f         // 急弯目标速度倍率（基于 set_speed）
+#define Nag_Speed_Ratio_Curve 0.85f         // 普通弯道目标速度倍率（基于 motor_user_speed_cmd）
+#define Nag_Speed_Ratio_Sharp 0.75f         // 急弯目标速度倍率（基于 motor_user_speed_cmd）
 #define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
 
 /* 元素前预减速：
@@ -183,7 +183,8 @@ typedef struct{
        float Spin_Saved_SetSpeed; //自旋元素接管前保存的全局速度档位
        uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
        uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
-       uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 set_speed，退出时需恢复
+       uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 motor_user_speed_cmd，退出时需恢复
+       uint8 Jump_Element_Armed; //1表示跳跃元素已置 jump_flag，供 IsDone 防误判（Start 前 jump_flag 可能为 0）
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标

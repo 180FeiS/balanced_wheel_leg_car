@@ -76,7 +76,7 @@ static void Nag_Spin_RestoreSetSpeed(void)
 {
     if (N.Spin_Speed_Latched)
     {
-        set_speed = N.Spin_Saved_SetSpeed;
+        motor_user_speed_cmd = N.Spin_Saved_SetSpeed;
         N.Spin_Speed_Latched = 0;
     }
     N.Spin_Saved_SetSpeed = 0.0f;
@@ -99,18 +99,18 @@ bool Nag_Hook_Turnaround_IsDone(void) { return (spin_done != 0);}
 void Nag_Hook_Turnaround_Stop(void) {spin_task_stop();}
 
 /* 自转元素接法：
- * 1. Start：先接管全局速度档位，把 set_speed 清零，给车一个“先刹停”的阶段；
+ * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
  * 2. Run：只有当前速度连续多拍低于阈值后，才真正启动 spin_task_start()；
  * 3. IsDone：只有自旋真正启动后才读取 spin_done，避免等待阶段误判完成；
  * 4. Stop：无论正常结束还是异常中止，都统一恢复被接管前的速度档位。
  */
 bool Nag_Hook_Spin_Start(void)
 {
-    N.Spin_Saved_SetSpeed = set_speed;
+    N.Spin_Saved_SetSpeed = motor_user_speed_cmd;
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
     N.Spin_Speed_Latched = 1;
-    set_speed = 0.0f;
+    motor_user_speed_cmd = 0.0f;
     return true;
 }
 void Nag_Hook_Spin_Run(void)
@@ -171,10 +171,29 @@ void Nag_Hook_Bump_Run(void) {}
 bool Nag_Hook_Bump_IsDone(void) { return false; }
 void Nag_Hook_Bump_Stop(void) {}
 
-bool Nag_Hook_Jump_Start(void) { return false; }
+/* 跳跃元素：与串口调试 'i' 相同，置 jump_flag=1，由 control.c 的 jump_control() 在 ISR 内推进并在结束时清零。
+ * Jump_Element_Armed 防止 IsDone 在 Start 前因 jump_flag 初值为 0 而误判完成。
+ */
+bool Nag_Hook_Jump_Start(void)
+{
+    if (jump_flag != 0u)
+    {
+        return false;
+    }
+    N.Jump_Element_Armed = 1u;
+    jump_flag = 1u;
+    return true;
+}
 void Nag_Hook_Jump_Run(void) {}
-bool Nag_Hook_Jump_IsDone(void) { return false; }
-void Nag_Hook_Jump_Stop(void) {}
+bool Nag_Hook_Jump_IsDone(void)
+{
+    return (N.Jump_Element_Armed != 0u) && (jump_flag == 0u);
+}
+void Nag_Hook_Jump_Stop(void)
+{
+    jump_flag = 0u;
+    N.Jump_Element_Armed = 0u;
+}
 
 bool Nag_Element_Start(uint8 event_type)
 {
@@ -284,7 +303,7 @@ static void Nag_UpdatePreviewAndSpeedTarget(void)
 {
     uint16 max_index = 0;
     uint16 lookahead = 0;
-    float base_speed = fabsf((float)set_speed);
+    float base_speed = fabsf((float)motor_user_speed_cmd);
 
     if (N.Save_index < 2)
     {
@@ -329,6 +348,11 @@ static void Nag_ClearEventRuntimeState(void)
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
     N.Spin_Speed_Latched = 0;
+    if (N.Jump_Element_Armed != 0u)
+    {
+        jump_flag = 0u;
+    }
+    N.Jump_Element_Armed = 0u;
 }
 
 static void Nag_Element_StateMachine(void)
@@ -665,17 +689,22 @@ uint16 Nag_GetDebugProspectIndex(void)
     return N.Prospect_index;
 }
 
+/* 速度目标合成（由 pid_ctrl_Run 每 20ms 读取一次）：
+ * - motor_user_speed_cmd：用户层基准（拨码 SWITCH2、串口 V、串口 q/r/s），符号表示前进/后退；
+ * - N.Target_Speed：导航前瞻 + 弯道强度算出的“建议上限”，再与用户基准取 MIN/比例；
+ * - 本函数在非回放执行态（Nag_SystemRun_Index!=3）强制返回 0，避免待机误跑。
+ */
 float Nag_GetControlSpeedTarget(void)
 {
     float nav_speed = N.Target_Speed;
-    float abs_user_speed = fabsf((float)set_speed);
+    float abs_user_speed = fabsf((float)motor_user_speed_cmd);
 
     /* 安全门控：正常模式下只有导航真正进入回放执行态(case 3)后，速度目标才允许生效。
-     * 这样可以把 SWITCH2 预选的 1000/1500 先写进 set_speed，但在上电、待机、录制、
+     * 这样可以把 SWITCH2 预选的 1000/1500 先写进 motor_user_speed_cmd，但在上电、待机、录制、
      * 以及回放准备阶段（Nag_SystemRun_Index==2, 仍在读 flash）时，速度环统一拿到 0。
-     * 调试时若发现 set_speed 已经是 1000/1500，但车还没动，优先看两件事：
+     * 调试时若发现 motor_user_speed_cmd 已经是 1000/1500，但车还没动，优先看两件事：
      * 1. N.Nag_SystemRun_Index 是否已经到 3；
-     * 2. Motor_Switch 是否已经被 SWITCH1 放开。
+     * 2. Motor_Switch 是否为 ON（由 SWITCH1 决定，失控锁存时强制关）。
      */
     if (N.Nag_Stop_f)
     {
@@ -685,10 +714,10 @@ float Nag_GetControlSpeedTarget(void)
 #if Nag_Debug_Speed_Bypass_Enable
     /* PID 调试旁路：
      * 1. 旁路只保留终点停车保护，允许非回放态也直接输出固定速度目标；
-     * 2. 目标直接跟随 set_speed，便于直道阶跃调试速度环；
+     * 2. 目标直接跟随 motor_user_speed_cmd，便于直道阶跃调试速度环；
      * 3. 正式跑导航前请把 Nag_Debug_Speed_Bypass_Enable 改回 0。
      */
-    return ((float)set_speed < 0.0f) ? -abs_user_speed : abs_user_speed;
+    return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
 #endif
 
     if (N.Nag_SystemRun_Index != 3)
@@ -703,14 +732,17 @@ float Nag_GetControlSpeedTarget(void)
 
     if (N.Event_Active)
     {
-        nav_speed = MIN(nav_speed, abs_user_speed * Nag_Event_Speed_Ratio);
+        float ratio = (N.Event_Active_Type == NAG_EVENT_TYPE_JUMP)
+                  ? 1.0f               // 跳跃不限速，保留全速冲击
+                  : Nag_Event_Speed_Ratio;
+    nav_speed = MIN(nav_speed, abs_user_speed * ratio);
     }
     else
     {
         nav_speed = Nag_ApplyPreEventDecel(nav_speed);
     }
 
-    if ((float)set_speed < 0.0f)
+    if ((float)motor_user_speed_cmd < 0.0f)
     {
         return -nav_speed;
     }
@@ -891,6 +923,7 @@ void Nag_Begin_Record(void)
     N.Nag_SystemRun_Index = 1;
 }
 
+/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 后进入 3，速度环才放行 Nag_GetControlSpeedTarget */
 void Nag_Begin_Replay(void)
 {
     N.Mileage_All = 0;
@@ -898,7 +931,7 @@ void Nag_Begin_Replay(void)
     N.Mileage_Debug_Total = 0;
     N.Speed_Forward = 0;
     N.Curve_Strength = 0;
-    N.Target_Speed = fabsf((float)set_speed);
+    N.Target_Speed = fabsf((float)motor_user_speed_cmd);
     N.Angle_Run = 0;
     N.Run_index = 0;
     N.Prospect_index = 0;
@@ -994,6 +1027,7 @@ void Nag_Element_Abort(void)
 // 返回参数     void
 // 使用示例     在中断里调用
 // 备注信息     当前固定在 pit0_ch0_isr 的 1ms 中断里调用一次；请勿同时在主循环/5ms 软任务里重复调用。
+//             Nag_SystemRun_Index==2 时 switch 无分支，不执行 Nag_Run；速度门控由 Nag_GetControlSpeedTarget 在索引!=3 时返回 0。
 //-------------------------------------------------------------------------------------------------------------------
 void Nag_System(){
     //偏航角
@@ -1059,7 +1093,7 @@ void NagFlashRead(){
   N.Prospect_index = 0;
   N.Nag_Stop_f = 0;
   N.Curve_Strength = 0;
-  N.Target_Speed = fabsf((float)set_speed);
+  N.Target_Speed = fabsf((float)motor_user_speed_cmd);
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[0] / 100.0f) : (float)Nag_Yaw;
   N.Requested_Target_Yaw = 0;
   N.Target_Request_Valid = 0;

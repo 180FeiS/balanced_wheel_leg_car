@@ -14,6 +14,96 @@ extern float gyro_z_bias_mean;
 
 uint16 jump_test = 1;
 
+#if !LEG_DEBUG_MODE
+/*
+ * 普通模式视觉自动跳跃（不接入惯导元素）：
+ * - 触发源：step_data.bottom_row_raw 与 VOFA CH1 一致，在 step_detect() 每处理完一帧后更新。
+ * - 条件：上一帧 bottom_row_raw>0 且本帧为 0（下沿消失），再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次
+ *   step_detect 调用（与 task_10ms_step_pending 同周期，默认约 10ms）以抑制单帧丢边。
+ * - 额度：成功置 jump_flag=1 计为一次，满 VISUAL_JUMP_MAX_COUNT 次后永久禁止直至重新上电/复位。
+ * - 置 0：VISUAL_JUMP_AUTO_ENABLE 可在工程预处理里覆盖为 0，关闭本功能。
+ */
+#ifndef VISUAL_JUMP_AUTO_ENABLE
+#define VISUAL_JUMP_AUTO_ENABLE 1u
+#endif
+#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u
+#endif
+#ifndef VISUAL_JUMP_MAX_COUNT
+#define VISUAL_JUMP_MAX_COUNT 3u
+#endif
+
+#if VISUAL_JUMP_AUTO_ENABLE
+static uint16 visual_jump_prev_bottom_raw;
+static uint8 visual_jump_in_zero_confirm; /* 1：已捕获“高→0”下降沿，正在数连续为 0 的步数 */
+static uint8 visual_jump_zero_confirm_cnt;
+static uint8 visual_jump_done_count;
+static uint8 visual_jump_lockout;
+#endif
+
+static void visual_jump_trigger_after_step(void)
+{
+#if VISUAL_JUMP_AUTO_ENABLE
+  uint16 curr = step_data.bottom_row_raw;
+
+  if (visual_jump_lockout != 0u)
+  {
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
+  if (jump_flag != 0u)
+  {
+    /* 跳跃由 control.c 的 jump_control() 推进；期间不再累计 0 确认，避免重复触发 */
+    visual_jump_in_zero_confirm = 0u;
+    visual_jump_zero_confirm_cnt = 0u;
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
+  if (visual_jump_in_zero_confirm != 0u)
+  {
+    if (curr != 0u)
+    {
+      visual_jump_in_zero_confirm = 0u;
+      visual_jump_zero_confirm_cnt = 0u;
+    }
+    else
+    {
+      visual_jump_zero_confirm_cnt++;
+      if (visual_jump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
+      {
+        jump_flag = 1u;
+        visual_jump_done_count++;
+        if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
+          visual_jump_lockout = 1u;
+        visual_jump_in_zero_confirm = 0u;
+        visual_jump_zero_confirm_cnt = 0u;
+      }
+    }
+  }
+  else if (visual_jump_prev_bottom_raw > 0u && curr == 0u)
+  {
+    /* 下降沿当帧计为第 1 个连续 0；若阈值为 1 则本帧即满足“短时全 0” */
+    visual_jump_in_zero_confirm = 1u;
+    visual_jump_zero_confirm_cnt = 1u;
+    if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
+    {
+      jump_flag = 1u;
+      visual_jump_done_count++;
+      if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
+        visual_jump_lockout = 1u;
+      visual_jump_in_zero_confirm = 0u;
+      visual_jump_zero_confirm_cnt = 0u;
+    }
+  }
+
+  visual_jump_prev_bottom_raw = curr;
+#else
+  (void)0;
+#endif
+}
+#endif /* !LEG_DEBUG_MODE */
 
 /* 主循环侧统一用这个函数“取走一次待执行任务”。
  * 这里短暂关中断是为了避免与 ISR 同时修改 pending 计数。
@@ -68,7 +158,10 @@ static void run_soft_tasks(void)
 
   if (task_pending_take(&task_10ms_step_pending))
   {
-    step_detect();                                                  // 
+    step_detect();
+#if !LEG_DEBUG_MODE
+    visual_jump_trigger_after_step();
+#endif
   }
   
 }
@@ -145,18 +238,18 @@ static void send_nav_debug_to_vofa(void)
       break;
     case 4:
       /* 调速/元素组：
-       * set_speed: SWITCH2 或 q/r/s 选中的基础速度；旁路调试时可直接设成 1000 做阶跃
+       * motor_user_speed_cmd: SWITCH2 / V 命令 / qrs 等用户基准速度；旁路调试时可直接设成 1000 做阶跃
        * speed_target_effective: 真正送给速度环的目标速度，是 PID 调参最该盯住的“目标值”
        * car_speed: 当前实际车速，用来和 speed_target_effective 对比响应快慢、超调和拖尾
        * Nag_SystemRun_Index: 导航状态机。正常回放时 2=正在读 flash，3=正式回放运行
        * 调试顺序建议：
-       *   1. 先把 SWITCH1 拨到 OFF，只看 set_speed 是否能随 SWITCH2 在 1000/1500 间切换；
+       *   1. 先把 SWITCH1 拨到 OFF，只看 motor_user_speed_cmd 是否能随 SWITCH2 在 1000/1500 间切换；
        *   2. 正常模式下若未回放，speed_target_effective 应保持 0；
        *   3. 若打开速度调试旁路，则不进回放也能直接观察 speed_target_effective 与 car_speed 的阶跃响应；
-       *   4. 建议 VOFA 第 4 组按顺序看：set_speed / speed_target_effective / car_speed / Nag_SystemRun_Index / group。
+       *   4. 建议 VOFA 第 4 组按顺序看：motor_user_speed_cmd / speed_target_effective / car_speed / Nag_SystemRun_Index / group。
        */
       SendDataStreamToVOFA(5,
-                           (float)set_speed,
+                           (float)motor_user_speed_cmd,
                            (float)speed_target_effective,
                            (float)-car_speed,
                            (float)N.Nag_SystemRun_Index,
@@ -228,7 +321,12 @@ int main(void)
         // if(!gpio_get_level(KEY_2)) N.Nag_SystemRun_Index=2;//2复现
         // if(!gpio_get_level(KEY_3) && N.Nag_SystemRun_Index == 1) N.End_f=1;//End_f请勿重复赋值
         if(N.Nag_SystemRun_Index == 2) NagFlashRead();//移植的时候这个必须要。直接复制粘贴过去就行
+        /* 台阶测距 VOFA：在 step_detection.h 里把 STEP_DEBUG_USE_VOFA 置 1，则此处改发 6 路台阶数据，避免与导航帧混在同一串口 */
+#if STEP_DEBUG_USE_VOFA
+        step_debug_send_to_vofa();
+#else
         send_nav_debug_to_vofa();
+#endif
     /* VOFA 调试输出按需要二选一或三选一打开：
      * 1. 姿态/零偏观测：pitch / roll / yaw / gyro_z_bias_mean
      * 2. 单层自旋调试：spin_accum_deg / spin_angle_err / spin_rate_target_dps / spin_rate_meas_dps

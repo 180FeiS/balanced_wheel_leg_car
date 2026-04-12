@@ -4,7 +4,7 @@
 #include "zf_common_headfile.h"
 
 void SendDataStreamToVOFA(uint32_t Count, float Data, ...);
-void ReadDataFromPc(void);
+void ReadDataFromPc(void); /* 除单字节 Menu_command 外，支持 V<数值> 扩展帧，详见 vofa.c 内注释 */
 void SendDataToVofa(void);
 
 extern uint32 WirelessUart_ReadBuff_Count;   // 读取无线串口数据长度

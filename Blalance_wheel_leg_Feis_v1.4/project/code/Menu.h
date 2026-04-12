@@ -77,5 +77,7 @@ extern void selectMenu_Key(void);
 extern void menu_key_capture_event(void);
 extern void dip_switch_motor_sync_from_hw(void);
 
+/* 串口多字节扩展帧 V<数值>（由 ReadDataFromPc 在写入 Menu_command 前调用）。返回 1 表示已整帧消费。 */
+extern uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count);
 
 #endif /* CODE_LOGIC_MENU_H_ */

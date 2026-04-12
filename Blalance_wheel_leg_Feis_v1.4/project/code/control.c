@@ -52,9 +52,22 @@ float dt_pid_turn_gyro = 0.001f;
 float leg_long = 5.5f; 
 // float leg_high_integral = 0;
 
+/*---------------------------------------------------------------------------
+ * 用户速度与拨码（与 Menu.c dip_switch_motor_sync_from_hw 配合）：
+ * - motor_user_speed_cmd：导航/速度环的“用户期望基准”，符号表示前进/后退；
+ * - motor_poll_switch2_speed_baseline()：周期调用，按 SWITCH2 档位/边沿同步 1000 或 1500；
+ * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 直接写基准（无速度锁；SWITCH2 档位变化时仍会同步为 1000/1500）；
+ * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
+ *---------------------------------------------------------------------------*/
 
-float set_speed = 0; //用户设定的速度上限/基准速度，导航会在此基础上做弯道限速
-float speed_target_effective = 0; //真正送入速度环的目标速度，便于 VOFA 对比“设定速度”和“导航限速后速度”
+/* 用户速度基准：导航弯道限速、元素限速等均以此为上限参考；符号用于倒车方向 */
+float motor_user_speed_cmd = 0.0f;
+float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的速度环目标，供调试对比 */
+
+/* 拨码 SWITCH2 边沿检测状态，集中在控制层，避免 Menu 与串口解析各写一套 */
+static uint8 motor_dip_speed_inited = 0u;
+static uint8 motor_dip_last_fast = 0u;
+
 // 跳跃标志位
 uint8 jump_flag = 0;
 uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
@@ -63,6 +76,30 @@ uint8 speed_flag = 0;
 
 /* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
 uint8 Motor_Runaway_Latch = 0;
+
+void motor_user_speed_cmd_set_from_pc(float cmd)
+{
+    motor_user_speed_cmd = cmd;
+}
+
+void motor_poll_switch2_speed_baseline(void)
+{
+    uint8 dip_speed_fast = (gpio_get_level(SWITCH2) == GPIO_LOW) ? 1u : 0u;
+
+    if (!motor_dip_speed_inited)
+    {
+        motor_dip_last_fast = dip_speed_fast;
+        motor_dip_speed_inited = 1u;
+        motor_user_speed_cmd = dip_speed_fast ? 0.0f : 500.0f;
+        return;
+    }
+
+    if (dip_speed_fast != motor_dip_last_fast)
+    {
+        motor_dip_last_fast = dip_speed_fast;
+        motor_user_speed_cmd = dip_speed_fast ? 0.0f : 500.0f;
+    }
+}
 
 // 速度环输出，供腿部倾斜角使用
 float speed_loop_leg_tilt = 0.0f;
@@ -381,8 +418,8 @@ uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭�
 #define LEG_TILT_MAX             20.0f // 腿倾角限幅±20°
 
 /*---------- 跳跃参数（障碍跨越）----------*/
-#define JUMP_PID_SCALE          0.3f  // 跳跃时angle/speed的kp缩放，维持稳定
-#define JUMP_PREPARE_P          10.0f // 准备缓冲目标腿长（起跳后伸腿高度）
+#define JUMP_PID_SCALE          0.5f  // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_PREPARE_P          10.5f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
 #define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
 #define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
@@ -393,8 +430,8 @@ uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭�
 const jump_control_struct jump_control_config[] =
     {
         {0,  5,  jump_set_step, "起跳"},           // 0~100ms 伸腿爆发
-        {5,  8, jump_set_step, "准备缓冲"},       // 100~160ms 过渡姿态
-        {8, 8 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
+        {5,  11, jump_set_step, "准备缓冲"},       // 100~160ms 过渡姿态
+        {11, 11 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
 };
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
@@ -554,11 +591,8 @@ void pid_ctrl_Run(void)
 
     if (0 == timer_flag) // 速度环（20ms，与 car_speed 更新节拍保持一致）
     {
-        /* 速度环入口统一使用导航给出的有效目标速度：
-         * 1. set_speed 仍然表示人工设置的“最高想跑多快”；
-         * 2. speed_target_effective 会叠加弯道减速、元素段限速等导航决策；
-         * 3. 调试时建议同时看 set_speed / speed_target_effective / car_speed，
-         *    先确认限速逻辑方向正确，再去调速度环 PID。
+        /* 速度环入口：motor_user_speed_cmd 为用户基准；speed_target_effective 为导航门控+弯道/元素限速后目标。
+         * 调试建议同时观察 motor_user_speed_cmd / speed_target_effective / car_speed。
          */
         speed_target_effective = Nag_GetControlSpeedTarget();
         pid_set_target(&speed, -speed_target_effective);
@@ -912,7 +946,7 @@ void jump_set_step(int step_num)
     switch (step_num)
     {
     case 0:
-        leg_long = 13.5f;           // 起跳：直接爆发伸腿
+        leg_long = 14.5f;           // 起跳：直接爆发伸腿
         break;
     case 1:
         leg_long = JUMP_PREPARE_P;  // 准备缓冲：直通到中间姿态
@@ -931,6 +965,8 @@ void jump_set_step(int step_num)
 // 返回参数     null
 // 使用示例     jump_control();
 // 备注信息     isr中断调用, 针对障碍使用
+// 补充说明     本函数只负责在 jump_flag==1 时按 jump_control_config[] 推进腿姿态与时序；
+//              何时置 jump_flag（例如普通模式视觉下沿消失）由其它模块决定，勿在此处做视觉判定。
 -------------------------------------------------------------------------------------------------------------------*/
 void jump_control(void)
 {

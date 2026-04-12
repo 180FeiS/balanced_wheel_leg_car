@@ -28,8 +28,15 @@ extern float dt_leg;
 extern float dt_pid_turn_angle;
 extern float dt_pid_turn_gyro;
 
-extern float set_speed;                   //设置速度
+/* 用户期望的基准速度（可带符号：负号表示反向），导航弯道限速等在此基础上缩放。
+ * 来源：拨码 SWITCH2（1000/1500，边沿刷新）、串口 V<数值>、串口 q/r/s 微调；后两者写入后仍可能被 SWITCH2 拨动覆盖。
+ * 旧工程中的 set_speed 已合并为该变量，请勿在模块外随意直接写全局，优先调用 motor_* API。
+ */
+extern float motor_user_speed_cmd;
 extern float speed_target_effective;      //真正送入速度环的目标速度，已叠加导航限速/元素限速
+
+void motor_user_speed_cmd_set_from_pc(float cmd);
+void motor_poll_switch2_speed_baseline(void);
 extern uint8 jump_flag;                   //跳跃标志位
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
@@ -54,7 +61,7 @@ extern int16 RO_S;
 
 extern uint8 roll_balance_en;  // 1开启横滚平衡，0关闭，运行时可改
 
-extern uint8 Motor_Runaway_Latch;  // 失控保护锁存；与拨码协同，见 Menu.c dip_switch_motor_sync_from_hw
+extern uint8 Motor_Runaway_Latch;  /* 失控保护最高优先级关断；清除方式见 dip_switch_motor_sync_from_hw */
 
 /* 横滚控制调试变量，供VOFA查看 */
 extern float roll_debug_roll;

@@ -52,6 +52,8 @@
  ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
+#include <stdlib.h>
+#include <string.h>
 
 /* 全局变量定义 */
 HASH_TABLE_t hashMenu;    // 储存菜单项的哈希表
@@ -100,36 +102,47 @@ static uint8 MenuIsNavDebugPage(void);
  * @Example: selectMenu();
  */
 
+/* 返回 1：整帧已由扩展协议消费，ReadDataFromPc 不应再写入 Menu_command。
+ * selectMenu() 仅处理单字节；多字节 V<数值> 在本函数解析。
+ * 格式：V<数值>  例 V1200 / V0 / V-800（写入 motor_user_speed_cmd，无速度锁；SWITCH2 仍可改写）
+ */
+uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
+{
+    char tmp[68];
+    uint32 n;
+
+    if ((data == NULL) || (count == 0u))
+    {
+        return 0u;
+    }
+    n = count;
+    if (n >= sizeof(tmp))
+    {
+        n = (uint32)(sizeof(tmp) - 1u);
+    }
+    memcpy(tmp, data, n);
+    tmp[n] = '\0';
+
+    if ((tmp[0] == 'V') && (n >= 2u))
+    {
+        motor_user_speed_cmd_set_from_pc((float)atof(&tmp[1]));
+        return 1u;
+    }
+    return 0u;
+}
+
 /*-------------------------------------------------------------------------
- * 拨码开关分工：
- * 1. SWITCH1 决定 Motor_Switch，只负责“允不允许电机真正出力”；
- * 2. SWITCH2 决定速度档位：慢速=1000，快速=1500，只负责“准备跑多快”；
- * 3. 导航未正式进入回放执行态前，速度环会被强制锁成 0，因此即便 SWITCH2 已选好档位，
- *    车也不会因为 set_speed 非 0 而一上电就跑。
- *
- * 上拉输入：拨到 ON 侧通常接 GND，引脚为低电平；若硬件相反，将 GPIO_LOW / GPIO_HIGH 对调即可。
- *
- * 调试说明：
- * - 串口 q/r/s 仍保留为备用调试入口，但 SWITCH2 是日常使用的主速度源；
- * - 这里仅在“上电首次同步”或“SWITCH2 状态发生变化”时刷新 set_speed，
- *   因此 q/r/s 可临时改速；再次拨动 SWITCH2 后，会重新同步回 1000/1500 档位。
- *
- * Motor_Runaway_Latch==1（control.c 轮速失控保护）时：不再用拨码把电机重新使能，
- * 须先将拨码拨到 OFF 清除锁存后，再拨 ON 才能恢复。
+ * 拨码与速度基准（须周期性调用，如 selectMenu_Key / selectMenu 内）：
+ * 1. SWITCH2：motor_poll_switch2_speed_baseline() 按档位/边沿刷新 motor_user_speed_cmd（1000/1500）。
+ * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
+ * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
+ * 4. Motor_Runaway_Latch：最高优先级关电机；须 SWITCH1 到 OFF 后才清除锁存。
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
-    static uint8 speed_dip_inited = 0;
-    static uint8 last_speed_fast = 0;
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
-    uint8 dip_speed_fast = (gpio_get_level(SWITCH2) == GPIO_LOW) ? 1 : 0;
 
-    if (!speed_dip_inited || (last_speed_fast != dip_speed_fast))
-    {
-        set_speed = dip_speed_fast ? 1500.0f : 1000.0f;
-        last_speed_fast = dip_speed_fast;
-        speed_dip_inited = 1;
-    }
+    motor_poll_switch2_speed_baseline();
 
     if (Motor_Runaway_Latch)
     {
@@ -141,13 +154,17 @@ void dip_switch_motor_sync_from_hw(void)
         return;
     }
 
-    uint8 prev = Motor_Switch;
-    Motor_Switch = dip_motor;
-    if (prev != dip_motor && dip_motor == MOTOR_OFF)
     {
-        ips200_clear();
-        menuMember.gui();
-        menuMember.act();
+        uint8 prev = Motor_Switch;
+
+        Motor_Switch = dip_motor;
+
+        if (prev != Motor_Switch && Motor_Switch == MOTOR_OFF)
+        {
+            ips200_clear();
+            menuMember.gui();
+            menuMember.act();
+        }
     }
 }
 
@@ -327,6 +344,7 @@ static uint8 MenuIsNavDebugPage(void)
 void selectMenu(void)
 {
     ReadDataFromPc();
+    dip_switch_motor_sync_from_hw();
     switch (Menu_command)
     {
     case 'a':
@@ -364,17 +382,6 @@ void selectMenu(void)
         Flash.Flash_state = FLASH_MENU;
         break;
         */
-    case 'h':
-       if(Motor_Switch == MOTOR_OFF)
-        {
-            Motor_Switch = MOTOR_ON;
-        }
-        else
-        {
-            Motor_Switch = MOTOR_OFF;
-        }
-        //Motor_OpenFlag = 1;
-        break;
     case 'i':
         jump_flag = 1;
         break;
@@ -409,18 +416,15 @@ void selectMenu(void)
         steer_request_relative_yaw(30.0f);
         break;
     case 'q':
-        /* 备用调试入口：在不拨动 SWITCH2 的前提下，临时把基准速度上调 500。 */
-        set_speed += 500;
+        /* 调试：步进增加用户速度基准（拨动 SWITCH2 仍会按档位刷新为 1000/1500） */
+        motor_user_speed_cmd += 500.0f;
         break;
     case 'r':
-        /* 备用调试入口：在不拨动 SWITCH2 的前提下，临时把基准速度下调 500。 */
-        set_speed -= 500;
+        motor_user_speed_cmd -= 500.0f;
         break;
     case 's':
-        /* 备用调试入口：紧急把基础速度清零。
-         * 若之后重新拨动 SWITCH2，会再次恢复到 1000/1500 两档之一。
-         */
-        set_speed  = 0;
+        /* 紧急清零速度命令；拨动 SWITCH2 仍会回到 1000/1500 */
+        motor_user_speed_cmd = 0.0f;
         break;
     case 't':
         /* 录制阶段手动标记元素 enter/exit：
@@ -657,7 +661,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.1.1");
 #endif
 }
 

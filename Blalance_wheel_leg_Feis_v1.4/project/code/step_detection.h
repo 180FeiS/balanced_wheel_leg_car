@@ -7,21 +7,39 @@
 #define STEP_LENGTH_MM     500     // 台阶长度 500mm
 #define STEP_WIDTH_MM      500     // 台阶宽度 500mm
 
-#define CAMERA_HEIGHT_MM  200     // 摄像头安装高度（mm），根据实际调整
+#define CAMERA_HEIGHT_MM  250     // 摄像头安装高度（mm），根据实际调整
 #define CAMERA_ANGLE_DEG  30      // 摄像头俯仰角度（度），根据实际调整
-#define FOCAL_LENGTH_MM   2.5     // 摄像头焦距（mm），根据实际调整
-#define PIXEL_SIZE_MM     0.00375   // 像素尺寸（mm），根据实际调整
+#define FOCAL_LENGTH_MM   2.3     // 摄像头焦距（mm），根据实际调整
+#define PIXEL_SIZE_MM      0.006   // 像素尺寸（mm），根据实际调整
 
 #define MIN_STEP_HEIGHT_PIX   5   // 最小台阶高度（像素）
-#define MAX_STEP_HEIGHT_PIX   150 // 最大台阶高度（像素）
+#define MAX_STEP_HEIGHT_PIX   60 // 最大台阶高度（像素）
+
+/* 边缘检测：CH2/CH3 抖动时优先调大 GRAD_THRESH 或 MIN_DIV；检不到台阶则反向调 */
+#define STEP_EDGE_ROW_DELTA    2   /* 纵向梯度用 i±此行距，越小边缘定位越细 */
+#define STEP_EDGE_GRAD_THRESH  50  /* 灰度差阈值，场地亮/反光强可调到 60~80 */
+/* 软阈值直方图：白台面→蓝台阶时过曝/对比弱，强阈值下 edge 计数不够；须小于 GRAD_THRESH；0=不建软直方图 */
+#define STEP_EDGE_GRAD_SOFT_THRESH 32
+#define STEP_EDGE_MIN_DIV      3   /* 水平边缘最少计数 = MT9V03X_W / 本值，越大越严 */
+#define STEP_HEIGHT_MED_WIN    5   /* 像素高中值滤波窗口（进入测距公式前） */
+
+/* 下沿纵向 ROI：仅搜 [H/STEP_BOTTOM_ROW_START_DIV , H-10)。除数越大起始行越靠上，越利于“站在白台面看下一级”（边常出现在画面中上部）；除数过小易等同只搜下半幅导致 CH1 恒为 0 */
+#define STEP_BOTTOM_ROW_START_DIV 2
+/* 主 min_edges 未检出时，用 W/本值 再搜同一 ROI 一次；0=关闭 */
+#ifndef STEP_BOTTOM_MIN_DIV_FALLBACK
+#define STEP_BOTTOM_MIN_DIV_FALLBACK 4
+#endif
 
 typedef struct {
     uint8 detected;           // 是否检测到台阶
-    uint16 step_row;          // 台阶底部边缘行坐标
+    uint16 step_row;          // 台阶底部边缘行坐标（通过测距校验后写入，失败时可能保持旧值）
     uint16 step_top_row;      // 台阶顶部边缘行坐标
     uint16 step_height_pix;   // 台阶高度（像素）
     float distance_mm;        // 台阶距离（mm）
     float distance_cm;        // 台阶距离（cm）
+    /* 本帧原始台阶下沿行号：与 VOFA CH1（step_bottom_row）一致；find_step_bottom_edge()>0 时写入行号，否则为 0。
+     * 供普通模式“下沿消失触发跳跃”等逻辑使用，不等同于滤波后的测距结果。仅在新摄像头帧被 step_detect 处理时更新。 */
+    uint16 bottom_row_raw;
 } step_info_t;
 
 extern step_info_t step_data;
@@ -30,5 +48,30 @@ void step_detection_init(void);
 uint8 step_detect(void);
 float calculate_step_distance(uint16 step_height_pix);
 void step_reset_distance_tracking(void);
+
+/*
+ * 台阶测距 VOFA 调试（JustFloat 6 通道，与 SendDataStreamToVOFA 顺序一致）：
+ *
+ *  CH0  step_top_row      台阶上沿在图像中的行号（约小越靠画面上方）；未检出时为 0
+ *  CH1  step_bottom_row  台阶下沿行号；未检出时为 0（与 step_data.bottom_row_raw 同语义，每处理一帧更新）
+ *  CH2  step_height_pix  用于测距的像素高（经 STEP_HEIGHT_MED_WIN 帧中值）；与距离公式直接相关
+ *  CH3  dist_raw_mm       本帧由 calculate_step_distance 算出的原始距离（未做 10 帧均值）
+ *  CH4  dist_filt_mm     与 step_data.distance_mm 一致（滤波后或失败时保持的上次有效值）
+ *  CH5  flags             整数化信息：frame_ok*10 + detected；frame_ok=本帧是否通过有效测距更新(0/1)，detected=累计确认标志
+ *
+ * 在 VOFA 里如何判断问题出在谁：
+ *  1) CH2 波动大、CH3 跟着跳 → 边缘检测不稳或光照变化，优先改梯度阈值/ROI/对 step_height 做中值滤波
+ *  2) CH2 很稳，但 CH3 与卷尺真值差一截 → step_detection.h 里 CAMERA_HEIGHT_MM / ANGLE / FOCAL / PIXEL_SIZE 标定不对
+ *  3) CH3 稳，CH4 仍飘 → get_filtered_distance 均值把野值拉偏，可改为中值或收紧野值剔除
+ *  4) CH0/CH1 突然跳到无关行、CH2 异常大/小 → 可能检到地布纹理或坡道边缘；白台看下一级 CH1 常为 0 时增大 STEP_BOTTOM_ROW_START_DIV 或 FALLBACK
+ *  5) 蓝→白能检、白→蓝不能：多为过曝/弱对比而非梯度方向(abs 已对称)；略降 STEP_EDGE_GRAD_SOFT_THRESH 或 STEP_EDGE_GRAD_THRESH
+ *
+ * 使用：将 STEP_DEBUG_USE_VOFA 置 1，主循环会只发本组数据（不再发 send_nav_debug_to_vofa），避免两帧混叠。
+ */
+#ifndef STEP_DEBUG_USE_VOFA
+#define STEP_DEBUG_USE_VOFA 1 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
+#endif
+
+void step_debug_send_to_vofa(void);
 
 #endif /* CODE_STEP_DETECTION_H_ */

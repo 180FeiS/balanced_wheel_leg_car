@@ -1,5 +1,7 @@
 #include "vofa.h"
 #include "init.h"
+#include <stdlib.h>
+#include <string.h>
 
 const uint8_t vofa_justfloat_frame_tail[4] = {0x00, 0x00, 0x80, 0x7f};
 #define Wired_Mode 1 // 0-有线模式    1-无线模式
@@ -54,6 +56,7 @@ void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
 uint32 WirelessUart_ReadBuff_Count = 0;     // 读取无线串口接收数据长度
 uint8 WirelessUart_ReadBuff_Data[64] = {0}; // 读取无线串口接收数据
 uint8 Menu_command = 0;                     // 菜单控制指令
+
 //-------------------------------------------------------------------------------------------------------------------
 // 函数简介     从电脑接收数据
 // 参数说明     void
@@ -72,6 +75,7 @@ uint8 Menu_command = 0;                     // 菜单控制指令
 //                 p4+ ：右下增加10
 //                 p4- ：右下减少10 
 //                 使用前需要注释control.c中right_leg_control和left_leg_control的servo_control_table函数.
+//             V1.1.4  速度多字节帧 V<数值> 由 Menu.c:Menu_TryConsumePcMotorSpeedString 解析 2026年4月
 //-------------------------------------------------------------------------------------------------------------------
 void ReadDataFromPc()
 {
@@ -81,10 +85,17 @@ void ReadDataFromPc()
 
     if (WirelessUart_ReadBuff_Count)
     {
+        if (Menu_TryConsumePcMotorSpeedString(WirelessUart_ReadBuff_Data, WirelessUart_ReadBuff_Count))
+        {
+            memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+            WirelessUart_ReadBuff_Count = 0;
+        }
+        else
+        {
         Menu_command = WirelessUart_ReadBuff_Data[0];
         if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
         {
-            ReadBuf_Pid = atof(&WirelessUart_ReadBuff_Data[0]);
+            ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
             //Flash.Flash_state = FLASH_READ;
             //Flash.Flash_Error = FLASH_RUNNING;
         }
@@ -133,6 +144,7 @@ void ReadDataFromPc()
 
         memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // 清除接收缓存
         WirelessUart_ReadBuff_Count = 0;
+        }
     }
 
 #else // 在Debug模式下读取数据
@@ -141,10 +153,17 @@ void ReadDataFromPc()
     {
         // debug_send_buffer(WirelessUart_ReadBuff_Data,WirelessUart_ReadBuff_Count);
         debug_send_buffer(ReadPos, sizeof(ReadPos));
+        if (Menu_TryConsumePcMotorSpeedString(WirelessUart_ReadBuff_Data, WirelessUart_ReadBuff_Count))
+        {
+            memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+            WirelessUart_ReadBuff_Count = 0;
+        }
+        else
+        {
         Menu_command = WirelessUart_ReadBuff_Data[0];
         if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
         {
-            ReadBuf_Pid = atof(&WirelessUart_ReadBuff_Data[0]);
+            ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
             //Flash_Read_State = FLASH_RUNNING;
         }
         
@@ -188,6 +207,7 @@ void ReadDataFromPc()
         
         memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // 清除接收缓存
         WirelessUart_ReadBuff_Count = 0;
+        }
     }
 #endif
 }
