@@ -38,6 +38,8 @@ extern float speed_target_effective;      //真正送入速度环的目标速度
 void motor_user_speed_cmd_set_from_pc(float cmd);
 void motor_poll_switch2_speed_baseline(void);
 extern uint8 jump_flag;                   //跳跃标志位
+uint8 jump_is_allowed(void);              //轮速失控保护触发后返回0，禁止新的跳跃
+void jump_stop(void);                     //立即终止当前跳跃并复位跳跃时序
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 

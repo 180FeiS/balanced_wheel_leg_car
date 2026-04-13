@@ -176,7 +176,7 @@ void Nag_Hook_Bump_Stop(void) {}
  */
 bool Nag_Hook_Jump_Start(void)
 {
-    if (jump_flag != 0u)
+    if (jump_flag != 0u || jump_is_allowed() == 0u)
     {
         return false;
     }
@@ -191,7 +191,7 @@ bool Nag_Hook_Jump_IsDone(void)
 }
 void Nag_Hook_Jump_Stop(void)
 {
-    jump_flag = 0u;
+    jump_stop();
     N.Jump_Element_Armed = 0u;
 }
 

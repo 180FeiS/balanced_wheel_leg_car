@@ -52,6 +52,14 @@ static void visual_jump_trigger_after_step(void)
     return;
   }
 
+  if (jump_is_allowed() == 0u)
+  {
+    visual_jump_in_zero_confirm = 0u;
+    visual_jump_zero_confirm_cnt = 0u;
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
   if (jump_flag != 0u)
   {
     /* 跳跃由 control.c 的 jump_control() 推进；期间不再累计 0 确认，避免重复触发 */
@@ -160,7 +168,7 @@ static void run_soft_tasks(void)
   {
     step_detect();
 #if !LEG_DEBUG_MODE
-    visual_jump_trigger_after_step();
+    //visual_jump_trigger_after_step();
 #endif
   }
   
@@ -176,19 +184,13 @@ static void run_soft_tasks(void)
  */
 static void send_nav_debug_to_vofa(void)
 {
-  switch (4)
+  switch (0)
   {
     case 0:
       /* 基础输入组：
-       * yaw: 当前姿态解算出来的偏航角
-       * car_speed: 当前选作惯导积分的平均车速
-       * left/right_speed: 原始左右轮速度，便于检查方向和符号
+   
        */
-      SendDataStreamToVOFA(4,
-                           (float)euler_angle.yaw,
-                           (float)gyro_z_bias_mean,
-                           (float)car_speed,
-                           (float)Nag_Vofa_Group);
+      SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
       break;
     case 1:
       /* 录制状态组：
@@ -359,6 +361,7 @@ int main(void)
     // timer_stop(TC_TIME2_CH0);                                                   // 停止定时器
     // SendDataStreamToVOFA(1, (float)timer_get(TC_TIME2_CH0));
     // timer_clear(TC_TIME2_CH0); 
+    
 
       
   }

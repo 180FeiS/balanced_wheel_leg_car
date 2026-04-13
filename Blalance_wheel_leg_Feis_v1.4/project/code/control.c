@@ -32,8 +32,8 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 5;  // pitch机械中值（俯仰平衡）
-float roll_mid = 2.95; // roll机械中值（横滚平衡，leg_hight PID目标）
+float pitch_mid = 7.5;  // pitch机械中值（俯仰平衡）
+float roll_mid = -9.0; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -71,11 +71,25 @@ static uint8 motor_dip_last_fast = 0u;
 // 跳跃标志位
 uint8 jump_flag = 0;
 uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
+static int jump_time = 0;   // 跳跃时序计数，单位见 jump_control()
 
 uint8 speed_flag = 0;
 
 /* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
 uint8 Motor_Runaway_Latch = 0;
+
+uint8 jump_is_allowed(void)
+{
+    return (Motor_Runaway_Latch == 0u);
+}
+
+void jump_stop(void)
+{
+    jump_flag = 0u;
+    jump_step_index = 0u;
+    jump_time = 0;
+    leg_long = 5.5f;
+}
 
 void motor_user_speed_cmd_set_from_pc(float cmd)
 {
@@ -418,7 +432,7 @@ uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭�
 #define LEG_TILT_MAX             20.0f // 腿倾角限幅±20°
 
 /*---------- 跳跃参数（障碍跨越）----------*/
-#define JUMP_PID_SCALE          0.5f  // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_PID_SCALE          0.3f  // 跳跃时angle/speed的kp缩放，维持稳定
 #define JUMP_PREPARE_P          10.5f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
 #define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
@@ -462,7 +476,7 @@ void pid_ctrl_Init(void)
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
      pid_init(&angle, 500.0, 0, 0, 0.01, 0, 0, 0, 10000, Position_pid);
-     pid_init(&speed, 3.3, 0.001, 0.01, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
+     pid_init(&speed, 3.0, 0.001, 0.01, 0.02, 0, 0, 0, 10000, Position_pid);//3.0
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     pid_set_target(&leg_hight, roll_mid);  // 横滚目标=机械零点
     pid_set_target(&speed, 0);
@@ -766,6 +780,7 @@ void pid_ctrl_Run(void)
         {
             Motor_Switch = 0;
             Motor_Runaway_Latch = 1;
+            jump_stop();
          }
         else
         {
@@ -970,9 +985,14 @@ void jump_set_step(int step_num)
 -------------------------------------------------------------------------------------------------------------------*/
 void jump_control(void)
 {
-    static int jump_time = 0;
     if (jump_flag == 1)
     {
+        if (jump_is_allowed() == 0u)
+        {
+            jump_stop();
+            return;
+        }
+
         jump_time++;
 
         if (jump_time < jump_control_config[jump_step_num - 1].max)
@@ -991,9 +1011,7 @@ void jump_control(void)
         }
         else
         {
-            jump_flag = 0;
-            jump_time = 0;
-            jump_step_index = 0; // 重置当前跳跃步
+            jump_stop();
         }
     }
 }
