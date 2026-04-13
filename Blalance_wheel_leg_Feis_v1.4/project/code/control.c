@@ -428,12 +428,13 @@ uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭�
 
 /*---------- 俯仰角参数（速度环→腿倾角，与横滚并级）----------*/
 #define LEG_SERVO_SPEED_TILT_EN  1     // 置0关闭速度环→舵机倾角
-#define LEG_TILT_K              0.02f // 速度环输出→腿倾角缩放系数
+#define LEG_TILT_K              0.016f // 速度环输出→腿倾角缩放系数
 #define LEG_TILT_MAX             20.0f // 腿倾角限幅±20°
 
 /*---------- 跳跃参数（障碍跨越）----------*/
-#define JUMP_PID_SCALE          0.3f  // 跳跃时angle/speed的kp缩放，维持稳定
-#define JUMP_PREPARE_P          10.5f // 准备缓冲目标腿长（起跳后伸腿高度）
+#define JUMP_PID_SCALE          0.5f  // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_TAKEOFF_P          13.0f // 起跳爆发目标腿长（直通伸腿）
+#define JUMP_PREPARE_P          10.0f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
 #define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
 #define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
@@ -443,9 +444,9 @@ uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭�
 /* 跳跃时序（jump_control在pit0_ch10 20ms周期，单位=20ms）*/
 const jump_control_struct jump_control_config[] =
     {
-        {0,  5,  jump_set_step, "起跳"},           // 0~100ms 伸腿爆发
-        {5,  11, jump_set_step, "准备缓冲"},       // 100~160ms 过渡姿态
-        {11, 11 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
+        {0,  5,  jump_set_step, "起跳"},           //  伸腿爆发
+        {5,  9, jump_set_step, "准备缓冲"},       //  过渡姿态
+        {9, 9 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
 };
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
@@ -776,7 +777,7 @@ void pid_ctrl_Run(void)
 
     if(Motor_Switch)
     {
-        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 2000 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -2000)
+        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 3000 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -3000)
         {
             Motor_Switch = 0;
             Motor_Runaway_Latch = 1;
@@ -961,7 +962,7 @@ void jump_set_step(int step_num)
     switch (step_num)
     {
     case 0:
-        leg_long = 14.5f;           // 起跳：直接爆发伸腿
+        leg_long = JUMP_TAKEOFF_P;  // 起跳：直接爆发伸腿
         break;
     case 1:
         leg_long = JUMP_PREPARE_P;  // 准备缓冲：直通到中间姿态
