@@ -168,7 +168,7 @@ static void run_soft_tasks(void)
   {
     step_detect();
 #if !LEG_DEBUG_MODE
-    visual_jump_trigger_after_step();
+    //visual_jump_trigger_after_step();
 #endif
   }
   
