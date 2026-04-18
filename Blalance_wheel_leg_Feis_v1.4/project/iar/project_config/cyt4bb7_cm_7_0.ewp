@@ -1158,6 +1158,12 @@
             <name>$PROJ_DIR$\..\..\code\dualcore_shared.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\remote_control.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\remote_control.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\matrix.c</name>
         </file>
         <file>

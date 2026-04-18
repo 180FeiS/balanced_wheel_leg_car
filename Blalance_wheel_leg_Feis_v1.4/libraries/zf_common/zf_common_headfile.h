@@ -97,6 +97,7 @@
 #include "zf_device_wifi_spi.h"
 #include "zf_device_wifi_uart.h"
 #include "zf_device_wireless_uart.h"
+#include "zf_device_lora3a22.h"
 //===================================================外接设备驱动层===================================================
 
 //=====================================================组件应用层=====================================================
@@ -122,5 +123,7 @@
 #include "self_math.h"
 #include "step_detection.h"
 #include "task_schedule.h"
+#include "remote_control.h"
+#include "dualcore_shared.h"
 //=====================================================用户code=====================================================
 #endif

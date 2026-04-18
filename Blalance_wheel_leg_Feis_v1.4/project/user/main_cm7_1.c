@@ -31,31 +31,55 @@
 * 修改记录
 * 日期              作者                备注
 * 2024-1-4       pudding            first version
+* （项目）        ——                双核：本文件为 CM7_1（UI/感知）主循环，见下方「双核分工说明」
 ********************************************************************************************************************/
 
+/*********************************************************************************************************************
+ * 【双核分工说明 — 哪些任务在 CM7_1】
+ *
+ * CM7_0（控制核）：IMU/EKF、导航 Nag_System、PID、电机 PWM、跳跃状态机 jump_control、拨码 dip_switch_motor_sync
+ *   等与实时控制相关的逻辑；通过 dualcore_ctrl_to_ui_publish() 把状态快照写给 CM7_1 显示。
+ *
+ * CM7_1（本核）：从原单核 main 软任务 / 外设中迁出、且与控制核解耦的部分，主要包括：
+ *   1) 摄像头 + IPS200 + 台阶检测：camera_init_ips200 / step_detect / step_data（见 init.c all_init_cm7_1_ui）
+ *   2) 菜单与五向键：menu_key_capture_event、selectMenu_Key、selectMenu（命令经 dualcore_ui_cmd_push 到 0 核执行）
+ *   3) 界面刷新数据：ui_pull_ctrl_snapshot() 从共享区拉取控制核快照再画 GUI（UI.c）
+ *   4) 无线 VOFA：wireless_uart_init（init），SendDataStreamToVOFA / ReadDataFromPc（vofa.c），UART1 在 cm7_1_isr
+ *   5) 视觉结果下发：dualcore_vision_publish_after_step() 把 step_data 写入 g_dualcore_blob.vision 供 0 核拉取
+ *   6) （可选）遥控：remote_control_init/task，与 UART1 共用，与 VOFA 二选一时注意 REMOTE_CONTROL_ENABLE
+ *   7) （可选）视觉自动跳跃：visual_jump_after_step_cm71() 通过 DUALCORE_UI_CMD_JUMP 通知 0 核置 jump_flag
+ *
+ * 共享与协议：project/code/dualcore_shared.h、dualcore_shared.c（地址 DUALCORE_SHARED_PHYS_ADDR）。
+ ********************************************************************************************************************/
+
 #include "zf_common_headfile.h"
-#include "init.h"
-#include "dualcore_shared.h"
-#include "UI.h"
+
 
 #if !LEG_DEBUG_MODE
+/* 视觉自动跳跃：与原先 CM7_0 main 软任务里逻辑一致，迁到 1 核后改经命令队列触发跳跃（非直接写 jump_flag） */
 #ifndef VISUAL_JUMP_AUTO_ENABLE
-#define VISUAL_JUMP_AUTO_ENABLE 1u
+#define VISUAL_JUMP_AUTO_ENABLE 1u       /* 1：启用；工程预处理里可改为 0 关闭 */
 #endif
 #ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u  /* 底行由有边沿变 0 后，需连续为 0 的 step_detect 次数再触发 */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
-#define VISUAL_JUMP_MAX_COUNT 3u
+#define VISUAL_JUMP_MAX_COUNT 3u         /* 成功下发跳跃命令的次数上限，达到后 visual_jump_lockout 禁止直到复位 */
 #endif
 
 #if VISUAL_JUMP_AUTO_ENABLE
-static uint16 visual_jump_prev_bottom_raw;
-static uint8 visual_jump_in_zero_confirm;
-static uint8 visual_jump_zero_confirm_cnt;
-static uint8 visual_jump_done_count;
-static uint8 visual_jump_lockout;
+static uint16 visual_jump_prev_bottom_raw;   /* 上一帧 step_data.bottom_row_raw，用于边沿检测 */
+static uint8 visual_jump_in_zero_confirm;   /* 1：已看到高→0，正在数连续为 0 的帧数 */
+static uint8 visual_jump_zero_confirm_cnt; /* 当前连续为 0 的计数 */
+static uint8 visual_jump_done_count;       /* 已成功 push JUMP 命令的次数 */
+static uint8 visual_jump_lockout;          /* 1：已达 VISUAL_JUMP_MAX_COUNT，不再触发 */
 
+/*-------------------------------------------------------------------------------------------------------------------
+ * 函数简介     每帧台阶检测后调用：根据底行消失沿 + 连续 0 确认，向 CM7_0 发送跳跃命令
+ * 参数说明     无（读 step_data、读共享快照 dcj）
+ * 备注         门控：dcj.jump_allowed（0 核 jump_is_allowed）、dcj.jump_active（0 核 jump_flag 进行中）；
+ *              真正置位 jump_flag 在 CM7_0 的 dualcore_ui_cmd_consume_all → DUALCORE_UI_CMD_JUMP
+-------------------------------------------------------------------------------------------------------------------*/
 static void visual_jump_after_step_cm71(void)
 {
   uint16 curr = step_data.bottom_row_raw;
@@ -129,33 +153,43 @@ static void visual_jump_after_step_cm71(void)
 // 第一步 关闭上面所有打开的文件
 // 第二步 project->clean  等待下方进度条走完
 
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
+// **************************** CM7_1 主循环（UI / 感知核）****************************
 
-// **************************** 代码区域 ****************************
-
+/*-------------------------------------------------------------------------------------------------------------------
+ * 函数简介     CM7_1 入口：只做本核外设与用户交互；不向 CM7_0 全局直接写控制量（走 dualcore_ui_cmd_push）
+ * 备注         all_init_cm7_1_ui 定义见 init.c：摄像头/屏/菜单/按键/无线，无 IMU/电机/PIT 控制定时器
+-------------------------------------------------------------------------------------------------------------------*/
 int main(void)
 {
     clock_init(SYSTEM_CLOCK_250M); 	// 时钟配置及系统初始化<务必保留>
-    debug_info_init();                  // 调试串口信息初始化
+    debug_info_init();                  // 本核调试串口（与 CM7_0 的 debug_init 独立）
 
+    /* 摄像头 IPS200、台阶初始化、无线 VOFA、按键、MenuInit；pit_flag=0 不在本核开控制用 PIT */
     all_init_cm7_1_ui();
+
+#if REMOTE_CONTROL_ENABLE
+    /* LoRa 等与 wireless_uart 共用 UART1；与 VOFA 同时调试易冲突，不需要遥控时置 REMOTE_CONTROL_ENABLE=0 */
+    remote_control_init();
+#endif
 
     while(true)
     {
-        menu_key_capture_event();
-        selectMenu_Key();
-        selectMenu();
-        ui_pull_ctrl_snapshot();
+#if REMOTE_CONTROL_ENABLE
+        remote_control_task();         /* 遥控周期任务；具体协议见 remote_control.c */
+#endif
+        menu_key_capture_event();      /* 五向键扫描 → 导航调试页推 UI 命令，其余页推菜单方向事件 */
+        selectMenu_Key();              /* 消费按键队列 + 刷新菜单（电机关断时才重绘，Motor_Switch 来自共享快照） */
+        selectMenu();                  /* 串口/VOFA 单字节命令 + PC 扩展帧；CM7_1 内转为 dualcore_ui_cmd_push */
+        ui_pull_ctrl_snapshot();       /* 从 g_dualcore_blob.ctrl 拉快照，供 UI.c 显示车速/导航调试等 */
 
-        step_detect();
-        static uint32 step_frame_seq;
+        step_detect();                 /* 读 mt9v03x 更新 step_data；原在 CM7_0 10ms 软任务，现仅在 1 核 */
+        static uint32 step_frame_seq;  /* 单调递增，随 vision 一并写入共享区，便于 0 核对齐帧 */
         step_frame_seq++;
-        dualcore_vision_publish_after_step(step_frame_seq);
+        dualcore_vision_publish_after_step(step_frame_seq); /* 拷贝 step_data → g_dualcore_blob.vision + 缓存同步 */
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
-        visual_jump_after_step_cm71();
+        /* 需要视觉自动跳跃时取消下行注释；会占满 UI 命令队列时需留意 CM7_0 消费速度 */
+        //visual_jump_after_step_cm71();
 #endif
     }
 }

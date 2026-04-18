@@ -48,6 +48,7 @@ typedef enum
     BLUETOOTH_CH9141,                                                           // 蓝牙 CH9141
     WIFI_UART,                                                                  // 串口 WiFi
     RECEIVER_UART,                                                              // SBUS遥控器接收
+    LORA3A22_UART,                                                              // LoRa3A22 逐飞遥控接收（与 WIRELESS_UART 共用回调通道，仅作类型标记）
 }wireless_type_enum;
 
 typedef enum

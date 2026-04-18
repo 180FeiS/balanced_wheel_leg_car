@@ -120,6 +120,11 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % 6u);
     break;
   case DUALCORE_UI_CMD_SPIN_START:
+    /* 元素接管或已在自旋时忽略，避免遥控/菜单调试互相抢状态 */
+    if ((N.Event_Active != 0u) || (spin_enable != 0u))
+    {
+      break;
+    }
     /* arg_u32: dir as int8 符号扩展在发送端保证 */
     spin_task_start(s->arg_f32, (int8)s->arg_u32);
     break;
@@ -163,6 +168,9 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     }
     break;
   }
+  case DUALCORE_UI_CMD_NAG_IDLE_RESET:
+    Init_Nag();
+    break;
   default:
     break;
   }

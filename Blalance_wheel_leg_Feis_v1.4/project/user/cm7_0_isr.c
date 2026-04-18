@@ -35,7 +35,6 @@
  ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
-#include "dualcore_shared.h"
 
 vuint8 task_5ms_nav_pending = 0;
 vuint8 task_10ms_menu_key_pending = 0;
@@ -58,8 +57,12 @@ static void task_pending_push(vuint8 *task_pending)
 void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH0); // 1ms
-    dualcore_ui_cmd_consume_all();
+    /* 先同步 SWITCH1/2，再消费 CM7_1 命令队列，最后用遥控连续量覆盖速度/转向，避免拨码每周期冲掉串口/遥控写入 */
     dip_switch_motor_sync_from_hw();
+    dualcore_ui_cmd_consume_all();
+#if REMOTE_CONTROL_ENABLE
+    remote_control_apply_after_dip();
+#endif
     EKF_UpData();
     EKF_V_UPData();
     /* 导航当前固定在 1ms 中断里运行：

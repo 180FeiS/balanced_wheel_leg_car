@@ -86,7 +86,8 @@
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 1u
+/* v2：事件表 NagEvent.type 编码与下方 Nag_Event_Type 一致；v1 页版本号不匹配将整表丢弃，需重录元素。 */
+#define Nag_Event_Version 2u
 
 /* 自转元素示范参数：
  * 这组参数只是给默认的 Nag_Hook_Spin_* 一个“能跑通模板”的最小接法，
@@ -112,17 +113,18 @@
 //********************************************************//
 
 /* 元素类型枚举：
- * 与录制到 flash 的事件表 type 字段一一对应。
+ * 与录制到 flash 的事件表 type 字段一一对应（有效值 0~4）。
  */
 typedef enum
 {
-       NAG_EVENT_TYPE_GENERIC = 0,       // 通用占位类型（默认未接入动作）
-       NAG_EVENT_TYPE_TURNAROUND = 1,    // 掉头元素
-       NAG_EVENT_TYPE_SPIN = 2,          // 原地自旋元素
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3, // 单边桥元素
-       NAG_EVENT_TYPE_BUMP = 4,          // 减速带/颠簸元素
-       NAG_EVENT_TYPE_JUMP = 5,          // 跳跃元素
+       NAG_EVENT_TYPE_SPIN = 0,          // 原地自旋元素
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 1, // 单边桥元素
+       NAG_EVENT_TYPE_TURNAROUND = 2,    // 掉头元素
+       NAG_EVENT_TYPE_BUMP = 3,          // 减速带/颠簸元素
+       NAG_EVENT_TYPE_JUMP = 4,          // 跳跃元素
 } Nag_Event_Type;
+/* 无元素接管时 Event_Active_Type 的占位，勿写入 NagEvent.type。 */
+#define NAG_EVENT_TYPE_INVALID 0xFFu
 
 /* 元素状态机枚举：
  * 由 Nag_Element_StateMachine() 周期驱动。

@@ -24,7 +24,6 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
         case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
         case NAG_EVENT_TYPE_JUMP: return (Nag_HeadingHold_Jump_Enable != 0u);
-        case NAG_EVENT_TYPE_GENERIC:
         default: return false;
     }
 }
@@ -342,7 +341,7 @@ static void Nag_ClearEventRuntimeState(void)
     N.Event_State = NAG_EVENT_STATE_IDLE;
     N.Event_Start_Latched = 0;
     N.Event_Done_Latched = 0;
-    N.Event_Active_Type = NAG_EVENT_TYPE_GENERIC;
+    N.Event_Active_Type = (uint8)NAG_EVENT_TYPE_INVALID;
     N.Event_Start_RunIndex = 0;
     N.Spin_Saved_SetSpeed = 0.0f;
     N.Spin_Stop_Stable_Count = 0;
@@ -490,7 +489,6 @@ static bool Nag_GetPreDecelConfig(uint8 event_type, uint16 *pre_points, float *m
             *pre_points = Nag_Jump_PreDecel_Points;
             *min_speed = Nag_Jump_PreDecel_MinSpeed;
             break;
-        case NAG_EVENT_TYPE_GENERIC:
         default:
             *pre_points = 0u;
             *min_speed = 0.0f;
@@ -909,7 +907,7 @@ void Init_Nag()
     memset(Nag_Event_Table, 0, sizeof(Nag_Event_Table));
     N.Flash_page_index=Nag_Start_Page;
     N.Event_Active_Index = 0xFFu;
-    N.Event_Record_Type = NAG_EVENT_TYPE_GENERIC;
+    N.Event_Record_Type = NAG_EVENT_TYPE_SPIN;
     flash_Nag_ResetReadState();
     flash_buffer_clear();
 }
@@ -987,7 +985,7 @@ void Nag_Request_Event_Mark(void)
 
 void Nag_Cycle_Record_Event_Type(void)
 {
-    N.Event_Record_Type = (uint8)((N.Event_Record_Type + 1u) % 6u);
+    N.Event_Record_Type = (uint8)((N.Event_Record_Type + 1u) % 5u);
 }
 
 void Nag_Notify_Event_Done(void)

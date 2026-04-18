@@ -765,7 +765,8 @@ void pid_ctrl_Run(void)
         steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
         if (!steer_enable)
         {
-            steer_cmd = 0.0f;
+            /* 遥控右摇杆角速度模式：无普通转向任务时直接混入差速（与自旋/航向闭环互斥由 spin/steer_enable 保证） */
+            steer_cmd = remote_control_get_yaw_steer_mix();
         }
     }
 

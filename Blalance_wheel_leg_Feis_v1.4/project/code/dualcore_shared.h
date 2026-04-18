@@ -40,6 +40,8 @@ typedef enum
   DUALCORE_UI_CMD_KEY_NAV_RECORD = 15,
   DUALCORE_UI_CMD_KEY_NAV_STOP_REC = 16,
   DUALCORE_UI_CMD_KEY_NAV_KEY3 = 17,
+  /* 遥控拨码“结束回放/回待机”：调用 Init_Nag() 清空导航运行态，勿与比赛自动流程混用 */
+  DUALCORE_UI_CMD_NAG_IDLE_RESET = 18,
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -94,11 +96,23 @@ typedef struct
   dualcore_ui_cmd_slot_t slot[DUALCORE_UI_CMD_QUEUE_DEPTH];
 } dualcore_ui_cmd_fifo_t;
 
+/* 遥控连续量快照：仅 CM7_1 写、CM7_0 读；与 fifo 瞬时命令互补。 */
+typedef struct
+{
+  volatile uint32 seq;
+  uint8 online;    /* 1：最近收到有效 LoRa 帧；0：超时，CM7_0 应视为无遥控 */
+  uint8 takeover;  /* 1：用户已用左摇杆下压接过遥控使能权；0：不拉闸、不改速度，完全跟 SWITCH1/2 */
+  uint8 motor_arm; /* takeover==1 时有效：1 跟 SWITCH1；0 遥控强制停车 */
+  int16 speed_cmd; /* 左摇杆前后，内部量程约 [-2000,2000]，具体见 remote_control.h */
+  int16 yaw_rate_cmd; /* 右摇杆左右，角速度模式内部量 */
+} dualcore_remote_from_ui_t;
+
 typedef struct
 {
   dualcore_ctrl_to_ui_t ctrl;
   dualcore_vision_to_ctrl_t vision;
   dualcore_ui_cmd_fifo_t fifo;
+  dualcore_remote_from_ui_t remote;
 } dualcore_shared_blob_t;
 
 extern dualcore_shared_blob_t g_dualcore_blob;
