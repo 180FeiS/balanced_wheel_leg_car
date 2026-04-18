@@ -179,5 +179,7 @@ extern void ACT_2_3_3();
 extern void GUI_2_3_4();
 extern void ACT_2_3_4();
 
+/* CM7_1：在刷新菜单 GUI 前调用，从共享区拉取控制核快照供显示。CM7_0 为空操作。 */
+void ui_pull_ctrl_snapshot(void);
 
 #endif

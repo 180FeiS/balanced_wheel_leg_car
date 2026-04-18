@@ -1118,6 +1118,45 @@
         <file>
             <name>$PROJ_DIR$\..\..\code\本文件夹作用.txt</name>
         </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\dualcore_shared.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\dualcore_shared.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\dualcore_cm71_pwm_stubs.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\init.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\init.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\Menu.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\Menu.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\UI.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\UI.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\vofa.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\vofa.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\step_detection.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\step_detection.h</name>
+        </file>
     </group>
     <group>
         <name>doc</name>

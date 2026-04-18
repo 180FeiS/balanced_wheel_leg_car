@@ -35,6 +35,7 @@
  ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
+#include "dualcore_shared.h"
 
 vuint8 task_5ms_nav_pending = 0;
 vuint8 task_10ms_menu_key_pending = 0;
@@ -57,6 +58,8 @@ static void task_pending_push(vuint8 *task_pending)
 void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH0); // 1ms
+    dualcore_ui_cmd_consume_all();
+    dip_switch_motor_sync_from_hw();
     EKF_UpData();
     EKF_V_UPData();
     /* 导航当前固定在 1ms 中断里运行：
@@ -107,19 +110,14 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH2); // 10ms
-    /* key_init(10) 要求约每 10ms 调用一次 key_scanner；若仅随主循环调用，主循环慢时短按无法累计到 KEY_MAX_SHOCK_PERIOD。 */
-    key_scanner();
-    /* 短按事件先在这里缓存，避免主循环忙时被下一次 key_scanner() 覆盖掉；真正的菜单切换和显示刷新仍放主循环。 */
-    menu_key_capture_event();
-    task_pending_push(&task_10ms_menu_key_pending);
+    /* 菜单/按键已迁移到 CM7_1，此处保留 10ms 节拍占位（如需可改作其它轻量任务）。 */
 }
 
 void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH10); // 20ms 跳跃/菜单（leg_control已移至5ms）
     jump_control();
-    /* 跳跃控制保留在 ISR，菜单解析迁到主循环。 */
-    task_pending_push(&task_20ms_menu_pending);
+    /* 菜单在 CM7_1，此处不再挂起菜单软任务。 */
     
     Left_Motor_Speed = -motor_value.receive_left_speed_data;
     Right_Motor_Speed = motor_value.receive_right_speed_data;
@@ -130,9 +128,7 @@ void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数
 void pit0_ch11_isr() // 定时器通道 11 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH11); // 10ms
-    /* 台阶检测会遍历图像，耗时不稳定，因此只挂任务。 */
-    task_pending_push(&task_10ms_step_pending);
-   
+    /* 台阶检测在 CM7_1 运行。 */
 }
 
 void pit0_ch12_isr() // 定时器通道 12 周期中断服务函数

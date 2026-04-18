@@ -54,6 +54,7 @@
 #include "zf_common_headfile.h"
 #include <stdlib.h>
 #include <string.h>
+#include "dualcore_shared.h"
 
 /* 全局变量定义 */
 HASH_TABLE_t hashMenu;    // 储存菜单项的哈希表
@@ -125,7 +126,11 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 
     if ((tmp[0] == 'V') && (n >= 2u))
     {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_MOTOR_SPEED_FROM_PC, 0, (float)atof(&tmp[1]));
+#else
         motor_user_speed_cmd_set_from_pc((float)atof(&tmp[1]));
+#endif
         return 1u;
     }
     return 0u;
@@ -140,6 +145,9 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
 
     motor_poll_switch2_speed_baseline();
@@ -161,15 +169,89 @@ void dip_switch_motor_sync_from_hw(void)
 
         if (prev != Motor_Switch && Motor_Switch == MOTOR_OFF)
         {
+#if !DUALCORE_UI_ON_CM7_1
             ips200_clear();
             menuMember.gui();
             menuMember.act();
+#endif
         }
     }
+#endif /* !CY_CORE_CM7_1 */
 }
 
 void menu_key_capture_event(void)
 {
+#if defined(CY_CORE_CM7_1)
+   dualcore_ctrl_to_ui_t dc;
+   dualcore_ctrl_to_ui_pull(&dc);
+   uint8 nav_recording_active = dc.nav_recording_active;
+   uint8 event_active = dc.event_active;
+   if(MenuIsNavDebugPage())
+   {
+        if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
+        {
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_RECORD, 0, 0.0f);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_1);
+        }
+        if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
+        {
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_STOP_REC, 0, 0.0f);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_2);
+        }
+        if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
+        {
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_KEY3, 0, 0.0f);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_3);
+        }
+        if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
+        {
+            if (nav_recording_active)
+            {
+                (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_MARK, 0, 0.0f);
+            }
+            else if (event_active)
+            {
+                (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_DONE, 0, 0.0f);
+            }
+            else
+            {
+                MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            }
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_4);
+        }
+   }
+   else
+   {
+        if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_UP);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_1);
+        }
+        if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_DOWN);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_2);
+        }
+        if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_3);
+        }
+        if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
+        {
+            MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+            gpio_toggle_level(LED1);
+            key_clear_state(KEY_4);
+        }
+   }
+#else
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -253,6 +335,7 @@ void menu_key_capture_event(void)
             key_clear_state(KEY_4);
         }
     }
+#endif /* !CY_CORE_CM7_1 */
 }
 
 void selectMenu_Key(void)
@@ -260,7 +343,16 @@ void selectMenu_Key(void)
    uint8 menu_nav = 0;
    menu_key_nav_enum nav = MENU_KEY_NAV_NONE;
 
+#if !defined(CY_CORE_CM7_1)
    dip_switch_motor_sync_from_hw();
+#endif
+#if defined(CY_CORE_CM7_1)
+   dualcore_ctrl_to_ui_t dc_k;
+   dualcore_ctrl_to_ui_pull(&dc_k);
+   uint8 motor_sw_key = dc_k.motor_switch;
+#else
+   uint8 motor_sw_key = Motor_Switch;
+#endif
 
    while(MenuKeyEventPop(&nav))
    {
@@ -292,7 +384,7 @@ void selectMenu_Key(void)
    }
 
    /* 与 selectMenu() 一致：导航后立刻重绘，且须在主循环内完成，避免与 ips200 SPI 冲突。 */
-   if(menu_nav && (Motor_Switch == MOTOR_OFF))
+   if(menu_nav && (motor_sw_key == MOTOR_OFF))
    {
         ips200_clear();
         menuMember.gui();
@@ -344,7 +436,16 @@ static uint8 MenuIsNavDebugPage(void)
 void selectMenu(void)
 {
     ReadDataFromPc();
+#if !defined(CY_CORE_CM7_1)
     dip_switch_motor_sync_from_hw();
+#endif
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc_s;
+    dualcore_ctrl_to_ui_pull(&dc_s);
+    uint8 motor_sw_sel = dc_s.motor_switch;
+#else
+    uint8 motor_sw_sel = Motor_Switch;
+#endif
     switch (Menu_command)
     {
     case 'a':
@@ -383,70 +484,107 @@ void selectMenu(void)
         break;
         */
     case 'i':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+#else
         jump_flag = 1;
+#endif
         break;
     case 'j':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_ROLL_BALANCE_TOGGLE, 0, 0.0f);
+#else
         roll_balance_en = !roll_balance_en;
+#endif
         break;
     case 'k':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_BEGIN_RECORD, 0, 0.0f);
+#else
         Nag_Begin_Record();
+#endif
         break;
     case 'l':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_BEGIN_REPLAY, 0, 0.0f);
+#else
         Nag_Begin_Replay();
+#endif
         break;
     case 'm':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_STOP_RECORD, 0, 0.0f);
+#else
         Nag_Request_Stop_Record();
+#endif
         break;
     case 'n':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT, 0, 0.0f);
+#else
         Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % 6);
+#endif
         break;
     case 'o':
-        /* 调试入口：发送字符 o 后，直接启动 1 圈正向自旋。
-         * 自旋保持独立任务，不走 steer_request_target_yaw() 请求链，
-         * 否则会变成持续重置普通转向目标，破坏当前的自旋收尾与互斥逻辑。
-         */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPIN_START, (uint32)(int8)1, 2.0f);
+#else
         spin_task_start(2.0f, 1);
-        
+#endif
         break;
     case 'p':
-        /* 调试入口：发送字符 p 后，登记一次相对转角请求。
-         * 当前航向 + 相对角度 的换算由 control.c 统一处理，
-         * 真正的 steer_set_target_yaw() 会在下一拍 1ms ISR 里安全执行。
-         */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_STEER_REL_DEG, 0, 30.0f);
+#else
         steer_request_relative_yaw(30.0f);
+#endif
         break;
     case 'q':
-        /* 调试：步进增加用户速度基准（拨动 SWITCH2 仍会按档位刷新为 1000/1500） */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_DELTA, 0, 500.0f);
+#else
         motor_user_speed_cmd += 500.0f;
+#endif
         break;
     case 'r':
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_DELTA, 0, -500.0f);
+#else
         motor_user_speed_cmd -= 500.0f;
+#endif
         break;
     case 's':
-        /* 紧急清零速度命令；拨动 SWITCH2 仍会回到 1000/1500 */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_SET_ABS, 0, 0.0f);
+#else
         motor_user_speed_cmd = 0.0f;
+#endif
         break;
     case 't':
-        /* 录制阶段手动标记元素 enter/exit：
-         * 第一次按下记录 enter_index，第二次按下记录 exit_index；
-         * 当前版本先只写 RAM，不写 flash，方便先把“切出/接回”链路跑通。
-         */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_MARK, 0, 0.0f);
+#else
         Nag_Request_Event_Mark();
+#endif
         break;
     case 'u':
-        /* 切换下一条待录元素类型。
-         * 建议录制时先固定一种元素把流程跑通，再逐步区分 STEP/JUMP 等类型。
-         */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_CYCLE_EVENT_TYPE, 0, 0.0f);
+#else
         Nag_Cycle_Record_Event_Type();
+#endif
         break;
     case 'v':
-        /* 回放或人工调试时，手动通知“当前元素已完成”，导航将从 exit_index 继续。 */
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_DONE, 0, 0.0f);
+#else
         Nag_Notify_Event_Done();
+#endif
         break;
     }
     
     Menu_command = 0;
-    if(Motor_Switch == MOTOR_OFF
+    if(motor_sw_sel == MOTOR_OFF
   //  || MOTOR_ON
     )
     {
@@ -616,7 +754,6 @@ void MenuInit()
         menuMember.act = ACT_2_2_2;
         strcpy(menuMember.pos, "2.2.2");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
-/*
 
             menuMember.gui=GUI_2_2_3;
             menuMember.act=ACT_2_2_3;

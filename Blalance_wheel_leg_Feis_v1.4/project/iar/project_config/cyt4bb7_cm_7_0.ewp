@@ -1152,6 +1152,12 @@
             <name>$PROJ_DIR$\..\..\code\init.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\dualcore_shared.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\dualcore_shared.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\matrix.c</name>
         </file>
         <file>

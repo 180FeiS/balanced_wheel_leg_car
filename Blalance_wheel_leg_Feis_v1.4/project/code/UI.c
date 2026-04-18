@@ -31,8 +31,18 @@
 * 2024-12-19        Bron            V2.0.1         移植到新工程，重新整理菜单
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
+#if defined(CY_CORE_CM7_1)
+#include "dualcore_shared.h"
+static dualcore_ctrl_to_ui_t s_ui_dc;
+#endif
 
-
+void ui_pull_ctrl_snapshot(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+#else
+#endif
+}
 
 /*********************************************************************************************************************
 * 多级菜单框架
@@ -358,6 +368,15 @@ void GUI_2_2_1(void) // 惯导调试界面（须从 2.2 按「右」进入）
     ips200_draw_line(24,ROW_9 ,215,ROW_9 ,IPS200_DEFAULT_PENCOLOR);
 
     ips200_show_string(24,ROW_10,"Mileage:");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_float(104,ROW_10,s_ui_dc.mileage_debug_total,4,2);
+
+    ips200_show_string(24,ROW_11,"SaveIdx:");
+    ips200_show_uint(104,ROW_11,(uint32)s_ui_dc.save_index,5);
+
+    ips200_show_string(24,ROW_12,"FlashPg:");
+    ips200_show_uint(104,ROW_12,(uint32)s_ui_dc.flash_page_index,3);
+#else
     ips200_show_float(104,ROW_10,N.Mileage_Debug_Total,4,2);
 
     ips200_show_string(24,ROW_11,"SaveIdx:");
@@ -365,6 +384,7 @@ void GUI_2_2_1(void) // 惯导调试界面（须从 2.2 按「右」进入）
 
     ips200_show_string(24,ROW_12,"FlashPg:");
     ips200_show_uint(104,ROW_12,N.Flash_page_index,3);
+#endif
 
     ips200_show_string(24,ROW_14,"Rec  / Replay / Stop");
     ips200_show_string(24,ROW_15,"LED1 toggles on press");
@@ -564,11 +584,19 @@ void GUI_1_1_1(void) // 测试电机
     GUI_Display_Level3_Common1();
     ips200_show_string(0,ROW_1,"Motor ");
 
+#if defined(CY_CORE_CM7_1)
+    if(s_ui_dc.motor_switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
+    else ips200_show_string(24,ROW_3,"Motor:Off");
+
+    ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_pwm,5);
+    ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_pwm,5);
+#else
     if(Motor_Switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
     else ips200_show_string(24,ROW_3,"Motor:Off");
 
     ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,Left_Motor_Pwm,5);
     ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,Right_Motor_Pwm,5);
+#endif
   
 
 
@@ -588,9 +616,15 @@ void GUI_1_2_1(void)
 {
     GUI_Display_Level3_Common1();
     ips200_show_string(0,ROW_1,"Encode");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_speed,5);
+    ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_speed,5);
+    ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,(int)s_ui_dc.car_speed,5);
+#else
     ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,Left_Motor_Speed,5);
     ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,Right_Motor_Speed,5);
     ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,car_speed,5);
+#endif
     //ips200_show_string(24,ROW_7,"Integ:");      ips200_show_int(88,ROW_7,Integ_Encode,5);
 }
 void ACT_1_2_1()

@@ -34,6 +34,97 @@
 ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
+#include "init.h"
+#include "dualcore_shared.h"
+#include "UI.h"
+
+#if !LEG_DEBUG_MODE
+#ifndef VISUAL_JUMP_AUTO_ENABLE
+#define VISUAL_JUMP_AUTO_ENABLE 1u
+#endif
+#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u
+#endif
+#ifndef VISUAL_JUMP_MAX_COUNT
+#define VISUAL_JUMP_MAX_COUNT 3u
+#endif
+
+#if VISUAL_JUMP_AUTO_ENABLE
+static uint16 visual_jump_prev_bottom_raw;
+static uint8 visual_jump_in_zero_confirm;
+static uint8 visual_jump_zero_confirm_cnt;
+static uint8 visual_jump_done_count;
+static uint8 visual_jump_lockout;
+
+static void visual_jump_after_step_cm71(void)
+{
+  uint16 curr = step_data.bottom_row_raw;
+  dualcore_ctrl_to_ui_t dcj;
+  dualcore_ctrl_to_ui_pull(&dcj);
+
+  if (visual_jump_lockout != 0u)
+  {
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
+  if (dcj.jump_allowed == 0u)
+  {
+    visual_jump_in_zero_confirm = 0u;
+    visual_jump_zero_confirm_cnt = 0u;
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
+  if (dcj.jump_active != 0u)
+  {
+    visual_jump_in_zero_confirm = 0u;
+    visual_jump_zero_confirm_cnt = 0u;
+    visual_jump_prev_bottom_raw = curr;
+    return;
+  }
+
+  if (visual_jump_in_zero_confirm != 0u)
+  {
+    if (curr != 0u)
+    {
+      visual_jump_in_zero_confirm = 0u;
+      visual_jump_zero_confirm_cnt = 0u;
+    }
+    else
+    {
+      visual_jump_zero_confirm_cnt++;
+      if (visual_jump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
+      {
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+        visual_jump_done_count++;
+        if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
+          visual_jump_lockout = 1u;
+        visual_jump_in_zero_confirm = 0u;
+        visual_jump_zero_confirm_cnt = 0u;
+      }
+    }
+  }
+  else if (visual_jump_prev_bottom_raw > 0u && curr == 0u)
+  {
+    visual_jump_in_zero_confirm = 1u;
+    visual_jump_zero_confirm_cnt = 1u;
+    if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
+    {
+      (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+      visual_jump_done_count++;
+      if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
+        visual_jump_lockout = 1u;
+      visual_jump_in_zero_confirm = 0u;
+      visual_jump_zero_confirm_cnt = 0u;
+    }
+  }
+
+  visual_jump_prev_bottom_raw = curr;
+}
+#endif
+#endif /* !LEG_DEBUG_MODE */
+
 // 打开新的工程或者工程移动了位置务必执行以下操作
 // 第一步 关闭上面所有打开的文件
 // 第二步 project->clean  等待下方进度条走完
@@ -48,21 +139,24 @@ int main(void)
 {
     clock_init(SYSTEM_CLOCK_250M); 	// 时钟配置及系统初始化<务必保留>
     debug_info_init();                  // 调试串口信息初始化
-     
-    // 此处编写用户代码 例如外设初始化代码等
 
+    all_init_cm7_1_ui();
 
-    
-
-    // 此处编写用户代码 例如外设初始化代码等
     while(true)
     {
-        // 此处编写需要循环执行的代码
-        
+        menu_key_capture_event();
+        selectMenu_Key();
+        selectMenu();
+        ui_pull_ctrl_snapshot();
 
-      
-      
-        // 此处编写需要循环执行的代码
+        step_detect();
+        static uint32 step_frame_seq;
+        step_frame_seq++;
+        dualcore_vision_publish_after_step(step_frame_seq);
+
+#if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
+        visual_jump_after_step_cm71();
+#endif
     }
 }
 

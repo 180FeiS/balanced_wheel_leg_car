@@ -37,6 +37,10 @@
 /*********************************************************************函数*********************************************************************/
 void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag, uint8 imu_flag, uint8 servo_flag, uint8 foc_flag, uint8 pid_flag,uint8 guandao_flag, uint8 ekf_flag, uint8 key_flag, uint8 pit_flag, uint8 time_flag);   //总初始化
 
+/* 双核分工：CM7_0 仅运动控制；CM7_1 摄像头/显示/菜单/无线 VOFA */
+void all_init_cm7_0_control(void);
+void all_init_cm7_1_ui(void);
+
 void buzzer_init(void);                     //蜂鸣器初始化
 
 void buzzer_check(uint32 buzzer_time);      //蜂鸣器检测

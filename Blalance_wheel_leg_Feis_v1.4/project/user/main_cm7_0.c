@@ -2,6 +2,7 @@
 
 
 #include "zf_common_headfile.h"
+#include "dualcore_shared.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -14,7 +15,7 @@ extern float gyro_z_bias_mean;
 
 uint16 jump_test = 1;
 
-#if !LEG_DEBUG_MODE
+#if !LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1
 /*
  * 普通模式视觉自动跳跃（不接入惯导元素）：
  * - 触发源：step_data.bottom_row_raw 与 VOFA CH1 一致，在 step_detect() 每处理完一帧后更新。
@@ -111,7 +112,7 @@ static void visual_jump_trigger_after_step(void)
   (void)0;
 #endif
 }
-#endif /* !LEG_DEBUG_MODE */
+#endif /* !LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1 */
 
 /* 主循环侧统一用这个函数“取走一次待执行任务”。
  * 这里短暂关中断是为了避免与 ISR 同时修改 pending 计数。
@@ -154,6 +155,7 @@ static void run_soft_tasks(void)
 
   }
 
+#if !DUALCORE_UI_ON_CM7_1
   if (task_pending_take(&task_10ms_menu_key_pending))
   {
     selectMenu_Key();
@@ -161,16 +163,17 @@ static void run_soft_tasks(void)
 
   if (task_pending_take(&task_20ms_menu_pending))
   {
-    selectMenu();                                               // 
+    selectMenu();
   }
 
   if (task_pending_take(&task_10ms_step_pending))
   {
     step_detect();
 #if !LEG_DEBUG_MODE
-    //visual_jump_trigger_after_step();
+    visual_jump_trigger_after_step();
 #endif
   }
+#endif
   
 }
 
@@ -278,8 +281,9 @@ int main(void)
 {
   clock_init(SYSTEM_CLOCK_250M); // 时钟配置及系统初始化<务必保留>
   debug_init();                  // 调试串口信息初始化
-  // 此处编写用户代码 例如外设初始化代码等
-  // 此处编写用户代码 例如外设初始化代码等
+#if DUALCORE_UI_ON_CM7_1
+  all_init_cm7_0_control();
+#else
   all_init(1,  // 是否开启屏幕显示标志位           //0:关闭          1:IPS200显示    （默认开启摄像头初始化）
            0,  // 是否开启逐飞助手标志位           //0:关闭          1:开启
            1,  // 是否开启vofa初始化标志位         //0:关闭          1:开启
@@ -292,24 +296,23 @@ int main(void)
            1,  // 是否开启按键初始化标志位           //0:关闭          1:开启
            1,  // 是否开启中断标志位              //0:关闭          1:开启
            1); // 是否开启菜单初始化标志位        //0:关闭          1:开启
-
-
-  // 此处编写用户代码 例如外设初始化代码等
+#endif
 
   while (true)
   {
-    /* 先处理由中断挂起的软任务，再做主循环中的显示/调试输出。 */
     run_soft_tasks();
-     
+#if DUALCORE_UI_ON_CM7_1
+    dualcore_ctrl_to_ui_publish();
+#endif
 
-#if LEG_DEBUG_MODE
+#if LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1
     // 调试模式：发送4路舵机PWM到VOFA
     int16 servo1_value = SERVO1_MID + pwm_ph1;
     int16 servo2_value = SERVO2_MID - pwm_ph2;
     int16 servo3_value = SERVO3_MID - pwm_ph3;
     int16 servo4_value = SERVO4_MID + pwm_ph4;
     SendDataStreamToVOFA(4, (float)servo1_value, (float)servo2_value, (float)servo3_value, (float)servo4_value);
-#else
+#elif !LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1
     // 正常模式：6路姿态/速度 + 9路横滚调试（roll_debug_*）
     // SendDataStreamToVOFA(15,
     //                      (float)euler_angle.pitch, (float)euler_angle.roll, (float)car_speed,
@@ -347,6 +350,11 @@ int main(void)
     // SendDataStreamToVOFA(4, (float)set_speed, (float)car_speed, (float)Left_Motor_Speed, (float)Right_Motor_Speed);
 
     // SendDataStreamToVOFA(4, (float)steer_angle_err, (float)steer_rate_target_dps, (float)steer_rate_meas_dps, (float)turn_gyro.out);
+#else
+    if (N.Nag_SystemRun_Index == 2)
+    {
+      NagFlashRead();
+    }
 #endif
 
     /* 切勿在 while(true) 里每轮调用 steer_request_target_yaw()：
