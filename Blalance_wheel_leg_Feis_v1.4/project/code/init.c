@@ -98,6 +98,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 
   if (key_flag == 1 && menu_flag == 1)
   {
+    /* MENU_INPUT_REMOTE_MENU_FIRST==1 时此处不读拨码，Motor_Switch 等保持默认直至控制/串口侧更新。 */
     dip_switch_motor_sync_from_hw();
   }
 }

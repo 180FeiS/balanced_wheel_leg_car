@@ -141,13 +141,18 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
  * 1. SWITCH2：motor_poll_switch2_speed_baseline() 按档位/边沿刷新 motor_user_speed_cmd（1000/1500）。
  * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
  * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
- * 4. Motor_Runaway_Latch：最高优先级关电机；须 SWITCH1 到 OFF 后才清除锁存。
+ * 4. Motor_Runaway_Latch：最高优先级关电机；遥控优先关闭时须 SWITCH1 到 OFF 后才清除锁存。
+ *    MENU_INPUT_REMOTE_MENU_FIRST==1 时不读拨码，锁存仅能遥控清或复位；关断与轮速失控仍见 control.c。
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
 #if defined(CY_CORE_CM7_1)
     (void)0;
 #else
+#if MENU_INPUT_REMOTE_MENU_FIRST
+    /* 遥控优先（方案 B）：不读 SWITCH；Runaway 锁存不靠拨码清除。 */
+    return;
+#endif
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
 
     motor_poll_switch2_speed_baseline();
@@ -181,6 +186,10 @@ void dip_switch_motor_sync_from_hw(void)
 
 void menu_key_capture_event(void)
 {
+#if MENU_INPUT_REMOTE_MENU_FIRST
+    /* 遥控优先：板载键不进入菜单/导航事件队列。 */
+    return;
+#endif
 #if defined(CY_CORE_CM7_1)
    dualcore_ctrl_to_ui_t dc;
    dualcore_ctrl_to_ui_pull(&dc);
@@ -446,6 +455,7 @@ void selectMenu(void)
 #else
     uint8 motor_sw_sel = Motor_Switch;
 #endif
+#if MENU_INPUT_REMOTE_MENU_FIRST
     switch (Menu_command)
     {
     case 'a':
@@ -582,7 +592,10 @@ void selectMenu(void)
 #endif
         break;
     }
-    
+#else
+    /* 按键+拨码模式：不消费串口单字节菜单命令，避免与按键双触发。 */
+#endif
+
     Menu_command = 0;
     if(motor_sw_sel == MOTOR_OFF
   //  || MOTOR_ON
