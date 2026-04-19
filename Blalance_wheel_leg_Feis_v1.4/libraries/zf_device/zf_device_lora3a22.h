@@ -39,13 +39,30 @@
 
 #include "zf_common_headfile.h"
 
-#define LORA3A22_UART_INDEX            (UART_1)              // 定义串口遥控器使用的串口
-#define LORA3A22_UART_TX_PIN           (UART1_TX_P04_1)      // 遥控器接收机的RX引脚 连接单片机的TX引脚
-#define LORA3A22_UART_RX_PIN           (UART1_RX_P04_0)      // 遥控器接收机的TX引脚 连接单片机的RX引脚
-#define LORA3A22_UART_BAUDRATE         (115200)              // 指定 lora3a22 串口所使用的的串口波特率
+/* 默认与逐飞例程一致；可与 wireless_uart 同 UART_1，二者只能二选一初始化接收回调。
+ * 换独立串口时在包含本头文件之前 #undef 再 #define 覆盖下列宏即可。 */
+#ifndef LORA3A22_UART_INDEX
+#define LORA3A22_UART_INDEX            (UART_1)
+#endif
+#ifndef LORA3A22_UART_TX_PIN
+#define LORA3A22_UART_TX_PIN           (UART1_TX_P04_1)
+#endif
+#ifndef LORA3A22_UART_RX_PIN
+#define LORA3A22_UART_RX_PIN           (UART1_RX_P04_0)
+#endif
+#ifndef LORA3A22_UART_BAUDRATE
+#define LORA3A22_UART_BAUDRATE         (115200)
+#endif
 
 #define LORA3A22_DATA_LEN              ( 18  )               // lora3a22帧长
 #define LORA3A22_FRAME_STAR            ( 0XA3 )              // 帧头信息
+
+/* 约 500ms 无有效帧则 lora3a22_state_flag 置 0；由 1ms 节拍调用 lora3a22_link_timeout_tick_1ms() */
+#ifndef LORA3A22_LINK_LOST_MS
+#define LORA3A22_LINK_LOST_MS          (500u)
+#endif
+
+void lora3a22_link_timeout_tick_1ms(void);
 
 
 

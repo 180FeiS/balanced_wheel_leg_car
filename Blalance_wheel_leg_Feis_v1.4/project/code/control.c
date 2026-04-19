@@ -165,6 +165,43 @@ vuint8 steer_yaw_request_pending = 0;
 vuint8 steer_yaw_delayed_by_spin = 0;
 volatile float steer_yaw_request_deg = 0.0f;
 
+volatile float remote_lora_steer_rate_cmd_dps = 0.0f;
+volatile uint8 remote_lora_steer_snapshot_valid = 0u;
+
+uint8 remote_lora_nav_allows_heading_override(void)
+{
+    if (N.Nag_SystemRun_Index == 3)
+    {
+        return 0u;
+    }
+    if (N.Event_Active)
+    {
+        return 0u;
+    }
+    if (N.Nag_Stop_f)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+
+uint8 remote_lora_nav_allows_spin_request(void)
+{
+    if (remote_lora_nav_allows_heading_override() == 0u)
+    {
+        return 0u;
+    }
+    if (Motor_Switch != MOTOR_ON)
+    {
+        return 0u;
+    }
+    if (Motor_Runaway_Latch != 0u)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+
 /* 普通转向参数先固定成常量，后续确认效果后再决定是否开放到菜单。
  * 这里故意比自旋保守，避免“点一下转向”变成类似原地甩尾的激烈动作。
  */
@@ -718,7 +755,29 @@ void pid_ctrl_Run(void)
         spin_cmd = 0.0f;
     }
 
-    if (!spin_enable && steer_enable)
+    if (!spin_enable &&
+        (remote_lora_steer_snapshot_valid != 0u) &&
+        (remote_lora_nav_allows_heading_override() != 0u))
+    {
+        /* LORA 横向：直接给目标偏航角速度，松杆为 0，不维护绝对航向目标 */
+        if (steer_enable != 0u)
+        {
+            steer_task_stop(); /* 仅退出航向闭环时清一次，避免每拍 reset turn_gyro */
+        }
+
+        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+        steer_rate_target_dps = clip(
+            remote_lora_steer_rate_cmd_dps,
+            -STEER_RATE_TARGET_MAX_DPS,
+            STEER_RATE_TARGET_MAX_DPS);
+
+        pid_set_target(&turn_gyro, steer_rate_target_dps);
+        pid_get_observation(&turn_gyro, steer_rate_meas_dps);
+        pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
+        pid_run(&turn_gyro);
+        set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
+    }
+    else if (!spin_enable && steer_enable)
     {
         static uint8 steer_settle_count = 0;
         steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;

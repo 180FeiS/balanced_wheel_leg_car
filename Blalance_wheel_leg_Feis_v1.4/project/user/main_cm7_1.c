@@ -139,6 +139,8 @@ int main(void)
     debug_info_init();                  // 调试串口信息初始化
 
     all_init_cm7_1_ui();
+    /* LORA 默认 UART_1 与 wireless_uart 同口：后初始化覆盖 RX 回调；分路时请改 zf_device_lora3a22.h 宏 */
+    remote_lora_init();
 
     while(true)
     {
@@ -146,6 +148,8 @@ int main(void)
         selectMenu_Key();
         selectMenu();
         ui_pull_ctrl_snapshot();
+
+        remote_lora_update_from_driver_and_publish();
 
         step_detect();
         static uint32 step_frame_seq;

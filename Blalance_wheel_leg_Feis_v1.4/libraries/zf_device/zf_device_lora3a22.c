@@ -116,3 +116,13 @@ void lora3a22_init(void)
     set_wireless_type(LORA3A22_UART, lora3a22_uart_callback);
 }
 
+void lora3a22_link_timeout_tick_1ms(void)
+{
+    lora3a22_response_time++;
+    if (lora3a22_response_time > LORA3A22_LINK_LOST_MS)
+    {
+        lora3a22_state_flag = 0u;
+        lora3a22_response_time = 0u;
+    }
+}
+

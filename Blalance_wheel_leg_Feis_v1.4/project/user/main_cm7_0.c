@@ -2,7 +2,6 @@
 
 
 #include "zf_common_headfile.h"
-#include "dualcore_shared.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -302,6 +301,8 @@ int main(void)
   {
     run_soft_tasks();
 #if DUALCORE_UI_ON_CM7_1
+    /* 验证用：左摇杆速度 + 左杆键翻转 Motor_Switch；正式策略可迁到 control/navigation */
+    remote_lora_apply_validate_motor();
     dualcore_ctrl_to_ui_publish();
 #endif
 
