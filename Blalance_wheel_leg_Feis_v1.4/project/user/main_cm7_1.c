@@ -34,9 +34,7 @@
 ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
-#include "init.h"
-#include "dualcore_shared.h"
-#include "UI.h"
+
 
 #if !LEG_DEBUG_MODE
 #ifndef VISUAL_JUMP_AUTO_ENABLE
@@ -155,7 +153,7 @@ int main(void)
         dualcore_vision_publish_after_step(step_frame_seq);
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
-        visual_jump_after_step_cm71();
+        //visual_jump_after_step_cm71();
 #endif
     }
 }

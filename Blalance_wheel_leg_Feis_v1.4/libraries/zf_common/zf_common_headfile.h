@@ -122,5 +122,7 @@
 #include "self_math.h"
 #include "step_detection.h"
 #include "task_schedule.h"
+#include "dualcore_shared.h"
+
 //=====================================================”√ªßcode=====================================================
 #endif

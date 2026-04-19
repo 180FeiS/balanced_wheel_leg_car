@@ -35,7 +35,6 @@
  ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
-#include "dualcore_shared.h"
 
 vuint8 task_5ms_nav_pending = 0;
 vuint8 task_10ms_menu_key_pending = 0;
