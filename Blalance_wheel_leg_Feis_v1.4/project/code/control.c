@@ -32,7 +32,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 7.5;  // pitch机械中值（俯仰平衡）
+float pitch_mid = 4.5;  // pitch机械中值（俯仰平衡）
 float roll_mid = -9.0; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
@@ -68,7 +68,7 @@ float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的�
 static uint8 motor_dip_speed_inited = 0u;
 static uint8 motor_dip_last_fast = 0u;
 
-// 跳跃标志位
+// 跳跃标志位（LORA 触发键下标见 remote_lora.h 的 REMOTE_LORA_KEY_INDEX_JUMP）
 uint8 jump_flag = 0;
 uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
 static int jump_time = 0;   // 跳跃时序计数，单位见 jump_control()
@@ -165,9 +165,12 @@ vuint8 steer_yaw_request_pending = 0;
 vuint8 steer_yaw_delayed_by_spin = 0;
 volatile float steer_yaw_request_deg = 0.0f;
 
+/* 遥控“开环转把”：由 remote_lora_apply 写入右杆 right_x 映射的目标偏航角速度 (°/s)，1ms 环内作 turn_gyro 目标 */
 volatile float remote_lora_steer_rate_cmd_dps = 0.0f;
+/* 本次周期是否具备有效 LORA 遥控数据（在线且摇杆/键语义有效时置 1，离线或禁用时由 apply 清 0） */
 volatile uint8 remote_lora_steer_snapshot_valid = 0u;
 
+/** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)
 {
     if (N.Nag_SystemRun_Index == 3)
@@ -185,6 +188,7 @@ uint8 remote_lora_nav_allows_heading_override(void)
     return 1u;
 }
 
+/** 是否允许响应右摇杆键触发的自旋（需电机 ON、无失控锁存、且航向覆盖允许）。 */
 uint8 remote_lora_nav_allows_spin_request(void)
 {
     if (remote_lora_nav_allows_heading_override() == 0u)
@@ -212,7 +216,7 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_SETTLE_COUNT_MAX      20u     // 连续满足收敛条件若干次再结束，避免边界抖动误判
 
 /* 自旋任务参数与调试变量 */
-#define SPIN_ANGLE_OUT_MAX_DPS      250.0f  // 单层匀速方案下的固定巡航角速度
+#define SPIN_ANGLE_OUT_MAX_DPS      200.0f  // 单层匀速方案下的固定巡航角速度
 #define SPIN_ANGLE_SETTLE_DEG         10.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
 #define SPIN_RATE_SETTLE_DPS         6.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
 #define SPIN_SETTLE_COUNT_MAX        80u
@@ -295,7 +299,7 @@ static void spin_finish(uint8 done)
     spin_reset_pid_state(&turn_gyro);
 }
 
-/* 启动自旋任务：turns 为圈数，dir 为方向（正数=沿 yaw 正方向）。 */
+/* 启动自旋任务：turns 为整圈数（如遥控验证为 2 圈见 REMOTE_LORA_SPIN_TURNS_VALIDATE），dir 为正=沿 yaw 正方向。 */
 void spin_task_start(float turns, int8 dir)
 {
     if (turns <= 0.0f)
@@ -458,7 +462,7 @@ void set_steer_cmd(float cmd)
 #define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
 /*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
-uint8 roll_balance_en = 0;  // 运行时可改：1开启横滚平衡，0关闭（左右腿保持leg_long）
+uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 remote_lora.h 的 REMOTE_LORA_KEY_INDEX_ROLL_BALANCE
 #define ROLL_LEG_SCALE          1.0f  // 横滚PID输出→腿长增量缩放，越大抬腿越猛
 #define ROLL_LEG_OFFSET_MAX      8.5f  // 单侧腿长增量上限，防止过度抬腿
 // dt_leg、leg_hight PID 见上方变量及 pid_ctrl_Init()
@@ -759,7 +763,7 @@ void pid_ctrl_Run(void)
         (remote_lora_steer_snapshot_valid != 0u) &&
         (remote_lora_nav_allows_heading_override() != 0u))
     {
-        /* LORA 横向：直接给目标偏航角速度，松杆为 0，不维护绝对航向目标 */
+        /* LORA 右杆横向 right_x：开环角速度，remote_lora_steer_rate_cmd_dps 经限幅后作 turn_gyro 目标，松杆为 0，不拉固定航向 */
         if (steer_enable != 0u)
         {
             steer_task_stop(); /* 仅退出航向闭环时清一次，避免每拍 reset turn_gyro */
