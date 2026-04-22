@@ -6,11 +6,13 @@
  * - 右摇杆按键（key[REMOTE_LORA_KEY_INDEX_RIGHT_STICK]）上升沿在满足门控时 spin_task_start，圈数见 REMOTE_LORA_SPIN_TURNS_VALIDATE（默认 2 圈）；
  * - 左上/侧向键 key[REMOTE_LORA_KEY_INDEX_ROLL_BALANCE] 上升沿切换横滚平衡 roll_balance_en；
  * - 右上/侧向键 key[REMOTE_LORA_KEY_INDEX_JUMP] 上升沿在满足 jump_is_allowed 且未在跳时置 jump_flag；
+ * - 左拨码：首帧只同步前态不判沿，避免首包/掉线重连假沿进回放；沿 1→0 → Nag_Begin_Replay（可改 REMOTE_LORA_REPLAY_ON_SW0_RISING）；[0]=1 时 [1] 录/停沿（见 remote_lora.h）；
  * - 失控锁存时禁止用遥控将电机从 OFF 置 ON。
  *********************************************************************************************************************/
 #include "dualcore_shared.h"
 #include "remote_lora.h"
 #include "control.h"
+#include "navigation.h"
 #include "small_driver_uart_control.h"
 
 #if defined(CY_CORE_CM7_0)
@@ -47,7 +49,7 @@ static float remote_lora_clamp_steer_rate_dps(float w)
 
 /**
  * 从双核共享区拉取 LORA 遥控快照并写入电机/转向相关全局量（仅验证菜单/遥控使能时有效）。
- * 线速度：left_y；偏航角速度：right_x；自旋：右摇杆键；侧向键：横滚开关与跳跃（下标见 remote_lora.h）。
+ * 线速度：left_y；偏航角速度：right_x；自旋/侧向键/左拨码：见头文件与块内注释。
  */
 void remote_lora_apply_validate_motor(void)
 {
@@ -56,6 +58,9 @@ void remote_lora_apply_validate_motor(void)
     static uint8 s_prev_key_right_stick;
     static uint8 s_prev_key_roll_balance;
     static uint8 s_prev_key_jump;
+    static uint8 s_prev_left_sw0;
+    static uint8 s_prev_left_sw1;
+    static uint8 s_left_dip_synced; /* 联网后首帧只同步前态，避免首包 0/1 与初值 1,1 误形成 1→0 而误进回放 */
     float cmd;       /* 映射后的线速度用户指令，写入 motor_user_speed_cmd */
     float rate_cmd;  /* 右杆 right_x 映射后的目标偏航角速度 (°/s) */
     uint8 k0;
@@ -68,6 +73,7 @@ void remote_lora_apply_validate_motor(void)
     if ((r.enabled == 0u) || (r.online == 0u))
     {
         remote_lora_steer_snapshot_valid = 0u;
+        s_left_dip_synced = 0u; /* 掉线/禁遥控后重连需重新同步，否则会误认沿 */
         return;
     }
 
@@ -136,6 +142,55 @@ void remote_lora_apply_validate_motor(void)
         if ((rising_j != 0u) && (jump_is_allowed() != 0u) && (jump_flag == 0u))
         {
             jump_flag = 1u;
+        }
+    }
+#endif
+
+#if (REMOTE_LORA_LEFT_SWITCH0_INDEX < 4u) && (REMOTE_LORA_LEFT_SWITCH1_INDEX < 4u)
+    {
+        uint8 sw0;
+        uint8 sw1;
+        uint8 edge_replay;
+        uint8 edge_rec_on;
+        uint8 edge_rec_stop;
+
+        sw0 = (r.switch_key[REMOTE_LORA_LEFT_SWITCH0_INDEX] != 0u) ? 1u : 0u;
+        sw1 = (r.switch_key[REMOTE_LORA_LEFT_SWITCH1_INDEX] != 0u) ? 1u : 0u;
+
+        if (s_left_dip_synced == 0u)
+        {
+            s_prev_left_sw0 = sw0;
+            s_prev_left_sw1 = sw1;
+            s_left_dip_synced = 1u;
+        }
+        else
+        {
+#if REMOTE_LORA_REPLAY_ON_SW0_RISING
+            edge_replay = (uint8)((s_prev_left_sw0 == 0u) && (sw0 == 1u));
+#else
+            edge_replay = (uint8)((s_prev_left_sw0 == 1u) && (sw0 == 0u));
+#endif
+            if (edge_replay != 0u)
+            {
+                Nag_Begin_Replay();
+            }
+
+            if (sw0 == 1u)
+            {
+                edge_rec_on = (uint8)((s_prev_left_sw1 == 1u) && (sw1 == 0u));
+                edge_rec_stop = (uint8)((s_prev_left_sw1 == 0u) && (sw1 == 1u));
+                if (edge_rec_on != 0u)
+                {
+                    Nag_Begin_Record();
+                }
+                if (edge_rec_stop != 0u)
+                {
+                    Nag_Request_Stop_Record();
+                }
+            }
+
+            s_prev_left_sw0 = sw0;
+            s_prev_left_sw1 = sw1;
         }
     }
 #endif

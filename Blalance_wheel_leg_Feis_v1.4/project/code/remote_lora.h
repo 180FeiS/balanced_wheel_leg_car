@@ -49,6 +49,19 @@ struct dualcore_remote_to_ctrl;
 #define REMOTE_LORA_KEY_INDEX_JUMP  (3u)
 #endif
 
+/* 左边两路拨码：与逐飞 lora3a22 左边 switch_key[0/1] 一致；0/1 为协议里“上拉为 1/按下为 0”等逻辑，与实物箭头一致可改下标/取反 */
+/* 计划语义：非回放=1、回放档=0 → 沿 1→0 调 Nag_Begin_Replay。若你实物“停在上面=0、常态=1”，与计划一致。 */
+/* 若需改为 0→1 进回放，置 REMOTE_LORA_REPLAY_ON_SW0_RISING=1。首次联网先同步前态，不产假沿。 */
+#ifndef REMOTE_LORA_LEFT_SWITCH0_INDEX
+#define REMOTE_LORA_LEFT_SWITCH0_INDEX  (0u)
+#endif
+#ifndef REMOTE_LORA_LEFT_SWITCH1_INDEX
+#define REMOTE_LORA_LEFT_SWITCH1_INDEX  (1u)
+#endif
+#ifndef REMOTE_LORA_REPLAY_ON_SW0_RISING
+#define REMOTE_LORA_REPLAY_ON_SW0_RISING  (0u)
+#endif
+
 void remote_lora_init(void);
 void remote_lora_update_from_driver_and_publish(void);
 
@@ -59,7 +72,7 @@ uint8 remote_lora_is_remote_menu_enabled(void);
 void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out);
 
 #if defined(CY_CORE_CM7_0)
-/* 验证用：CM7_0 读 remote：左杆纵/右杆横、左杆键电机使能、右杆键自旋、侧向键横滚开关与跳跃（下标均见 REMOTE_LORA_KEY_INDEX_*） */
+/* 验证用：CM7_0 读 remote；左拨码 0/1 录/停/回放见 REMOTE_LORA_LEFT_SWITCH* */
 void remote_lora_apply_validate_motor(void);
 #endif
 

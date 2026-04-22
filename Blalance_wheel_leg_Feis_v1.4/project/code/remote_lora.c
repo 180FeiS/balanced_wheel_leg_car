@@ -119,6 +119,7 @@ void remote_lora_update_from_driver_and_publish(void)
         snap.key[2] = lora3a22_uart_transfer.key[2] ? 1u : 0u;
         snap.key[3] = lora3a22_uart_transfer.key[3] ? 1u : 0u;
 
+        /* 左边 0/1 为左拨码 1/2；CM7_0 用 switch_key[0] 回放、switch_key[0]=1 时 [1] 录/停，见 remote_lora.h REMOTE_LORA_LEFT_SWITCH* */
         snap.switch_key[0] = lora3a22_uart_transfer.switch_key[0] ? 1u : 0u;
         snap.switch_key[1] = lora3a22_uart_transfer.switch_key[1] ? 1u : 0u;
         snap.switch_key[2] = lora3a22_uart_transfer.switch_key[2] ? 1u : 0u;
