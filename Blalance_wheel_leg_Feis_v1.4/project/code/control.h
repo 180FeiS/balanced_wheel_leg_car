@@ -11,12 +11,13 @@ extern float roll_mid;                            //roll机械中值
 #define K               (1.0f)                                      //加速度低通滤波系数
 
 typedef void (*HandlerFunc)(int value);
+/* 跳跃阶段表项：min/max 为 jump_control() 节拍（与 pit0_ch10 周期一致，通常 20ms/格）闭区间 */
 typedef struct
 {
-        int16           min;                //运行时间最小值
-        int16           max;                //运行时间最大值
-        HandlerFunc     handler;            //执行函数
-        const char      *description;       //执行内容
+        int16           min;                // 阶段起始节拍
+        int16           max;                // 阶段结束节拍
+        HandlerFunc     handler;            // 通常为 jump_set_step，参数为阶段索引 0/1/2
+        const char      *description;       // 阶段名称（调试/可读）
 }jump_control_struct;
 
 //各个环节PID的运算周期
@@ -37,9 +38,9 @@ extern float speed_target_effective;      //真正送入速度环的目标速度
 
 void motor_user_speed_cmd_set_from_pc(float cmd);
 void motor_poll_switch2_speed_baseline(void);
-extern uint8 jump_flag;                   //跳跃标志位
-uint8 jump_is_allowed(void);              //轮速失控保护触发后返回0，禁止新的跳跃
-void jump_stop(void);                     //立即终止当前跳跃并复位跳跃时序
+extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
+uint8 jump_is_allowed(void);              // 1=允许跳跃：MOTOR_ON 且无 Motor_Runaway_Latch；否则禁止
+void jump_stop(void);                     // 终止跳跃，清时序，leg_long 回默认；保护/关电机时调用
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 
@@ -93,6 +94,13 @@ extern vuint8 steer_yaw_request_pending;   // 1：存在一条尚未真正进入
 extern vuint8 steer_yaw_delayed_by_spin;   // 1：该请求因 spin_enable==1 被延迟，等自旋结束后再应用
 extern volatile float steer_yaw_request_deg; // 最新待下发的绝对航向目标（度），新请求会覆盖旧目标
 
+/* 上电航向保持：yaw_poweron_ref 在 pid_ctrl_Run 内延迟约 300ms 后锁存一次上电时的 yaw；yaw_hold_poweron_en=1 时由 1ms ISR
+ * 调用 yaw_hold_poweron_request_if_needed() 按导航 Nag_HeadingHold 同类规则补发 steer_request。
+ * 与导航元素内锁航互斥；与 LORA 右杆开环角速度不能同时用（有有效 LORA 横向数据时不补发）。 */
+extern uint8 yaw_hold_poweron_en;
+extern float yaw_poweron_ref;
+void yaw_hold_poweron_request_if_needed(void);
+
 /* 自旋任务调试变量 */
 extern uint8 spin_enable;
 extern uint8 spin_done;
@@ -128,9 +136,9 @@ void pid_ctrl_Run(void);                                    //PID控制平衡和
 
 void leg_control(void);                                     //控制腿高
 
-void jump_set_step(int step_num);                           //执行跳跃内容
+void jump_set_step(int step_num);                           // 按阶段 0/1/2 设置 JUMP_* 目标腿长
 
-void jump_control(void);                                     // 控制腿高
+void jump_control(void);                                     // 跳跃状态机（20ms）；不允许时 jump_stop
 
 void dead_compensate(int16 *input_L, int16 *input_R);       //死区补偿
 

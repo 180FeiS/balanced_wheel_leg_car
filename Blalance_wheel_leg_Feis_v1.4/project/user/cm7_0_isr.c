@@ -77,6 +77,7 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     {
         steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());
     }
+    yaw_hold_poweron_request_if_needed();
     if (steer_yaw_request_pending)
     {
         if (spin_enable)

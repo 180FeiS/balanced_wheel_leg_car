@@ -167,7 +167,7 @@ int main(void)
 #endif
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
-        //visual_jump_after_step_cm71();
+        visual_jump_after_step_cm71();
 #endif
     }
 }

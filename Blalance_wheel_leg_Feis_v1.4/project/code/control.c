@@ -68,21 +68,37 @@ float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的�
 static uint8 motor_dip_speed_inited = 0u;
 static uint8 motor_dip_last_fast = 0u;
 
-// 跳跃标志位（LORA 触发键下标见 remote_lora.h 的 REMOTE_LORA_KEY_INDEX_JUMP）
+/* jump_flag：1=跳跃流程进行中；仅应在 jump_is_allowed()==1 时由外部（LORA/双核/导航等）置 1。
+ * jump_step_index：当前阶段 0=起跳 1=准备缓冲 2=执行缓冲，由 jump_control() 每 20ms 更新。
+ * jump_time：跳跃状态机在 jump_control() 内的节拍计数，与 pit0_ch10 周期一致（1 单位=20ms）。
+ */
 uint8 jump_flag = 0;
-uint8 jump_step_index = 0;  // 当前跳跃步 0起跳 1准备缓冲 2执行缓冲
-static int jump_time = 0;   // 跳跃时序计数，单位见 jump_control()
+uint8 jump_step_index = 0;
+static int jump_time = 0;
 
 uint8 speed_flag = 0;
 
 /* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
 uint8 Motor_Runaway_Latch = 0;
 
+/* 返回 1：允许发起/维持跳跃——电机拨码使能（Motor_Switch==MOTOR_ON）且无失控锁存。
+ * 返回 0：禁止跳跃（电机关闭、或 Motor_Runaway_Latch 置位）；jump_control() 会据此调用 jump_stop()。
+ * 各模块在置 jump_flag=1 前须先调用本函数。
+ */
 uint8 jump_is_allowed(void)
 {
-    return (Motor_Runaway_Latch == 0u);
+    if (Motor_Switch != MOTOR_ON)
+    {
+        return 0u;
+    }
+    if (Motor_Runaway_Latch != 0u)
+    {
+        return 0u;
+    }
+    return 1u;
 }
 
+/* 立即结束跳跃：清标志与时序，腿长基准 leg_long 回到非跳跃默认 5.5；电机关闭或保护触发时由控制层调用。 */
 void jump_stop(void)
 {
     jump_flag = 0u;
@@ -164,6 +180,13 @@ float steer_rate_meas_dps = 0.0f;     // 普通转向内环的实际角速度反
 vuint8 steer_yaw_request_pending = 0;
 vuint8 steer_yaw_delayed_by_spin = 0;
 volatile float steer_yaw_request_deg = 0.0f;
+
+/* 上电航向：约 300ms 后仅锁存一次 euler_angle.yaw；yaw_hold_poweron_en=1 时 ISR 内补发目标（见 yaw_hold_poweron_request_if_needed） */
+#define YAW_POWERON_REF_LATCH_MS  300u
+uint8 yaw_hold_poweron_en = 1;
+float yaw_poweron_ref = 0.0f;
+static uint8 yaw_poweron_ref_latched = 0;
+static uint16 yaw_poweron_latch_count = 0;
 
 /* 遥控“开环转把”：由 remote_lora_apply 写入右杆 right_x 映射的目标偏航角速度 (°/s)，1ms 环内作 turn_gyro 目标 */
 volatile float remote_lora_steer_rate_cmd_dps = 0.0f;
@@ -438,6 +461,50 @@ void steer_task_stop(void)
     steer_finish(0);
 }
 
+/* pit0_ch0 1ms 内、Nag_HeadingHold 之后若需消费 pending 之前调用；与导航元素锁航/自旋互斥，补发规则对齐 Nag_HeadingHold_ShouldRequest。 */
+void yaw_hold_poweron_request_if_needed(void)
+{
+    float yaw_err;
+
+    if (yaw_hold_poweron_en == 0u || yaw_poweron_ref_latched == 0u)
+    {
+        return;
+    }
+
+    if (N.HeadingHold_Enable && N.HeadingHold_Event_Allowed)
+    {
+        return;
+    }
+    if (spin_enable)
+    {
+        return;
+    }
+    /* LORA 右杆横向为开环角速度，与锁绝对航向冲突 */
+    if (remote_lora_steer_snapshot_valid != 0u)
+    {
+        return;
+    }
+    if (steer_yaw_request_pending)
+    {
+        return;
+    }
+    if (steer_enable == 0u)
+    {
+        steer_request_target_yaw(yaw_poweron_ref);
+        return;
+    }
+    if (fabsf((float)ange_deviation1(yaw_poweron_ref, steer_target_yaw_deg)) > 0.01f)
+    {
+        steer_request_target_yaw(yaw_poweron_ref);
+        return;
+    }
+    yaw_err = fabsf((float)ange_deviation1(yaw_poweron_ref, (float)euler_angle.yaw));
+    if (yaw_err > Nag_HeadingHold_Reissue_Error)
+    {
+        steer_request_target_yaw(yaw_poweron_ref);
+    }
+}
+
 /* 设置普通转向差速；自旋开启时该值会被暂时忽略。 */
 void set_steer_cmd(float cmd)
 {
@@ -482,12 +549,14 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 #define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
 #define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
 
-/* 跳跃时序（jump_control在pit0_ch10 20ms周期，单位=20ms）*/
+/* 跳跃时序表：jump_control() 在 pit0_ch10 每 20ms 调用一次，故 min/max 单位为 20ms。
+ * jump_control_struct：min/max 为闭区间节拍；handler 多为 jump_set_step；description 仅调试/可读。
+ */
 const jump_control_struct jump_control_config[] =
     {
-        {0,  5,  jump_set_step, "起跳"},           //  伸腿爆发
-        {5,  9, jump_set_step, "准备缓冲"},       //  过渡姿态
-        {9, 9 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
+        {0,  4,  jump_set_step, "起跳"},           //  伸腿爆发
+        {4,  6, jump_set_step, "准备缓冲"},       //  过渡姿态
+        {6, 6 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
 };
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
@@ -644,6 +713,15 @@ void pid_ctrl_Run(void)
     static uint32 timer_flag = 0;
     static float Angle_Out = 0;
     imu660rc_get_gyro();
+
+    if (yaw_poweron_ref_latched == 0u)
+    {
+        if (++yaw_poweron_latch_count >= YAW_POWERON_REF_LATCH_MS)
+        {
+            yaw_poweron_ref = (float)euler_angle.yaw;
+            yaw_poweron_ref_latched = 1u;
+        }
+    }
 
     if (0 == timer_flag) // 速度环（20ms，与 car_speed 更新节拍保持一致）
     {
@@ -939,15 +1017,22 @@ static float leg_servo_get_desired_tilt_angle(void)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
-// 函数简介     控制腿高
+// 函数简介     控制腿高（5ms，pit0_ch1）
 // 参数说明     null
 // 返回参数     null
 // 使用示例     leg_control();
-// 备注信息     isr中断调用, 针对单边桥使用
+// 备注信息     leg_control 比 jump_control(20ms) 更密：Motor_Switch 关闭时若仍 jump_flag==1，此处立即 jump_stop()，
+//              避免数拍内仍走跳跃腿形；与 jump_is_allowed() 中电机关闭互锁一致。
 -------------------------------------------------------------------------------------------------------------------*/
 void leg_control(void)
 {
     float desired_left_p, desired_right_p;
+
+    if ((Motor_Switch != MOTOR_ON) && (jump_flag != 0u))
+    {
+        jump_stop();
+    }
+
     if (jump_flag == 1)
     {
         desired_left_p = desired_right_p = leg_long;
@@ -1014,11 +1099,12 @@ void leg_control(void)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
-// 函数简介     执行跳跃内容
-// 参数说明     step_num    执行目标
+// 函数简介     按跳跃阶段设置目标腿长 leg_long（由 jump_control_config[].handler 调用）
+// 参数说明     step_num    与 jump_control 传入下标一致：0→JUMP_TAKEOFF_P 起跳；1→JUMP_PREPARE_P 准备缓冲；
+//                          2→JUMP_BUFFER_P 执行缓冲（落地收腿目标，实际收腿步进在 leg_servo_step_update）
 // 返回参数     null
 // 使用示例     jump_set_step(step_num);
-// 备注信息     jump_control函数中调用, 针对障碍使用
+// 备注信息     仅应在 jump_flag==1 且 jump_is_allowed() 为真时由 jump_control() 调度
 -------------------------------------------------------------------------------------------------------------------*/
 void jump_set_step(int step_num)
 {
@@ -1039,13 +1125,13 @@ void jump_set_step(int step_num)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
-// 函数简介     控制跳跃
+// 函数简介     跳跃状态机（20ms，pit0_ch10）
 // 参数说明     null
 // 返回参数     null
 // 使用示例     jump_control();
-// 备注信息     isr中断调用, 针对障碍使用
-// 补充说明     本函数只负责在 jump_flag==1 时按 jump_control_config[] 推进腿姿态与时序；
-//              何时置 jump_flag（例如普通模式视觉下沿消失）由其它模块决定，勿在此处做视觉判定。
+// 备注信息     jump_flag==1 时按 jump_control_config[] 推进；若 jump_is_allowed() 为 0（含 Motor_Switch 关闭、
+//              失控锁存）则 jump_stop() 并返回。leg_control(5ms) 入口另有电机关闭兜底，避免舵机滞后一拍。
+// 补充说明     何时置 jump_flag 由 LORA/双核/导航等决定，勿在此处做视觉判定。
 -------------------------------------------------------------------------------------------------------------------*/
 void jump_control(void)
 {
