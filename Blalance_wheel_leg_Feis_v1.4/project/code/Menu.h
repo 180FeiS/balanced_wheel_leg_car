@@ -32,7 +32,7 @@
  * 0 = 按键+拨码恢复原有同步；selectMenu 不执行 Menu_command 的 switch，避免与按键双触发。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 1
+#define MENU_INPUT_REMOTE_MENU_FIRST 0
 #endif
 
 /*

@@ -142,9 +142,9 @@ int main(void)
     /* LORA 默认 UART_1 与 wireless_uart 同口：后初始化覆盖 RX 回调；分路时请改 zf_device_lora3a22.h 宏 */
     remote_lora_init();
 
+    /* 板载键扫描与 menu_key_capture_event 在 cm7_1_isr pit0_ch2(10ms) 中，此处只消费队列并刷新菜单/界面。 */
     while(true)
     {
-        menu_key_capture_event();
         selectMenu_Key();
         selectMenu();
         ui_pull_ctrl_snapshot();

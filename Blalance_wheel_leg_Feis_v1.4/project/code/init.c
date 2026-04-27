@@ -90,6 +90,14 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
     pit_ms_init(PIT_CH11, 10);
 
   }
+#if defined(CY_CORE_CM7_1)
+  else if (key_flag == 1)
+  {
+    /* all_init_cm7_1_ui 传 pit=0 时，仍须在本核注册 PIT，以便 cm7_1_isr 中 LORA(1ms) 与 key_scanner/menu_key_capture_event(10ms) 能跑 */
+    pit_ms_init(PIT_CH0, 1);
+    pit_ms_init(PIT_CH2, 10);
+  }
+#endif
   // 菜单初始化
   if (menu_flag == 1)
   {
