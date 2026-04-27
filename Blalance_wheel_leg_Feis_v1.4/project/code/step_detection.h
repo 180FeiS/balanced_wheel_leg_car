@@ -69,7 +69,7 @@ void step_reset_distance_tracking(void);
  * 使用：将 STEP_DEBUG_USE_VOFA 置 1，主循环会只发本组数据（不再发 send_nav_debug_to_vofa），避免两帧混叠。
  */
 #ifndef STEP_DEBUG_USE_VOFA
-#define STEP_DEBUG_USE_VOFA 1 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
+#define STEP_DEBUG_USE_VOFA 0 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
 #endif
 
 void step_debug_send_to_vofa(void);

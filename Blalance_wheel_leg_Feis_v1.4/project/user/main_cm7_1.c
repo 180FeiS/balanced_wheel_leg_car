@@ -34,7 +34,8 @@
 ********************************************************************************************************************/
 
 #include "zf_common_headfile.h"
-
+#include "step_detection.h"
+#include "vofa.h"
 
 #if !LEG_DEBUG_MODE
 #ifndef VISUAL_JUMP_AUTO_ENABLE
@@ -155,6 +156,15 @@ int main(void)
         static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
+
+        /* VOFA：无线模块仅在本核初始化(all_init_cm7_1_ui→wireless_uart_init)，故上发只在此处。
+         * STEP_DEBUG_USE_VOFA=1：发台阶 6 路(step_debug_send_to_vofa)，=0：发惯导快照(vofa_send_nav_from_dualcore_snapshot)。
+         * 快照来自 CM7_0 的 dualcore_ctrl_to_ui_publish，与本轮 step 之间可能差一拍主循环，属正常。 */
+#if STEP_DEBUG_USE_VOFA
+        step_debug_send_to_vofa();
+#else
+        vofa_send_nav_from_dualcore_snapshot();
+#endif
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
         //visual_jump_after_step_cm71();

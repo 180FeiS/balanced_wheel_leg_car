@@ -12,4 +12,9 @@ extern uint8 WirelessUart_ReadBuff_Data[64]; // 读取无线串口缓冲数组
 extern uint8 Menu_command;                   // 菜单进行指令
 extern float ReadBuf_Pid;
 
+#if defined(CY_CORE_CM7_1)
+/* 仅双核 CM7_1：读 shared ctrl 快照，经 wireless_uart 发 JustFloat（须本核已 wireless_uart_init） */
+void vofa_send_nav_from_dualcore_snapshot(void);
+#endif
+
 #endif

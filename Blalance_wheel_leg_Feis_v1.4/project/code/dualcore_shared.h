@@ -70,6 +70,15 @@ typedef struct
   uint8 spin_done;
   uint8 jump_allowed; /* jump_is_allowed()，为 0 时不应再发视觉跳跃命令 */
   uint8 jump_active;  /* jump_flag!=0，跳跃流程进行中 */
+  /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
+  float dbg_run_index;        /* N.Run_index → 浮点 */
+  float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */
+  float dbg_angle_run;        /* N.Angle_Run */
+  float dbg_read_yaw;         /* Nag_GetDebugReadYaw() */
+  float dbg_nag_stop;         /* N.Nag_Stop_f：0/1 */
+  float dbg_final_out;        /* N.Final_Out */
+  float dbg_curve_strength;   /* N.Curve_Strength */
+  float dbg_nav_speed_target; /* Nag_GetControlSpeedTarget()，与 speed_target_effective 同源不同用途时见 navigation */
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

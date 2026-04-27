@@ -222,3 +222,67 @@ void SendDataToVofa()
 {
     // SendDataStreamToVOFA(4,(float)Gyro.pitch,(float)0,(float)Left_Motor_Pwm,(float)Gyro.gyro_y);
 }
+
+#if defined(CY_CORE_CM7_1)
+#include "dualcore_shared.h"
+
+/*-------------------------------------------------------------------------------------------------------------------
+ * 函数简介     双核模式下在 CM7_1 将惯导/姿态调试帧发到 VOFA（无线 JustFloat）
+ * 前置条件     CM7_0 主循环已周期性调用 dualcore_ctrl_to_ui_publish()；本核 all_init_cm7_1_ui 已 wireless_uart_init
+ * 分组说明     使用快照中 nag_vofa_group%6，与 DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT / 菜单切组一致；
+ *              通道顺序与 main_cm7_0.c 中 send_nav_debug_to_vofa 各 case 一致；第 2/3 组用 6 通道以覆盖原注释中 6 路
+ * 调用关系     SendDataStreamToVOFA 内部仍写 vofa_justfloat_frame_tail 作为帧尾
+ *-------------------------------------------------------------------------------------------------------------------*/
+void vofa_send_nav_from_dualcore_snapshot(void)
+{
+  dualcore_ctrl_to_ui_t c;
+  dualcore_ctrl_to_ui_pull(&c);
+  uint8 g = (uint8)(c.nag_vofa_group % 6u);
+
+  switch (g)
+  {
+  case 0:
+    SendDataStreamToVOFA(4, c.euler_pitch, c.euler_roll, c.euler_yaw, c.gyro_z_bias_mean);
+    break;
+  case 1:
+    SendDataStreamToVOFA(5,
+                         c.mileage_debug_total,
+                         (float)c.save_index,
+                         (float)c.flash_page_index,
+                         (float)c.end_f,
+                         (float)c.nag_vofa_group);
+    break;
+  case 2:
+    SendDataStreamToVOFA(6,
+                         c.dbg_run_index,
+                         c.dbg_prospect_index,
+                         c.dbg_angle_run,
+                         c.dbg_read_yaw,
+                         c.dbg_nag_stop,
+                         (float)c.nag_vofa_group);
+    break;
+  case 3:
+    SendDataStreamToVOFA(6,
+                         c.dbg_final_out,
+                         c.dbg_curve_strength,
+                         c.dbg_nav_speed_target,
+                         (float)c.event_active,
+                         (float)c.event_state,
+                         (float)c.nag_vofa_group);
+    break;
+  case 4:
+    SendDataStreamToVOFA(5,
+                         c.motor_user_speed_cmd,
+                         c.speed_target_effective,
+                         -c.car_speed,
+                         (float)c.nag_system_run_index,
+                         (float)c.nag_vofa_group);
+    break;
+  case 5:
+    SendDataStreamToVOFA(2, (float)c.spin_enable, (float)c.spin_done);
+    break;
+  default:
+    break;
+  }
+}
+#endif /* CY_CORE_CM7_1 */

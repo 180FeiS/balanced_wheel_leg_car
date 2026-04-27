@@ -69,6 +69,16 @@ void dualcore_ctrl_to_ui_publish(void)
   c->jump_allowed = jump_is_allowed();
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
 
+  /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */
+  c->dbg_run_index = (float)N.Run_index;
+  c->dbg_prospect_index = (float)Nag_GetDebugProspectIndex();
+  c->dbg_angle_run = N.Angle_Run;
+  c->dbg_read_yaw = Nag_GetDebugReadYaw();
+  c->dbg_nag_stop = N.Nag_Stop_f ? 1.0f : 0.0f;
+  c->dbg_final_out = N.Final_Out;
+  c->dbg_curve_strength = N.Curve_Strength;
+  c->dbg_nav_speed_target = Nag_GetControlSpeedTarget();
+
   c->seq++;
   __DSB();
 
