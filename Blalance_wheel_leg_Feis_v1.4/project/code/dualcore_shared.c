@@ -199,6 +199,16 @@ void dualcore_ui_cmd_consume_all(void)
   }
 }
 
+void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out)
+{
+  if (out == NULL)
+  {
+    return;
+  }
+  dualcore_shared_dcache_invalidate(&g_dualcore_blob.remote, sizeof(g_dualcore_blob.remote));
+  *out = g_dualcore_blob.remote;
+}
+
 #endif /* CY_CORE_CM7_0 */
 
 #if defined(CY_CORE_CM7_1)
@@ -248,6 +258,21 @@ void dualcore_vision_publish_after_step(uint32 frame_seq)
   __DSB();
 
   dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in)
+{
+  if (in == NULL)
+  {
+    return;
+  }
+  dualcore_remote_to_ctrl_t *r = &g_dualcore_blob.remote;
+
+  dualcore_shared_dcache_invalidate(r, sizeof(*r));
+  *r = *in;
+  r->seq++;
+  __DSB();
+  dualcore_shared_dcache_clean(r, sizeof(*r));
 }
 
 #endif /* CY_CORE_CM7_1 */

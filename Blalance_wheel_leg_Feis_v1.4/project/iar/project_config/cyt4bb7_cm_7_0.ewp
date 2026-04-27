@@ -1158,10 +1158,10 @@
             <name>$PROJ_DIR$\..\..\code\dualcore_shared.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\remote_control.c</name>
+            <name>$PROJ_DIR$\..\..\code\remote_lora_apply.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\remote_control.h</name>
+            <name>$PROJ_DIR$\..\..\code\remote_lora.h</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\matrix.c</name>

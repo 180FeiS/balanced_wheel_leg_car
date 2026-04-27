@@ -144,6 +144,14 @@ void spin_task_start(float turns, int8 dir);                 // 启动自旋任�
 
 void spin_task_stop(void);                                   // 停止自旋任务
 
+/* LORA 遥控：左杆横向目标偏航角速度（°/s），主循环写入；pid_ctrl_Run 内角速度环跟踪，松杆为 0、不拉向固定航向 */
+extern volatile float remote_lora_steer_rate_cmd_dps;
+/* 1：最近一次 remote_lora_apply 在 enabled&&online 下已更新横向通道；0：离线或未使能 */
+extern volatile uint8 remote_lora_steer_snapshot_valid;
+
+uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
+uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */
+
 /*********************************************************************函数*********************************************************************/
 
 

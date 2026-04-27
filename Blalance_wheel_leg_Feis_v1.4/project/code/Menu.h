@@ -26,6 +26,16 @@
 #define HASH_ERROR (HASH_SIZE + 2) // 哈希操作失败返回值
 
 /*
+ * 菜单输入源（编译期）：改后需重编译烧录。
+ * 1 = 遥控优先：板载键不进入菜单/导航；CM7_0 侧 dip_switch_motor_sync_from_hw 不读 SWITCH1/2（方案 B）；
+ *    Motor_Runaway_Latch 不能靠拨码清除，须后续遥控协议或复位；保护性关断仍以 control.c 为准。
+ * 0 = 按键+拨码恢复原有同步；selectMenu 不执行 Menu_command 的 switch，避免与按键双触发。
+ */
+#ifndef MENU_INPUT_REMOTE_MENU_FIRST
+#define MENU_INPUT_REMOTE_MENU_FIRST 0
+#endif
+
+/*
  * 菜单位置编码说明：
  * 使用点分格式表示菜单项的层级关系，例如：
  * "1"    - 第一级菜单的第1个选项

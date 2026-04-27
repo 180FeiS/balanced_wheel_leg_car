@@ -166,29 +166,24 @@ int main(void)
 
     /* 摄像头 IPS200、台阶初始化、无线 VOFA、按键、MenuInit；pit_flag=0 不在本核开控制用 PIT */
     all_init_cm7_1_ui();
+    /* LORA 默认 UART_1 与 wireless_uart 同口：后初始化覆盖 RX 回调；分路时请改 zf_device_lora3a22.h 宏 */
+    remote_lora_init();
 
-#if REMOTE_CONTROL_ENABLE
-    /* LoRa 等与 wireless_uart 共用 UART1；与 VOFA 同时调试易冲突，不需要遥控时置 REMOTE_CONTROL_ENABLE=0 */
-    remote_control_init();
-#endif
-
+    /* 板载键扫描与 menu_key_capture_event 在 cm7_1_isr pit0_ch2(10ms) 中，此处只消费队列并刷新菜单/界面。 */
     while(true)
     {
-#if REMOTE_CONTROL_ENABLE
-        remote_control_task();         /* 遥控周期任务；具体协议见 remote_control.c */
-#endif
-        menu_key_capture_event();      /* 五向键扫描 → 导航调试页推 UI 命令，其余页推菜单方向事件 */
-        selectMenu_Key();              /* 消费按键队列 + 刷新菜单（电机关断时才重绘，Motor_Switch 来自共享快照） */
-        selectMenu();                  /* 串口/VOFA 单字节命令 + PC 扩展帧；CM7_1 内转为 dualcore_ui_cmd_push */
-        ui_pull_ctrl_snapshot();       /* 从 g_dualcore_blob.ctrl 拉快照，供 UI.c 显示车速/导航调试等 */
+        selectMenu_Key();
+        selectMenu();
+        ui_pull_ctrl_snapshot();
 
-        step_detect();                 /* 读 mt9v03x 更新 step_data；原在 CM7_0 10ms 软任务，现仅在 1 核 */
-        static uint32 step_frame_seq;  /* 单调递增，随 vision 一并写入共享区，便于 0 核对齐帧 */
+        remote_lora_update_from_driver_and_publish();
+
+        step_detect();
+        static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq); /* 拷贝 step_data → g_dualcore_blob.vision + 缓存同步 */
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
-        /* 需要视觉自动跳跃时取消下行注释；会占满 UI 命令队列时需留意 CM7_0 消费速度 */
         //visual_jump_after_step_cm71();
 #endif
     }

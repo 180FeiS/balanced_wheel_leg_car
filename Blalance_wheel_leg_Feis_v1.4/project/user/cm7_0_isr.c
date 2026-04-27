@@ -71,15 +71,12 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      * 3. 若以后真的迁到 5ms 软任务，必须同时修改 Nag_Sample_Dt 和实车标定系数。
      */
     Nag_System();
+    /* LORA 横向为目标偏航角速度，在 pid_ctrl_Run 内消费；此处不再 steer_request_target_yaw，避免与惯导绝对航向抢链路 */
     /* 绝对航向请求统一在这里消费：
      * 1. 非自旋时：在 pid_ctrl_Run() 前执行一次 steer_set_target_yaw()；
      * 2. 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()；
      * 3. 元素锁航向模块也在这里前置补登请求，但仍复用同一套 pending 消费链路。
      */
-     if(Nag_Debug_Speed_Bypass_Enable)
-     {
-        steer_request_target_yaw(steer_yaw_request_deg);
-     }
     if (Nag_HeadingHold_ShouldRequest())
     {
         steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());

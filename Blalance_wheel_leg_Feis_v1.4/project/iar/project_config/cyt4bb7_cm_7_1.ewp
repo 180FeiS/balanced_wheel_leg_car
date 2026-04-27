@@ -1146,6 +1146,12 @@
             <name>$PROJ_DIR$\..\..\code\Menu.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\remote_lora.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\remote_lora.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\UI.c</name>
         </file>
         <file>

@@ -40,6 +40,7 @@
 void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH0); // 1ms
+    lora3a22_link_timeout_tick_1ms();
 }
 
 void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
@@ -49,7 +50,10 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数
 {
-    pit_isr_flag_clear(PIT_CH2); // 10ms
+    pit_isr_flag_clear(PIT_CH2); // 10ms：与 all_init 中 key_init(10) 同周期
+    /* 按键去抖/短按见 zf_device_key.c；在固定节拍里扫描并锁存到 MenuKeyEventPush/双核队列，避免主循环重负载漏按。 */
+    key_scanner();
+    menu_key_capture_event();
 }
 
 void pit0_ch10_isr() // 定时器通道 10 周期中断服务函数

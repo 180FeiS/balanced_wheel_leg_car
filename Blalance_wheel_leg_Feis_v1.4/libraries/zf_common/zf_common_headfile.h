@@ -123,7 +123,8 @@
 #include "self_math.h"
 #include "step_detection.h"
 #include "task_schedule.h"
-#include "remote_control.h"
 #include "dualcore_shared.h"
+#include "remote_lora.h"
+
 //=====================================================”√ªßcode=====================================================
 #endif

@@ -96,23 +96,29 @@ typedef struct
   dualcore_ui_cmd_slot_t slot[DUALCORE_UI_CMD_QUEUE_DEPTH];
 } dualcore_ui_cmd_fifo_t;
 
-/* 遥控连续量快照：仅 CM7_1 写、CM7_0 读；与 fifo 瞬时命令互补。 */
-typedef struct
+/* CM7_1 汇总 LORA 遥控快照 -> CM7_0；与 MENU_INPUT_REMOTE_MENU_FIRST 联动见 remote_lora.c */
+struct dualcore_remote_to_ctrl
 {
   volatile uint32 seq;
-  uint8 online;    /* 1：最近收到有效 LoRa 帧；0：超时，CM7_0 应视为无遥控 */
-  uint8 takeover;  /* 1：用户已用左摇杆下压接过遥控使能权；0：不拉闸、不改速度，完全跟 SWITCH1/2 */
-  uint8 motor_arm; /* takeover==1 时有效：1 跟 SWITCH1；0 遥控强制停车 */
-  int16 speed_cmd; /* 左摇杆前后，内部量程约 [-2000,2000]，具体见 remote_control.h */
-  int16 yaw_rate_cmd; /* 右摇杆左右，角速度模式内部量 */
-} dualcore_remote_from_ui_t;
+  uint8 enabled; /* 1：MENU_INPUT_REMOTE_MENU_FIRST==1，控制核可采信本快照 */
+  uint8 online;  /* 1：lora3a22 链路判定在线 */
+  uint8 fresh;   /* 1：本周期有新完整帧（每帧仅置位一次） */
+  uint8 _pad;
+  int16 left_x;  /* 左摇杆水平，中位 0，幅值见 REMOTE_LORA_JOYSTICK_ABS_MAX */
+  int16 left_y;  /* 左摇杆垂直 */
+  int16 right_x; /* 右摇杆水平 */
+  int16 right_y; /* 右摇杆垂直 */
+  uint8 key[4];       /* 按下 1 松开 0；离线默认为 0 */
+  uint8 switch_key[4]; /* 遥控拨码 0/1；离线默认为 1（与需求默认一致） */
+};
+typedef struct dualcore_remote_to_ctrl dualcore_remote_to_ctrl_t;
 
 typedef struct
 {
   dualcore_ctrl_to_ui_t ctrl;
   dualcore_vision_to_ctrl_t vision;
   dualcore_ui_cmd_fifo_t fifo;
-  dualcore_remote_from_ui_t remote;
+  dualcore_remote_to_ctrl_t remote;
 } dualcore_shared_blob_t;
 
 extern dualcore_shared_blob_t g_dualcore_blob;
@@ -125,12 +131,14 @@ void dualcore_ctrl_to_ui_publish(void);
 void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, uint32 *vision_seq_out);
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */
 void dualcore_ui_cmd_consume_all(void);
+void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
 #endif
 
 #if defined(CY_CORE_CM7_1)
 void dualcore_ctrl_to_ui_pull(dualcore_ctrl_to_ui_t *out);
 uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f32);
 void dualcore_vision_publish_after_step(uint32 frame_seq);
+void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif
 
 #endif /* CODE_DUALCORE_SHARED_H_ */
