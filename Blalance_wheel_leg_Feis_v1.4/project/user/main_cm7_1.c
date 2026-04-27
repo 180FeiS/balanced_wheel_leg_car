@@ -124,6 +124,36 @@ static void visual_jump_after_step_cm71(void)
 #endif
 #endif /* !LEG_DEBUG_MODE */
 
+/* 与 step_detection.h 中 STEP_DEBUG_USE_VOFA 的 0/1 一致，供主循环 VOFA 分发 switch 使用 */
+typedef enum
+{
+  CM71_VOFA_TX_NAV_FROM_DUALCORE = 0,
+  CM71_VOFA_TX_STEP_DEBUG_SIX_CH = 1,
+} cm71_vofa_tx_payload_t;
+
+/*-------------------------------------------------------------------------------------------------------------------
+ * CM7_1 主循环每圈最多发一帧 VOFA（JustFloat 经 wireless_uart）。
+ * - 无线模块仅在本核初始化(all_init_cm7_1_ui→wireless_uart_init)，故上发集中在此处。
+ * - 模式由 STEP_DEBUG_USE_VOFA 决定：0=惯导/导航快照(vofa_send_nav_from_dualcore_snapshot)；
+ *   1=台阶调试 6 路(step_debug_send_to_vofa)，与导航帧二选一，避免两帧混叠。
+ * - 导航快照来自 CM7_0 的 dualcore_ctrl_to_ui_publish；与本轮 step_detect 之间可能差一拍主循环，属正常。
+ *-------------------------------------------------------------------------------------------------------------------*/
+static void cm71_vofa_main_loop_tx_dispatch(void)
+{
+  switch ((cm71_vofa_tx_payload_t)STEP_DEBUG_USE_VOFA)
+  {
+  case CM71_VOFA_TX_STEP_DEBUG_SIX_CH:
+    step_debug_send_to_vofa();
+    break;
+  case CM71_VOFA_TX_NAV_FROM_DUALCORE:
+    vofa_send_nav_from_dualcore_snapshot();
+    break;
+  default:
+    vofa_send_nav_from_dualcore_snapshot();
+    break;
+  }
+}
+
 // 打开新的工程或者工程移动了位置务必执行以下操作
 // 第一步 关闭上面所有打开的文件
 // 第二步 project->clean  等待下方进度条走完
@@ -157,14 +187,7 @@ int main(void)
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
-        /* VOFA：无线模块仅在本核初始化(all_init_cm7_1_ui→wireless_uart_init)，故上发只在此处。
-         * STEP_DEBUG_USE_VOFA=1：发台阶 6 路(step_debug_send_to_vofa)，=0：发惯导快照(vofa_send_nav_from_dualcore_snapshot)。
-         * 快照来自 CM7_0 的 dualcore_ctrl_to_ui_publish，与本轮 step 之间可能差一拍主循环，属正常。 */
-#if STEP_DEBUG_USE_VOFA
-        step_debug_send_to_vofa();
-#else
-        vofa_send_nav_from_dualcore_snapshot();
-#endif
+        cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
 
 #if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
         visual_jump_after_step_cm71();

@@ -66,7 +66,7 @@ void step_reset_distance_tracking(void);
  *  4) CH0/CH1 突然跳到无关行、CH2 异常大/小 → 可能检到地布纹理或坡道边缘；白台看下一级 CH1 常为 0 时增大 STEP_BOTTOM_ROW_START_DIV 或 FALLBACK
  *  5) 蓝→白能检、白→蓝不能：多为过曝/弱对比而非梯度方向(abs 已对称)；略降 STEP_EDGE_GRAD_SOFT_THRESH 或 STEP_EDGE_GRAD_THRESH
  *
- * 使用：将 STEP_DEBUG_USE_VOFA 置 1，主循环会只发本组数据（不再发 send_nav_debug_to_vofa），避免两帧混叠。
+ * 使用：将 STEP_DEBUG_USE_VOFA 置 1，main_cm7_1.c 中 cm71_vofa_main_loop_tx_dispatch 只发本组 6 路（不再发导航快照帧），避免两帧混叠。
  */
 #ifndef STEP_DEBUG_USE_VOFA
 #define STEP_DEBUG_USE_VOFA 0 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */

@@ -23,7 +23,7 @@
 #define SERVO1_MID              (4501)//(4457)          //舵机1中值     左上 
 #define SERVO2_MID              (5312)//(4512)          //舵机2中值     左下  大 上
 #define SERVO3_MID              (4070)//(4963)          //舵机3中值     右上  小 下
-#define SERVO4_MID              (3100)//(4533)          //舵机4中值     右下  大 下
+#define SERVO4_MID              (2950)//(4533)          //舵机4中值     右下  大 下
 
 
 
