@@ -14,105 +14,6 @@ extern float gyro_z_bias_mean;
 
 uint16 jump_test = 1;
 
-#if !LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1
-/*
- * 普通模式视觉自动跳跃（不接入惯导元素）：
- * - 触发源：step_data.bottom_row_raw 与 VOFA CH1 一致，在 step_detect() 每处理完一帧后更新。
- * - 条件：上一帧 bottom_row_raw>0 且本帧为 0（下沿消失），再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次
- *   step_detect 调用（与 task_10ms_step_pending 同周期，默认约 10ms）以抑制单帧丢边。
- * - 额度：成功置 jump_flag=1 计为一次，满 VISUAL_JUMP_MAX_COUNT 次后永久禁止直至重新上电/复位。
- * - 置 0：VISUAL_JUMP_AUTO_ENABLE 可在工程预处理里覆盖为 0，关闭本功能。
- */
-#ifndef VISUAL_JUMP_AUTO_ENABLE
-#define VISUAL_JUMP_AUTO_ENABLE 1u
-#endif
-#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u
-#endif
-#ifndef VISUAL_JUMP_MAX_COUNT
-#define VISUAL_JUMP_MAX_COUNT 3u
-#endif
-
-#if VISUAL_JUMP_AUTO_ENABLE
-static uint16 visual_jump_prev_bottom_raw;
-static uint8 visual_jump_in_zero_confirm; /* 1：已捕获“高→0”下降沿，正在数连续为 0 的步数 */
-static uint8 visual_jump_zero_confirm_cnt;
-static uint8 visual_jump_done_count;
-static uint8 visual_jump_lockout;
-#endif
-
-static void visual_jump_trigger_after_step(void)
-{
-#if VISUAL_JUMP_AUTO_ENABLE
-  uint16 curr = step_data.bottom_row_raw;
-
-  if (visual_jump_lockout != 0u)
-  {
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (jump_is_allowed() == 0u)
-  {
-    visual_jump_in_zero_confirm = 0u;
-    visual_jump_zero_confirm_cnt = 0u;
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (jump_flag != 0u)
-  {
-    /* 跳跃由 control.c 的 jump_control() 推进；期间不再累计 0 确认，避免重复触发 */
-    visual_jump_in_zero_confirm = 0u;
-    visual_jump_zero_confirm_cnt = 0u;
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (visual_jump_in_zero_confirm != 0u)
-  {
-    if (curr != 0u)
-    {
-      visual_jump_in_zero_confirm = 0u;
-      visual_jump_zero_confirm_cnt = 0u;
-    }
-    else
-    {
-      visual_jump_zero_confirm_cnt++;
-      if (visual_jump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
-      {
-        jump_flag = 1u;
-        visual_jump_done_count++;
-        if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
-          visual_jump_lockout = 1u;
-        visual_jump_in_zero_confirm = 0u;
-        visual_jump_zero_confirm_cnt = 0u;
-      }
-    }
-  }
-  else if (visual_jump_prev_bottom_raw > 0u && curr == 0u)
-  {
-    /* 下降沿当帧计为第 1 个连续 0；若阈值为 1 则本帧即满足“短时全 0” */
-    visual_jump_in_zero_confirm = 1u;
-    visual_jump_zero_confirm_cnt = 1u;
-    if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
-    {
-      jump_flag = 1u;
-      visual_jump_done_count++;
-      if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
-        visual_jump_lockout = 1u;
-      visual_jump_in_zero_confirm = 0u;
-      visual_jump_zero_confirm_cnt = 0u;
-    }
-  }
-
-  visual_jump_prev_bottom_raw = curr;
-#else
-  (void)0;
-#endif
-}
-#endif /* !LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1 */
-
 /* 主循环侧统一用这个函数“取走一次待执行任务”。
  * 这里短暂关中断是为了避免与 ISR 同时修改 pending 计数。
  * 如果以后增加新的软任务，通常不需要改这个函数，直接在 run_soft_tasks() 里复用即可。
@@ -168,9 +69,6 @@ static void run_soft_tasks(void)
   if (task_pending_take(&task_10ms_step_pending))
   {
     step_detect();
-#if !LEG_DEBUG_MODE
-    visual_jump_trigger_after_step();
-#endif
   }
 #endif
   

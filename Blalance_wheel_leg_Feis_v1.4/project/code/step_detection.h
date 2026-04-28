@@ -72,6 +72,27 @@ void step_reset_distance_tracking(void);
 #define STEP_DEBUG_USE_VOFA 0 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
 #endif
 
+/*---------------------------------------------------------------------------
+ * 视觉自动跳跃（台阶下沿消失触发，经双核命令发往 CM7_0）
+ *
+ * 仅在 !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE 时
+ * step_visual_jump_after_step() 内有实际逻辑；否则为空实现（含 CM7_0 工程链接）。
+ * 触发量：step_data.bottom_row_raw（与 VOFA CH1 同语义）；条件为上一拍 >0 且当前为 0，
+ * 再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次（下降沿当帧计第 1 次）。
+ *---------------------------------------------------------------------------*/
+#ifndef VISUAL_JUMP_AUTO_ENABLE
+#define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
+#endif
+#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u /* 连续为 0 的确认次数，抑制单帧丢边 */
+#endif
+#ifndef VISUAL_JUMP_MAX_COUNT
+#define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */
+#endif
+
+/* CM7_1：在 step_detect() 之后调用；读 dualcore_ctrl_to_ui 的 jump_allowed / jump_active，满足时 dualcore_ui_cmd_push(JUMP) */
+void step_visual_jump_after_step(void);
+
 void step_debug_send_to_vofa(void);
 
 #endif /* CODE_STEP_DETECTION_H_ */

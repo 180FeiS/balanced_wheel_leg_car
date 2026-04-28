@@ -366,6 +366,95 @@ void step_reset_distance_tracking(void)
     height_median_reset();
 }
 
+/*---------------------------------------------------------------------------
+ * 视觉自动跳跃状态机（见 step_detection.h 中 VISUAL_JUMP_* 宏说明）
+ *---------------------------------------------------------------------------*/
+#if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
+
+/* 上一拍的 bottom_row_raw，用于检测 >0 → 0 下降沿 */
+static uint16 step_vjump_prev_bottom_raw;
+/* 1：已捕获下降沿，正在累计连续为 0 的次数 */
+static uint8 step_vjump_in_zero_confirm;
+static uint8 step_vjump_zero_confirm_cnt;
+static uint8 step_vjump_done_count;
+/* 1：已达 VISUAL_JUMP_MAX_COUNT，不再自动发跳 */
+static uint8 step_vjump_lockout;
+
+void step_visual_jump_after_step(void)
+{
+    uint16 curr = step_data.bottom_row_raw;
+    dualcore_ctrl_to_ui_t dcj;
+    dualcore_ctrl_to_ui_pull(&dcj);
+
+    if (step_vjump_lockout != 0u)
+    {
+        step_vjump_prev_bottom_raw = curr;
+        return;
+    }
+
+    if (dcj.jump_allowed == 0u)
+    {
+        step_vjump_in_zero_confirm = 0u;
+        step_vjump_zero_confirm_cnt = 0u;
+        step_vjump_prev_bottom_raw = curr;
+        return;
+    }
+
+    if (dcj.jump_active != 0u)
+    {
+        step_vjump_in_zero_confirm = 0u;
+        step_vjump_zero_confirm_cnt = 0u;
+        step_vjump_prev_bottom_raw = curr;
+        return;
+    }
+
+    if (step_vjump_in_zero_confirm != 0u)
+    {
+        if (curr != 0u)
+        {
+            step_vjump_in_zero_confirm = 0u;
+            step_vjump_zero_confirm_cnt = 0u;
+        }
+        else
+        {
+            step_vjump_zero_confirm_cnt++;
+            if (step_vjump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
+            {
+                (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+                step_vjump_done_count++;
+                if (step_vjump_done_count >= VISUAL_JUMP_MAX_COUNT)
+                    step_vjump_lockout = 1u;
+                step_vjump_in_zero_confirm = 0u;
+                step_vjump_zero_confirm_cnt = 0u;
+            }
+        }
+    }
+    else if (step_vjump_prev_bottom_raw > 0u && curr == 0u)
+    {
+        step_vjump_in_zero_confirm = 1u;
+        step_vjump_zero_confirm_cnt = 1u;
+        if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
+        {
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+            step_vjump_done_count++;
+            if (step_vjump_done_count >= VISUAL_JUMP_MAX_COUNT)
+                step_vjump_lockout = 1u;
+            step_vjump_in_zero_confirm = 0u;
+            step_vjump_zero_confirm_cnt = 0u;
+        }
+    }
+
+    step_vjump_prev_bottom_raw = curr;
+}
+
+#else
+
+void step_visual_jump_after_step(void)
+{
+}
+
+#endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
+
 void step_debug_send_to_vofa(void)
 {
     /* JustFloat：6 个 float + 帧尾；通道含义见 step_detection.h 顶部注释 */

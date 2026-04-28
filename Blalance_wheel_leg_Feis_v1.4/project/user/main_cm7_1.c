@@ -37,93 +37,6 @@
 #include "step_detection.h"
 #include "vofa.h"
 
-#if !LEG_DEBUG_MODE
-#ifndef VISUAL_JUMP_AUTO_ENABLE
-#define VISUAL_JUMP_AUTO_ENABLE 1u
-#endif
-#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u
-#endif
-#ifndef VISUAL_JUMP_MAX_COUNT
-#define VISUAL_JUMP_MAX_COUNT 3u
-#endif
-
-#if VISUAL_JUMP_AUTO_ENABLE
-static uint16 visual_jump_prev_bottom_raw;
-static uint8 visual_jump_in_zero_confirm;
-static uint8 visual_jump_zero_confirm_cnt;
-static uint8 visual_jump_done_count;
-static uint8 visual_jump_lockout;
-
-static void visual_jump_after_step_cm71(void)
-{
-  uint16 curr = step_data.bottom_row_raw;
-  dualcore_ctrl_to_ui_t dcj;
-  dualcore_ctrl_to_ui_pull(&dcj);
-
-  if (visual_jump_lockout != 0u)
-  {
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (dcj.jump_allowed == 0u)
-  {
-    visual_jump_in_zero_confirm = 0u;
-    visual_jump_zero_confirm_cnt = 0u;
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (dcj.jump_active != 0u)
-  {
-    visual_jump_in_zero_confirm = 0u;
-    visual_jump_zero_confirm_cnt = 0u;
-    visual_jump_prev_bottom_raw = curr;
-    return;
-  }
-
-  if (visual_jump_in_zero_confirm != 0u)
-  {
-    if (curr != 0u)
-    {
-      visual_jump_in_zero_confirm = 0u;
-      visual_jump_zero_confirm_cnt = 0u;
-    }
-    else
-    {
-      visual_jump_zero_confirm_cnt++;
-      if (visual_jump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
-      {
-        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
-        visual_jump_done_count++;
-        if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
-          visual_jump_lockout = 1u;
-        visual_jump_in_zero_confirm = 0u;
-        visual_jump_zero_confirm_cnt = 0u;
-      }
-    }
-  }
-  else if (visual_jump_prev_bottom_raw > 0u && curr == 0u)
-  {
-    visual_jump_in_zero_confirm = 1u;
-    visual_jump_zero_confirm_cnt = 1u;
-    if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
-    {
-      (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
-      visual_jump_done_count++;
-      if (visual_jump_done_count >= VISUAL_JUMP_MAX_COUNT)
-        visual_jump_lockout = 1u;
-      visual_jump_in_zero_confirm = 0u;
-      visual_jump_zero_confirm_cnt = 0u;
-    }
-  }
-
-  visual_jump_prev_bottom_raw = curr;
-}
-#endif
-#endif /* !LEG_DEBUG_MODE */
-
 /* 与 step_detection.h 中 STEP_DEBUG_USE_VOFA 的 0/1 一致，供主循环 VOFA 分发 switch 使用 */
 typedef enum
 {
@@ -140,7 +53,7 @@ typedef enum
  *-------------------------------------------------------------------------------------------------------------------*/
 static void cm71_vofa_main_loop_tx_dispatch(void)
 {
-  switch ((cm71_vofa_tx_payload_t)STEP_DEBUG_USE_VOFA)
+  switch ((cm71_vofa_tx_payload_t)CM71_VOFA_TX_STEP_DEBUG_SIX_CH)
   {
   case CM71_VOFA_TX_STEP_DEBUG_SIX_CH:
     step_debug_send_to_vofa();
@@ -158,9 +71,6 @@ static void cm71_vofa_main_loop_tx_dispatch(void)
 // 第一步 关闭上面所有打开的文件
 // 第二步 project->clean  等待下方进度条走完
 
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
-// 本例程是开源库空工程 可用作移植或者测试各类内外设
 
 // **************************** 代码区域 ****************************
 
@@ -183,15 +93,12 @@ int main(void)
         remote_lora_update_from_driver_and_publish();
 
         step_detect();
+        step_visual_jump_after_step(); /* 视觉自动跳跃：见 step_detection.c / VISUAL_JUMP_* */
         static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
         cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
-
-#if !LEG_DEBUG_MODE && VISUAL_JUMP_AUTO_ENABLE
-        visual_jump_after_step_cm71();
-#endif
     }
 }
 
