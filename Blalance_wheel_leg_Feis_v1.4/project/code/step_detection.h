@@ -24,7 +24,7 @@
 #define STEP_HEIGHT_MED_WIN    5   /* 像素高中值滤波窗口（进入测距公式前） */
 
 /* 下沿纵向 ROI：仅搜 [H/STEP_BOTTOM_ROW_START_DIV , H-10)。除数越大起始行越靠上，越利于“站在白台面看下一级”（边常出现在画面中上部）；除数过小易等同只搜下半幅导致 CH1 恒为 0 */
-#define STEP_BOTTOM_ROW_START_DIV 2
+#define STEP_BOTTOM_ROW_START_DIV 2//2
 /* 主 min_edges 未检出时，用 W/本值 再搜同一 ROI 一次；0=关闭 */
 #ifndef STEP_BOTTOM_MIN_DIV_FALLBACK
 #define STEP_BOTTOM_MIN_DIV_FALLBACK 4
@@ -69,7 +69,7 @@ void step_reset_distance_tracking(void);
  * 使用：将 STEP_DEBUG_USE_VOFA 置 1，main_cm7_1.c 中 cm71_vofa_main_loop_tx_dispatch 只发本组 6 路（不再发导航快照帧），避免两帧混叠。
  */
 #ifndef STEP_DEBUG_USE_VOFA
-#define STEP_DEBUG_USE_VOFA 0 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
+#define STEP_DEBUG_USE_VOFA 1 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */
 #endif
 
 /*---------------------------------------------------------------------------
@@ -79,19 +79,34 @@ void step_reset_distance_tracking(void);
  * step_visual_jump_after_step() 内有实际逻辑；否则为空实现（含 CM7_0 工程链接）。
  * 触发量：step_data.bottom_row_raw（与 VOFA CH1 同语义）；条件为上一拍 >0 且当前为 0，
  * 再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次（下降沿当帧计第 1 次）。
+ *
+ * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳、不起动沿确认；
+ * 上升沿时清空内部沿状态；jump_active 落地后可选 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 内仍不发跳（由 pit0_ch1 每 5ms 递减，时长 = N×5ms）。
+ * 发往 CM7_0 的台阶快照见 dualcore_vision_publish_after_step：jump_active 时 step 故意置为全 0 无效帧。
  *---------------------------------------------------------------------------*/
 #ifndef VISUAL_JUMP_AUTO_ENABLE
 #define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
 #endif
 #ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 2u /* 连续为 0 的确认次数，抑制单帧丢边 */
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 5u /* 连续为 0 的确认次数，抑制单帧丢边 2 */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */
 #endif
+/* jump_active 从 1 变 0 后，再经 N 个 5ms 节拍（pit0_ch1）内禁止下沿触发；冷却时长 = N×5ms；0=关闭。
+ * 若在工程中曾用 VISUAL_JUMP_POST_JUMP_COOLDOWN_LOOPS，可继续定义该宏，未定义 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 时会映射过来。 */
+#ifndef VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS
+#ifdef VISUAL_JUMP_POST_JUMP_COOLDOWN_LOOPS
+#define VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS VISUAL_JUMP_POST_JUMP_COOLDOWN_LOOPS
+#else
+#define VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 0u
+#endif
+#endif
 
 /* CM7_1：在 step_detect() 之后调用；读 dualcore_ctrl_to_ui 的 jump_allowed / jump_active，满足时 dualcore_ui_cmd_push(JUMP) */
 void step_visual_jump_after_step(void);
+/* CM7_1：pit0_ch1_isr（5ms）内调用；递减落地冷却计数，与 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 配套 */
+void step_visual_jump_pit_ch1_5ms_tick(void);
 
 void step_debug_send_to_vofa(void);
 

@@ -55,8 +55,8 @@ float leg_long = 5.5f;
 /*---------------------------------------------------------------------------
  * 用户速度与拨码（与 Menu.c dip_switch_motor_sync_from_hw 配合）：
  * - motor_user_speed_cmd：导航/速度环的“用户期望基准”，符号表示前进/后退；
- * - motor_poll_switch2_speed_baseline()：周期调用，按 SWITCH2 档位/边沿同步 1000 或 1500；
- * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 直接写基准（无速度锁；SWITCH2 档位变化时仍会同步为 1000/1500）；
+ * - motor_poll_switch2_speed_baseline()：周期调用，按 SWITCH2 档位/边沿同步 motor_dip_switch2_speed_fast/slow；
+ * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 直接写基准（无速度锁；SWITCH2 档位变化时仍会同步为上述两档）；
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
 
@@ -68,8 +68,12 @@ float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的�
 static uint8 motor_dip_speed_inited = 0u;
 static uint8 motor_dip_last_fast = 0u;
 
+/* SWITCH2：dip_speed_fast==1（GPIO_LOW）与另一档对应的 motor_user_speed_cmd 基准，按需改 */
+static float motor_dip_switch2_speed_fast = 0.0f;
+static float motor_dip_switch2_speed_slow = 600.0f;
+
 /* jump_flag：1=跳跃流程进行中；仅应在 jump_is_allowed()==1 时由外部（LORA/双核/导航等）置 1。
- * jump_step_index：当前阶段 0=起跳 1=准备缓冲 2=执行缓冲，由 jump_control() 每 20ms 更新。
+ * jump_step_index：当前阶段 0=起跳 1=收腿 2=准备缓冲 3=执行缓冲，由 jump_control() 每 20ms 更新。
  * jump_time：跳跃状态机在 jump_control() 内的节拍计数，与 pit0_ch10 周期一致（1 单位=20ms）。
  */
 uint8 jump_flag = 0;
@@ -120,14 +124,14 @@ void motor_poll_switch2_speed_baseline(void)
     {
         motor_dip_last_fast = dip_speed_fast;
         motor_dip_speed_inited = 1u;
-        motor_user_speed_cmd = dip_speed_fast ? 0.0f : 500.0f;
+        motor_user_speed_cmd = dip_speed_fast ? motor_dip_switch2_speed_fast : motor_dip_switch2_speed_slow;
         return;
     }
 
     if (dip_speed_fast != motor_dip_last_fast)
     {
         motor_dip_last_fast = dip_speed_fast;
-        motor_user_speed_cmd = dip_speed_fast ? 0.0f : 500.0f;
+        motor_user_speed_cmd = dip_speed_fast ? motor_dip_switch2_speed_fast : motor_dip_switch2_speed_slow;
     }
 }
 
@@ -541,22 +545,24 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 
 /*---------- 跳跃参数（障碍跨越）----------*/
 #define JUMP_PID_SCALE          0.5f  // 跳跃时angle/speed的kp缩放，维持稳定
-#define JUMP_TAKEOFF_P          13.0f // 起跳爆发目标腿长（直通伸腿）
-#define JUMP_PREPARE_P          10.0f // 准备缓冲目标腿长（起跳后伸腿高度）
+#define JUMP_TAKEOFF_P          11.0f // 起跳爆发目标腿长（直通伸腿）
+#define JUMP_RETRACT_P          5.5f // 收腿阶段目标腿长（起跳爆发后空中收回一小段，直通到达；实车可调）
+#define JUMP_PREPARE_P          6.0f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
 #define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
 #define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
 #define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
 #define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
 
-/* 跳跃时序表：jump_control() 在 pit0_ch10 每 20ms 调用一次，故 min/max 单位为 20ms。
- * jump_control_struct：min/max 为闭区间节拍；handler 多为 jump_set_step；description 仅调试/可读。
+/* 跳跃时序表（pit0_ch10 每 20ms）：闭区间 [min,max]，与 jump_step_index 0..3 一一对应。
+ * 仅第 4 段在 leg_servo_step_update 内按缓冲步幅逼近 leg_long；前三段均为直通目标腿长。
  */
 const jump_control_struct jump_control_config[] =
     {
-        {0,  4,  jump_set_step, "起跳"},           //  伸腿爆发
-        {4,  6, jump_set_step, "准备缓冲"},       //  过渡姿态
-        {6, 6 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},  // 落地收腿
+        {0,  3,  jump_set_step, "起跳"},                                      // 伸腿爆发
+        {3, 6,  jump_set_step, "收腿"},                                       // 空中收回一小段
+        {6, 10, jump_set_step, "准备缓冲"},                                   // 过渡到缓冲前姿态
+        {10, 10 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},          // 落地缓冲（步进收腿）
 };
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
 
@@ -962,17 +968,17 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
         first_run = 0;
     }
 
-    /* use_step: 1=步进逼近, 0=直通。非跳跃或执行缓冲(step2)用步进，起跳/准备缓冲直通 */
+    /* use_step: 1=步进逼近, 0=直通。非跳跃或跳跃执行缓冲(step3)用缓冲步幅步进；其余跳跃阶段直通 */
     uint8 use_step = 0;
     if (jump_flag == 0)
         use_step = 1;    /* 非跳跃：步进 */
-    else if (jump_step_index == 2)
-        use_step = 1;    /* 执行缓冲(step2)：步进，实现缓慢收腿 */
-    /* else: 起跳(step0)/准备缓冲(step1)：直通 */
+    else if (jump_step_index == 3)
+        use_step = 1;    /* 执行缓冲(step3)：缓冲步幅步进，缓慢收腿到落地 */
+    /* else: 跳跃 step0~2：直通期望腿长 */
 
     if (use_step)
     {
-        float step_p = (jump_step_index == 2) ? JUMP_BUFFER_STEP_P_MAX : LEG_STEP_P_MAX;
+        float step_p = (jump_step_index == 3) ? JUMP_BUFFER_STEP_P_MAX : LEG_STEP_P_MAX;
         float delta;
         delta = desired_left_p - current_left_p;
         current_left_p += clip2(delta, step_p);
@@ -1100,8 +1106,8 @@ void leg_control(void)
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     按跳跃阶段设置目标腿长 leg_long（由 jump_control_config[].handler 调用）
-// 参数说明     step_num    与 jump_control 传入下标一致：0→JUMP_TAKEOFF_P 起跳；1→JUMP_PREPARE_P 准备缓冲；
-//                          2→JUMP_BUFFER_P 执行缓冲（落地收腿目标，实际收腿步进在 leg_servo_step_update）
+// 参数说明     step_num    与 jump_control_config[] 行号一致：0 起跳；1 收腿；2 准备缓冲；
+//                          3 执行缓冲（目标为落地高度 JUMP_BUFFER_P，逼近速率见 leg_servo_step_update）
 // 返回参数     null
 // 使用示例     jump_set_step(step_num);
 // 备注信息     仅应在 jump_flag==1 且 jump_is_allowed() 为真时由 jump_control() 调度
@@ -1111,13 +1117,16 @@ void jump_set_step(int step_num)
     switch (step_num)
     {
     case 0:
-        leg_long = JUMP_TAKEOFF_P;  // 起跳：直接爆发伸腿
+        leg_long = JUMP_TAKEOFF_P;   // 起跳：直接爆发伸腿
         break;
     case 1:
-        leg_long = JUMP_PREPARE_P;  // 准备缓冲：直通到中间姿态
+        leg_long = JUMP_RETRACT_P;   // 收腿：直通
         break;
     case 2:
-        leg_long = JUMP_BUFFER_P;   // 执行缓冲：步进收腿到落地
+        leg_long = JUMP_PREPARE_P;   // 准备缓冲：直通到过渡姿态
+        break;
+    case 3:
+        leg_long = JUMP_BUFFER_P;    // 执行缓冲：步进收腿到落地（步进在 leg_servo_step_update）
         break;
     default:
         break;

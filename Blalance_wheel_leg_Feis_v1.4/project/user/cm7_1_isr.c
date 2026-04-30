@@ -46,6 +46,7 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH1); // 5ms
+    step_visual_jump_pit_ch1_5ms_tick();
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数

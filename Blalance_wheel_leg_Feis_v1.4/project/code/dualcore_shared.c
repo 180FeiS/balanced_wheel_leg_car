@@ -249,12 +249,30 @@ uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f3
 
 void dualcore_vision_publish_after_step(uint32 frame_seq)
 {
+  dualcore_ctrl_to_ui_t ctrl;
+  dualcore_ctrl_to_ui_pull(&ctrl);
+
   dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
 
   dualcore_shared_dcache_invalidate(v, sizeof(*v));
 
   extern step_info_t step_data;
-  v->step = step_data;
+  if (ctrl.jump_active != 0u)
+  {
+    step_info_t invalid_step = {0};
+    invalid_step.detected = 0u;
+    invalid_step.step_row = 0u;
+    invalid_step.step_top_row = 0u;
+    invalid_step.step_height_pix = 0u;
+    invalid_step.distance_mm = 0.0f;
+    invalid_step.distance_cm = 0.0f;
+    invalid_step.bottom_row_raw = 0u;
+    v->step = invalid_step;
+  }
+  else
+  {
+    v->step = step_data;
+  }
   v->frame_seq = frame_seq;
   v->seq++;
   __DSB();

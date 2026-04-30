@@ -371,8 +371,14 @@ void step_reset_distance_tracking(void)
  *---------------------------------------------------------------------------*/
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
 
+#if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
+static volatile uint16 step_vjump_post_cooldown_ticks_remaining;
+#endif
+
 /* 上一拍的 bottom_row_raw，用于检测 >0 → 0 下降沿 */
 static uint16 step_vjump_prev_bottom_raw;
+/* 上一拍 dualcore snapshot 的 jump_active（与 jump_flag 同步） */
+static uint8 step_vjump_prev_jump_active;
 /* 1：已捕获下降沿，正在累计连续为 0 的次数 */
 static uint8 step_vjump_in_zero_confirm;
 static uint8 step_vjump_zero_confirm_cnt;
@@ -382,9 +388,25 @@ static uint8 step_vjump_lockout;
 
 void step_visual_jump_after_step(void)
 {
-    uint16 curr = step_data.bottom_row_raw;
     dualcore_ctrl_to_ui_t dcj;
     dualcore_ctrl_to_ui_pull(&dcj);
+
+    /* jump_active 上升沿：清空沿状态，避免起跳前 bottom 状态带入落地后首帧 */
+    if (step_vjump_prev_jump_active == 0u && dcj.jump_active != 0u)
+    {
+        step_vjump_prev_bottom_raw = 0u;
+        step_vjump_in_zero_confirm = 0u;
+        step_vjump_zero_confirm_cnt = 0u;
+    }
+
+#if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
+    if (step_vjump_prev_jump_active != 0u && dcj.jump_active == 0u)
+        step_vjump_post_cooldown_ticks_remaining = (uint16)VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS;
+#endif
+
+    step_vjump_prev_jump_active = (dcj.jump_active != 0u) ? 1u : 0u;
+
+    uint16 curr = step_data.bottom_row_raw;
 
     if (step_vjump_lockout != 0u)
     {
@@ -407,6 +429,16 @@ void step_visual_jump_after_step(void)
         step_vjump_prev_bottom_raw = curr;
         return;
     }
+
+#if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
+    if (step_vjump_post_cooldown_ticks_remaining > 0u)
+    {
+        step_vjump_in_zero_confirm = 0u;
+        step_vjump_zero_confirm_cnt = 0u;
+        step_vjump_prev_bottom_raw = curr;
+        return;
+    }
+#endif
 
     if (step_vjump_in_zero_confirm != 0u)
     {
@@ -454,6 +486,21 @@ void step_visual_jump_after_step(void)
 }
 
 #endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
+
+#if defined(CY_CORE_CM7_1)
+void step_visual_jump_pit_ch1_5ms_tick(void)
+{
+#if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE && (VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u)
+    uint16 r = step_vjump_post_cooldown_ticks_remaining;
+    if (r > 0u)
+        step_vjump_post_cooldown_ticks_remaining = (uint16)(r - 1u);
+#endif
+}
+#else
+void step_visual_jump_pit_ch1_5ms_tick(void)
+{
+}
+#endif /* CY_CORE_CM7_1 */
 
 void step_debug_send_to_vofa(void)
 {

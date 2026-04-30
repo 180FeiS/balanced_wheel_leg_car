@@ -16,7 +16,7 @@ typedef struct
 {
         int16           min;                // 阶段起始节拍
         int16           max;                // 阶段结束节拍
-        HandlerFunc     handler;            // 通常为 jump_set_step，参数为阶段索引 0/1/2
+        HandlerFunc     handler;            // 通常为 jump_set_step，参数为阶段索引 0~3
         const char      *description;       // 阶段名称（调试/可读）
 }jump_control_struct;
 
@@ -136,7 +136,7 @@ void pid_ctrl_Run(void);                                    //PID控制平衡和
 
 void leg_control(void);                                     //控制腿高
 
-void jump_set_step(int step_num);                           // 按阶段 0/1/2 设置 JUMP_* 目标腿长
+void jump_set_step(int step_num);                           // 按阶段 0~3 设置 JUMP_* 目标腿长（起跳/收腿/准备缓冲/执行缓冲）
 
 void jump_control(void);                                     // 跳跃状态机（20ms）；不允许时 jump_stop
 

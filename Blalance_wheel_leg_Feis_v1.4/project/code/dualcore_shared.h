@@ -84,6 +84,7 @@ typedef struct
 typedef struct
 {
   volatile uint32 seq;
+  /* jump_active==1（CM7_0 jump_flag）时 dualcore_vision_publish_after_step 故意写全 0 无效帧，勿作控车/决策 */
   step_info_t step;
   uint32 frame_seq;
 } dualcore_vision_to_ctrl_t;
@@ -144,6 +145,7 @@ void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
 #if defined(CY_CORE_CM7_1)
 void dualcore_ctrl_to_ui_pull(dualcore_ctrl_to_ui_t *out);
 uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f32);
+/* frame_seq 递增发布台阶快照；jump_active 时 step 写无效零帧（见 dualcore_vision_to_ctrl_t） */
 void dualcore_vision_publish_after_step(uint32 frame_seq);
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif
