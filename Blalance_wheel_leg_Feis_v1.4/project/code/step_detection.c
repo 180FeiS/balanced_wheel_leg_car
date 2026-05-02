@@ -488,17 +488,26 @@ void step_visual_jump_after_step(void)
 #endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
 
 #if defined(CY_CORE_CM7_1)
-void step_visual_jump_pit_ch1_5ms_tick(void)
+void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
 {
+/*
+ * CM7_1 不初始化 PIT_CH1（避免与 CM7_0 TCPWM CNT[1]/leg_control 冲突）。
+ * VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 仍以「5ms 一格」为语义：本函数在 pit0_ch0 每 1ms 调用一次，
+ * 内部累计 5 次再递减冷却计数，总冷却时间仍为 N×5ms（至多约 4ms 量化误差）。
+ *
+ * 仅在与 step_visual_jump_after_step 相同的三元预处理条件下读写 step_vjump_post_cooldown_ticks_remaining，
+ * 否则留空函数体，以满足任意 CM7_1 工程配置下 ISR 均能链接。
+ */
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE && (VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u)
+    static uint8 ms_agg_for_vjump_cd;
+    ms_agg_for_vjump_cd++;
+    if (ms_agg_for_vjump_cd < 5u)
+        return;
+    ms_agg_for_vjump_cd = 0u;
     uint16 r = step_vjump_post_cooldown_ticks_remaining;
     if (r > 0u)
         step_vjump_post_cooldown_ticks_remaining = (uint16)(r - 1u);
 #endif
-}
-#else
-void step_visual_jump_pit_ch1_5ms_tick(void)
-{
 }
 #endif /* CY_CORE_CM7_1 */
 

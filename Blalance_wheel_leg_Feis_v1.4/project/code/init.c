@@ -93,9 +93,20 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 #if defined(CY_CORE_CM7_1)
   else if (key_flag == 1)
   {
-    /* all_init_cm7_1_ui 传 pit=0 时，仍须在本核注册 PIT，以便 cm7_1_isr 中 LORA(1ms)、key_scanner/menu_key_capture_event(10ms)、视觉跳跃落地冷却(5ms) 能跑 */
+    /*
+     * CM7_1 UI 核：`all_init_cm7_1_ui` 传 pit=0 时仍注册的定时器仅限本核 ISR 实际需要。
+     *
+     * 禁止在此对 PIT_CH1 调用 pit_ms_init：
+     * - zf_driver_pit.c 中 PIT_CH0~2 均绑定 TCPWM0->GRP[2].CNT[pit_index]，片上物理实例唯一。
+     * - CM7_0 已在 pit_flag==1 路径对同一 CNT[1] 初始化，供 pit0_ch1_isr → leg_control()（约 5ms 舵机腿控）。
+     * - 若 CM7_1 再 pit_init(PIT_CH1)，会重写同一计数器/系统中断挂载，与用户验证的「舵机卡住、仅对齐两核固件才好」一致。
+     *
+     * 视觉跳跃「落地冷却」改为在 pit0_ch0（1ms）内软件 5 分频，等价原 5ms 递减，见
+     * step_visual_jump_post_jump_cooldown_on_cm7_1_1ms()。
+     *
+     * 注：PIT_CH0 目前仍可能被 CM7_0 与 CM7_1 各自 pit_init(1ms)；若日后需彻底消除双核争用，应另查 TRM/NVIC 路由。
+     */
     pit_ms_init(PIT_CH0, 1);
-    pit_ms_init(PIT_CH1, 5);
     pit_ms_init(PIT_CH2, 10);
   }
 #endif
