@@ -20,10 +20,10 @@
 #define SERVO_FREQ              (300)                   //定义主板上舵机频率
 #define SERVO_LEFT              (55)                    //左极限值 待测
 #define SERVO_RIGHT             (170)                   //右极限值 待测
-#define SERVO1_MID              (4051)//旧(4501)新 (3301)         //舵机1中值     左上 
-#define SERVO2_MID              (4762)//旧5312) 新   4012    //舵机2中值     左下  大 上
-#define SERVO3_MID              (4820)//旧(4070)新   5570      //舵机3中值     右上  小 下
-#define SERVO4_MID              (4000)//旧(2950)新 4750       //舵机4中值     右下  大 下
+#define SERVO1_MID              (4501)//旧(4501) 新   4051       //舵机1中值     左上 
+#define SERVO2_MID              (5312)//旧(5312) 新   4762    //舵机2中值     左下  大 上
+#define SERVO3_MID              (4070)//旧(4070) 新   4820      //舵机3中值     右上  小 下
+#define SERVO4_MID              (2950)//旧(2950) 新   4000       //舵机4中值     右下  大 下
 
 
 

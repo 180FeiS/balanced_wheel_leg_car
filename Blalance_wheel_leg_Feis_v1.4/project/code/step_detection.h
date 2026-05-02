@@ -88,7 +88,7 @@ void step_reset_distance_tracking(void);
 #define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
 #endif
 #ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 10u /* 连续为 0 的确认次数，抑制单帧丢边 2 */
+#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 5u /* 连续为 0 的确认次数，抑制单帧丢边 2 */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */

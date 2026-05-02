@@ -8,7 +8,8 @@ static float step_vofa_bottom_row;
 static float step_vofa_height_pix;
 static float step_vofa_dist_raw_mm;
 static float step_vofa_dist_filt_mm;
-static float step_vofa_flags; /* frame_ok*10 + detected */
+/* VOFA CH5：视觉跳跃影子调试（仅 CM7_1 且启用 VISUAL_JUMP 时每圈更新；否则 VOFA 侧发 0） */
+static float step_vofa_jump_dbg;
 
 static void step_vofa_snapshot(int top, int bot, float hpix, float raw_mm, uint8 frame_ok)
 {
@@ -17,7 +18,7 @@ static void step_vofa_snapshot(int top, int bot, float hpix, float raw_mm, uint8
     step_vofa_height_pix = hpix;
     step_vofa_dist_raw_mm = raw_mm;
     step_vofa_dist_filt_mm = step_data.distance_mm;
-    step_vofa_flags = (float)((frame_ok ? 10 : 0) + (int)step_data.detected);
+    (void)frame_ok;
 }
 
 static uint8 image_binary[MT9V03X_H][MT9V03X_W];
@@ -371,6 +372,59 @@ void step_reset_distance_tracking(void)
  *---------------------------------------------------------------------------*/
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
 
+#if defined(CY_CORE_CM7_1)
+/* 影子 FSM：仅 bottom_row_raw + N 帧连续 0，不受 jump_allowed/jump_active 等门控（便于电机关调试误触发） */
+static uint16 shadow_prev_bottom;
+static uint8 shadow_in_confirm;
+static uint8 shadow_zero_cnt;
+
+static void step_vjump_vofa_shadow_tick(uint16 curr)
+{
+    float out = 0.0f;
+
+    if (shadow_in_confirm != 0u)
+    {
+        if (curr != 0u)
+        {
+            shadow_in_confirm = 0u;
+            shadow_zero_cnt = 0u;
+        }
+        else
+        {
+            shadow_zero_cnt++;
+            if (shadow_zero_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
+            {
+                out = 1.0f;
+                shadow_in_confirm = 0u;
+                shadow_zero_cnt = 0u;
+            }
+            else
+            {
+                out = (float)shadow_zero_cnt / (float)VISUAL_JUMP_ZERO_CONFIRM_FRAMES;
+            }
+        }
+    }
+    else if (shadow_prev_bottom > 0u && curr == 0u)
+    {
+        shadow_in_confirm = 1u;
+        shadow_zero_cnt = 1u;
+        if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
+        {
+            out = 1.0f;
+            shadow_in_confirm = 0u;
+            shadow_zero_cnt = 0u;
+        }
+        else
+        {
+            out = (float)shadow_zero_cnt / (float)VISUAL_JUMP_ZERO_CONFIRM_FRAMES;
+        }
+    }
+
+    shadow_prev_bottom = curr;
+    step_vofa_jump_dbg = out;
+}
+#endif /* CY_CORE_CM7_1 */
+
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
 static volatile uint16 step_vjump_post_cooldown_ticks_remaining;
 #endif
@@ -388,6 +442,9 @@ static uint8 step_vjump_lockout;
 
 void step_visual_jump_after_step(void)
 {
+#if defined(CY_CORE_CM7_1)
+    step_vjump_vofa_shadow_tick(step_data.bottom_row_raw);
+#endif
     dualcore_ctrl_to_ui_t dcj;
     dualcore_ctrl_to_ui_pull(&dcj);
 
@@ -504,6 +561,11 @@ void step_visual_jump_pit_ch1_5ms_tick(void)
 
 void step_debug_send_to_vofa(void)
 {
+#if defined(CY_CORE_CM7_1) && !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
+    float ch5_jump_dbg = step_vofa_jump_dbg;
+#else
+    float ch5_jump_dbg = 0.0f;
+#endif
     /* JustFloat：6 个 float + 帧尾；通道含义见 step_detection.h 顶部注释 */
     SendDataStreamToVOFA(6,
                          step_vofa_top_row,
@@ -511,5 +573,5 @@ void step_debug_send_to_vofa(void)
                          step_vofa_height_pix,
                          step_vofa_dist_raw_mm,
                          step_vofa_dist_filt_mm,
-                         step_vofa_flags);
+                         ch5_jump_dbg);
 }
