@@ -41,12 +41,16 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH0); // 1ms
     lora3a22_link_timeout_tick_1ms();
+    step_visual_jump_post_jump_cooldown_on_cm7_1_1ms();
 }
 
 void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
-    pit_isr_flag_clear(PIT_CH1); // 5ms
-    step_visual_jump_pit_ch1_5ms_tick();
+    /*
+     * CM7_1 不得 pit_init(PIT_CH1)：CNT[1] 由 CM7_0 独占供 leg_control（见 init.c）。
+     * 本符号仍被 zf_driver_pit pit_isr_func 引用；本核不应使能 CH1，通常不会进入 ISR。
+     * 勿 pit_isr_flag_clear(PIT_CH1) 或其它 TCPWM 操作，以免与 CM7_0 竞态。
+     */
 }
 
 void pit0_ch2_isr() // 定时器通道 2 周期中断服务函数

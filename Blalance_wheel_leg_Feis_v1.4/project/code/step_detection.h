@@ -81,7 +81,9 @@ void step_reset_distance_tracking(void);
  * 再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次（下降沿当帧计第 1 次）。
  *
  * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳、不起动沿确认；
- * 上升沿时清空内部沿状态；jump_active 落地后可选 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 内仍不发跳（由 pit0_ch1 每 5ms 递减，时长 = N×5ms）。
+ * 上升沿时清空内部沿状态；jump_active 落地后可选 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 内仍不发跳（CM7_1：
+ * pit0_ch0 每毫秒调用 step_visual_jump_post_jump_cooldown_on_cm7_1_1ms()，内部 5 分频等价每 5ms 减一档；时长仍为 N×5ms，
+ * 不占 PIT_CH1，避免与 CM7_0 leg_control 争用 TCPWM CNT[1]）。
  * 发往 CM7_0 的台阶快照见 dualcore_vision_publish_after_step：jump_active 时 step 故意置为全 0 无效帧。
  *---------------------------------------------------------------------------*/
 #ifndef VISUAL_JUMP_AUTO_ENABLE
@@ -93,7 +95,7 @@ void step_reset_distance_tracking(void);
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */
 #endif
-/* jump_active 从 1 变 0 后，再经 N 个 5ms 节拍（pit0_ch1）内禁止下沿触发；冷却时长 = N×5ms；0=关闭。
+/* jump_active 从 1 变 0 后，再经 N 个「等效 5ms」节拍内禁止下沿触发（递减由 CM7_1 pit0_ch0×5 软件分频驱动）；时长 = N×5ms；0=关闭。
  * 若在工程中曾用 VISUAL_JUMP_POST_JUMP_COOLDOWN_LOOPS，可继续定义该宏，未定义 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 时会映射过来。 */
 #ifndef VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS
 #ifdef VISUAL_JUMP_POST_JUMP_COOLDOWN_LOOPS
@@ -105,8 +107,10 @@ void step_reset_distance_tracking(void);
 
 /* CM7_1：在 step_detect() 之后调用；读 dualcore_ctrl_to_ui 的 jump_allowed / jump_active，满足时 dualcore_ui_cmd_push(JUMP) */
 void step_visual_jump_after_step(void);
-/* CM7_1：pit0_ch1_isr（5ms）内调用；递减落地冷却计数，与 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 配套 */
-void step_visual_jump_pit_ch1_5ms_tick(void);
+#if defined(CY_CORE_CM7_1)
+/* CM7_1：pit0_ch0_isr（1ms）每拍调用；累计 5 次后递减落地冷却一档；勿用 PIT_CH1（与 CM7_0 leg_control 同源硬件） */
+void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void);
+#endif /* CY_CORE_CM7_1 */
 
 void step_debug_send_to_vofa(void);
 

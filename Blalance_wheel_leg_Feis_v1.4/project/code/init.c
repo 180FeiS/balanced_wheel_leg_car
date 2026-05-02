@@ -93,9 +93,21 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 #if defined(CY_CORE_CM7_1)
   else if (key_flag == 1)
   {
-    /* all_init_cm7_1_ui 传 pit=0 时，仍须在本核注册 PIT，以便 cm7_1_isr 中 LORA(1ms)、key_scanner/menu_key_capture_event(10ms)、视觉跳跃落地冷却(5ms) 能跑 */
+    /*
+     * CM7_1 UI 核：`all_init_cm7_1_ui` 传 pit=0 时仍须注册本核实际用到的 PIT。
+     *
+     * 根因（勿再对 PIT_CH1 调 pit_ms_init）：
+     * zf_driver_pit.c 中 PIT_CH0~2 均绑定 TCPWM0->GRP[2].CNT[pit_index]，片上只有一份物理实例；
+     * CM7_0 已在 pit_flag==1 路径初始化 CNT[1]，供 pit0_ch1_isr -> leg_control()（约 5ms 舵机腿控）。
+     * CM7_1 若再 pit_init(PIT_CH1)，会二次配置同一计数器/中断路由，导致腿控节拍异常、舵机似卡死；
+     * 混烧两核不同版本时只要 CM7_1 仍初始化 CH1 即可复现，与 CM7_0 单核源码是否回退无关。
+     *
+     * 避免准则：每个 pit_index 仅允许一个内核调用 pit_init；另一核用共享内存+对方节拍，或本核未占用的通道。
+     * 视觉跳跃落地冷却：用 pit0_ch0（1ms）内 step_visual_jump_post_jump_cooldown_on_cm7_1_1ms() 做 ÷5，等效原 5ms 递减。
+     *
+     * 注：PIT_CH0 仍可能被 CM7_0与CM7_1 各 init 一次；若日后要根除，须在 TRM/驱动层约定 owner 核，本补丁不改动 CM7_0。
+     */
     pit_ms_init(PIT_CH0, 1);
-    pit_ms_init(PIT_CH1, 5);
     pit_ms_init(PIT_CH2, 10);
   }
 #endif

@@ -545,17 +545,23 @@ void step_visual_jump_after_step(void)
 #endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
 
 #if defined(CY_CORE_CM7_1)
-void step_visual_jump_pit_ch1_5ms_tick(void)
+void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
 {
+    /*
+     * 不用 PIT_CH1：其与 CM7_0 的 TCPWM0->GRP[2].CNT[1]/leg_control 冲突（见 init.c CM7_1 注释）。
+     * VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 仍为「每 5ms 减一档」语义：pit0_ch0 每 1ms 进本函数，内部 ÷5 后递减；
+     * 预处理条件与读写 step_vjump_* 必须与 step_visual_jump_after_step() 活跃块一致，否则编译无静态变量引用。
+     */
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE && (VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u)
+    static uint8 ms_agg_for_vjump_cd;
+    ms_agg_for_vjump_cd++;
+    if (ms_agg_for_vjump_cd < 5u)
+        return;
+    ms_agg_for_vjump_cd = 0u;
     uint16 r = step_vjump_post_cooldown_ticks_remaining;
     if (r > 0u)
         step_vjump_post_cooldown_ticks_remaining = (uint16)(r - 1u);
 #endif
-}
-#else
-void step_visual_jump_pit_ch1_5ms_tick(void)
-{
 }
 #endif /* CY_CORE_CM7_1 */
 
