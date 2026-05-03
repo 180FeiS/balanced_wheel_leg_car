@@ -32,7 +32,7 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 4.5;  // pitch机械中值（俯仰平衡）
+float pitch_mid = 2.5;  // pitch机械中值（俯仰平衡）4.5
 float roll_mid = -9.0; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
@@ -70,7 +70,7 @@ static uint8 motor_dip_last_fast = 0u;
 
 /* SWITCH2：dip_speed_fast==1（GPIO_LOW）与另一档对应的 motor_user_speed_cmd 基准，按需改 */
 static float motor_dip_switch2_speed_fast = 0.0f;
-static float motor_dip_switch2_speed_slow = 600.0f;
+static float motor_dip_switch2_speed_slow = -300.0f;
 
 /* jump_flag：1=跳跃流程进行中；仅应在 jump_is_allowed()==1 时由外部（LORA/双核/导航等）置 1。
  * jump_step_index：当前阶段 0=起跳 1=收腿 2=准备缓冲 3=执行缓冲，由 jump_control() 每 20ms 更新。
