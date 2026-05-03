@@ -57,7 +57,7 @@ void step_reset_distance_tracking(void);
  *  CH2  step_height_pix  用于测距的像素高（经 STEP_HEIGHT_MED_WIN 帧中值）；与距离公式直接相关
  *  CH3  dist_raw_mm       本帧由 calculate_step_distance 算出的原始距离（未做 10 帧均值）
  *  CH4  dist_filt_mm     与 step_data.distance_mm 一致（滤波后或失败时保持的上次有效值）
- *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > TRIGGER 时约 1.2（接近发跳）；否则为 0
+ *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > TRIGGER 或 armed 且丢边保底接近发跳时约 1.2；否则为 0
  *
  * 在 VOFA 里如何判断问题出在谁：
  *  1) CH2 波动大、CH3 跟着跳 → 边缘检测不稳或光照变化，优先改梯度阈值/ROI/对 step_height 做中值滤波
@@ -83,9 +83,11 @@ void step_reset_distance_tracking(void);
  *   仅当 bottom_row_raw > VISUAL_JUMP_ARM_MIN_THRESHOLD 时递增毫秒计数；
  *   一旦 bottom_row_raw <= VISUAL_JUMP_ARM_MIN_THRESHOLD 则计数清零并取消前置完成；
  *   计数达到 VISUAL_JUMP_ARM_TIME_MS 后置「前置完成」，允许触发判定。
- * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里若 bottom_row_raw >
- *   VISUAL_JUMP_TRIGGER_THRESHOLD，则 dualcore_ui_cmd_push(JUMP)；触发后清零前置计数与完成标志，
- *   需重新满足前置才可再次触发。
+ * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里：
+ *   1) bottom_row_raw > VISUAL_JUMP_TRIGGER_THRESHOLD → dualcore_ui_cmd_push(JUMP)；
+ *   2) 保底丢边：上一拍为 (0, TRIGGER] 且变为 0 后，须由 pit0_ch0 连续判定 bottom_row_raw==0
+ *      满 VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 毫秒才发跳；
+ * 触发后清零前置计数与完成标志，需重新满足前置才可再次触发。
  *
  * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳；
  * jump_active 上升沿时清空内部前置状态；jump_allowed==0、落地冷却内同样清空前置状态。
@@ -98,13 +100,16 @@ void step_reset_distance_tracking(void);
 #define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
 #endif
 #ifndef VISUAL_JUMP_TRIGGER_THRESHOLD
-#define VISUAL_JUMP_TRIGGER_THRESHOLD 100u /* 前置完成后：bottom_row_raw 大于本值则发跳 */
+#define VISUAL_JUMP_TRIGGER_THRESHOLD 106u /* 前置完成后：bottom_row_raw 大于本值则发跳 */
 #endif
 #ifndef VISUAL_JUMP_ARM_MIN_THRESHOLD
-#define VISUAL_JUMP_ARM_MIN_THRESHOLD 60u /* 仅当 bottom_row_raw 大于本值时累计前置毫秒；否则清零 */
+#define VISUAL_JUMP_ARM_MIN_THRESHOLD 50u /* 仅当 bottom_row_raw 大于本值时累计前置毫秒；否则清零 */
 #endif
 #ifndef VISUAL_JUMP_ARM_TIME_MS
-#define VISUAL_JUMP_ARM_TIME_MS 100u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
+#define VISUAL_JUMP_ARM_TIME_MS 80u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
+#endif
+#ifndef VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS
+#define VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 10u /* 保底丢边：bottom_row_raw==0 须连续保持本毫秒数（1ms ISR）才允许发跳 */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */

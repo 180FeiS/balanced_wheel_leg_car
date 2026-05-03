@@ -379,6 +379,10 @@ static volatile uint16 step_vjump_post_cooldown_ticks_remaining;
 /* pit0_ch0 每 1ms 累计：bottom_row_raw > ARM_MIN 时递增，否则清零 */
 static volatile uint16 step_vjump_arm_ms;
 static volatile uint8 step_vjump_armed;
+/* 保底丢边：主循环 latch pending；ISR 在 armed&&pending 且 bot==0 时累计毫秒至 FALLBACK_ZERO_HOLD_MS 后置 ready */
+static volatile uint8 step_vjump_fallback_pending;
+static volatile uint16 step_vjump_fallback_zero_ms;
+static volatile uint8 step_vjump_fallback_ready;
 
 #if defined(CY_CORE_CM7_1)
 /* VOFA CH5 影子：不受 jump_allowed/jump_active 门控；反映前置毫秒进度与 armed / 接近触发 */
@@ -390,7 +394,23 @@ static void step_vjump_vofa_shadow_tick(uint16 curr)
 
     float out;
     if (armed != 0u)
-        out = 1.0f + ((curr > VISUAL_JUMP_TRIGGER_THRESHOLD) ? 0.2f : 0.0f);
+    {
+        float bump = 0.0f;
+        if (curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
+            bump = 0.2f;
+        else if (step_vjump_fallback_ready != 0u)
+            bump = 0.2f;
+        else if (step_vjump_fallback_pending != 0u && curr == 0u)
+        {
+            uint16 hold_ms = VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS;
+            if (hold_ms == 0u)
+                hold_ms = 1u;
+            bump = 0.2f * ((float)step_vjump_fallback_zero_ms / (float)hold_ms);
+            if (bump > 0.2f)
+                bump = 0.2f;
+        }
+        out = 1.0f + bump;
+    }
     else
     {
         out = (float)ms / arm_denom;
@@ -405,8 +425,13 @@ static void step_vjump_reset_arm_prereq(void)
 {
     step_vjump_arm_ms = 0u;
     step_vjump_armed = 0u;
+    step_vjump_fallback_pending = 0u;
+    step_vjump_fallback_zero_ms = 0u;
+    step_vjump_fallback_ready = 0u;
 }
 
+/* 上一拍 bottom_row_raw：armed 时「未超 TRIGGER 但丢边→0」保底触发 */
+static uint16 step_vjump_prev_bottom_raw;
 /* 上一拍 dualcore snapshot 的 jump_active（与 jump_flag 同步） */
 static uint8 step_vjump_prev_jump_active;
 static uint8 step_vjump_done_count;
@@ -421,9 +446,12 @@ void step_visual_jump_after_step(void)
     dualcore_ctrl_to_ui_t dcj;
     dualcore_ctrl_to_ui_pull(&dcj);
 
-    /* jump_active 上升沿：清空前置状态 */
+    /* jump_active 上升沿：清空前置状态与 bottom 历史 */
     if (step_vjump_prev_jump_active == 0u && dcj.jump_active != 0u)
+    {
         step_vjump_reset_arm_prereq();
+        step_vjump_prev_bottom_raw = 0u;
+    }
 
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
     if (step_vjump_prev_jump_active != 0u && dcj.jump_active == 0u)
@@ -433,19 +461,25 @@ void step_visual_jump_after_step(void)
     step_vjump_prev_jump_active = (dcj.jump_active != 0u) ? 1u : 0u;
 
     uint16 curr = step_data.bottom_row_raw;
+    uint16 prev_b = step_vjump_prev_bottom_raw;
 
     if (step_vjump_lockout != 0u)
+    {
+        step_vjump_prev_bottom_raw = curr;
         return;
+    }
 
     if (dcj.jump_allowed == 0u)
     {
         step_vjump_reset_arm_prereq();
+        step_vjump_prev_bottom_raw = curr;
         return;
     }
 
     if (dcj.jump_active != 0u)
     {
         step_vjump_reset_arm_prereq();
+        step_vjump_prev_bottom_raw = curr;
         return;
     }
 
@@ -453,11 +487,21 @@ void step_visual_jump_after_step(void)
     if (step_vjump_post_cooldown_ticks_remaining > 0u)
     {
         step_vjump_reset_arm_prereq();
+        step_vjump_prev_bottom_raw = curr;
         return;
     }
 #endif
 
-    if (step_vjump_armed != 0u && curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
+    uint8 fire = 0u;
+    if (step_vjump_armed != 0u)
+    {
+        if (curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
+            fire = 1u;
+        else if (step_vjump_fallback_ready != 0u)
+            fire = 1u;
+    }
+
+    if (fire != 0u)
     {
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
         step_vjump_done_count++;
@@ -465,6 +509,10 @@ void step_visual_jump_after_step(void)
             step_vjump_lockout = 1u;
         step_vjump_reset_arm_prereq();
     }
+    else if (step_vjump_armed != 0u && curr == 0u && prev_b > 0u && prev_b <= VISUAL_JUMP_TRIGGER_THRESHOLD)
+        step_vjump_fallback_pending = 1u;
+
+    step_vjump_prev_bottom_raw = curr;
 }
 
 #else
@@ -499,6 +547,37 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
         {
             step_vjump_arm_ms = 0u;
             step_vjump_armed = 0u;
+            step_vjump_fallback_pending = 0u;
+            step_vjump_fallback_zero_ms = 0u;
+            step_vjump_fallback_ready = 0u;
+        }
+
+        /* 保底丢边：须连续 bot==0 满 FALLBACK_ZERO_HOLD_MS */
+        if (step_vjump_fallback_pending != 0u && step_vjump_armed != 0u)
+        {
+            if (bot == 0u)
+            {
+                uint16 hold = VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS;
+                if (hold == 0u)
+                    hold = 1u;
+                uint16 z = (uint16)(step_vjump_fallback_zero_ms + 1u);
+                if (z > hold)
+                    z = hold;
+                step_vjump_fallback_zero_ms = z;
+                if (z >= hold)
+                    step_vjump_fallback_ready = 1u;
+            }
+            else
+            {
+                step_vjump_fallback_zero_ms = 0u;
+                step_vjump_fallback_pending = 0u;
+                step_vjump_fallback_ready = 0u;
+            }
+        }
+        else
+        {
+            step_vjump_fallback_zero_ms = 0u;
+            step_vjump_fallback_ready = 0u;
         }
     }
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
