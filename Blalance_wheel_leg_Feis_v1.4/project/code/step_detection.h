@@ -38,7 +38,7 @@ typedef struct {
     float distance_mm;        // 台阶距离（mm）
     float distance_cm;        // 台阶距离（cm）
     /* 本帧原始台阶下沿行号：与 VOFA CH1（step_bottom_row）一致；find_step_bottom_edge()>0 时写入行号，否则为 0。
-     * 供普通模式“下沿消失触发跳跃”等逻辑使用，不等同于滤波后的测距结果。仅在新摄像头帧被 step_detect 处理时更新。 */
+     * 供视觉自动跳跃（阈值判定，见 VISUAL_JUMP_*）等逻辑使用，不等同于滤波后的测距结果。仅在新摄像头帧被 step_detect 处理时更新。 */
     uint16 bottom_row_raw;
 } step_info_t;
 
@@ -57,7 +57,7 @@ void step_reset_distance_tracking(void);
  *  CH2  step_height_pix  用于测距的像素高（经 STEP_HEIGHT_MED_WIN 帧中值）；与距离公式直接相关
  *  CH3  dist_raw_mm       本帧由 calculate_step_distance 算出的原始距离（未做 10 帧均值）
  *  CH4  dist_filt_mm     与 step_data.distance_mm 一致（滤波后或失败时保持的上次有效值）
- *  CH5  flags             整数化信息：frame_ok*10 + detected；frame_ok=本帧是否通过有效测距更新(0/1)，detected=累计确认标志
+ *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > TRIGGER 时约 1.2（接近发跳）；否则为 0
  *
  * 在 VOFA 里如何判断问题出在谁：
  *  1) CH2 波动大、CH3 跟着跳 → 边缘检测不稳或光照变化，优先改梯度阈值/ROI/对 step_height 做中值滤波
@@ -73,24 +73,38 @@ void step_reset_distance_tracking(void);
 #endif
 
 /*---------------------------------------------------------------------------
- * 视觉自动跳跃（台阶下沿消失触发，经双核命令发往 CM7_0）
+ * 视觉自动跳跃（bottom_row_raw 阈值 + 前置持续时间，经双核命令发往 CM7_0）
  *
  * 仅在 !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE 时
  * step_visual_jump_after_step() 内有实际逻辑；否则为空实现（含 CM7_0 工程链接）。
- * 触发量：step_data.bottom_row_raw（与 VOFA CH1 同语义）；条件为上一拍 >0 且当前为 0，
- * 再连续保持 0 共 VISUAL_JUMP_ZERO_CONFIRM_FRAMES 次（下降沿当帧计第 1 次）。
  *
- * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳、不起动沿确认；
- * 上升沿时清空内部沿状态；jump_active 落地后可选 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 内仍不发跳（CM7_1：
- * pit0_ch0 每毫秒调用 step_visual_jump_post_jump_cooldown_on_cm7_1_1ms()，内部 5 分频等价每 5ms 减一档；时长仍为 N×5ms，
+ * 判定量：step_data.bottom_row_raw（与 VOFA CH1 同语义）。
+ * 前置（由 CM7_1 的 pit0_ch0 每 1ms 调用 step_visual_jump_post_jump_cooldown_on_cm7_1_1ms() 累计）：
+ *   仅当 bottom_row_raw > VISUAL_JUMP_ARM_MIN_THRESHOLD 时递增毫秒计数；
+ *   一旦 bottom_row_raw <= VISUAL_JUMP_ARM_MIN_THRESHOLD 则计数清零并取消前置完成；
+ *   计数达到 VISUAL_JUMP_ARM_TIME_MS 后置「前置完成」，允许触发判定。
+ * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里若 bottom_row_raw >
+ *   VISUAL_JUMP_TRIGGER_THRESHOLD，则 dualcore_ui_cmd_push(JUMP)；触发后清零前置计数与完成标志，
+ *   需重新满足前置才可再次触发。
+ *
+ * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳；
+ * jump_active 上升沿时清空内部前置状态；jump_allowed==0、落地冷却内同样清空前置状态。
+ * jump_active 落地后可选 VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 内仍不发跳（CM7_1：
+ * 同一 1ms ISR 内先做前置毫秒累计，再每 5ms 递减冷却一档；时长仍为 N×5ms，
  * 不占 PIT_CH1，避免与 CM7_0 leg_control 争用 TCPWM CNT[1]）。
  * 发往 CM7_0 的台阶快照见 dualcore_vision_publish_after_step：jump_active 时 step 故意置为全 0 无效帧。
  *---------------------------------------------------------------------------*/
 #ifndef VISUAL_JUMP_AUTO_ENABLE
 #define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
 #endif
-#ifndef VISUAL_JUMP_ZERO_CONFIRM_FRAMES
-#define VISUAL_JUMP_ZERO_CONFIRM_FRAMES 5u /* 连续为 0 的确认次数，抑制单帧丢边 2 */
+#ifndef VISUAL_JUMP_TRIGGER_THRESHOLD
+#define VISUAL_JUMP_TRIGGER_THRESHOLD 100u /* 前置完成后：bottom_row_raw 大于本值则发跳 */
+#endif
+#ifndef VISUAL_JUMP_ARM_MIN_THRESHOLD
+#define VISUAL_JUMP_ARM_MIN_THRESHOLD 60u /* 仅当 bottom_row_raw 大于本值时累计前置毫秒；否则清零 */
+#endif
+#ifndef VISUAL_JUMP_ARM_TIME_MS
+#define VISUAL_JUMP_ARM_TIME_MS 100u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */
@@ -108,7 +122,7 @@ void step_reset_distance_tracking(void);
 /* CM7_1：在 step_detect() 之后调用；读 dualcore_ctrl_to_ui 的 jump_allowed / jump_active，满足时 dualcore_ui_cmd_push(JUMP) */
 void step_visual_jump_after_step(void);
 #if defined(CY_CORE_CM7_1)
-/* CM7_1：pit0_ch0_isr（1ms）每拍调用；累计 5 次后递减落地冷却一档；勿用 PIT_CH1（与 CM7_0 leg_control 同源硬件） */
+/* CM7_1：pit0_ch0_isr（1ms）每拍调用：视觉跳跃前置毫秒累计 + 每 5 次递减落地冷却一档；勿用 PIT_CH1（与 CM7_0 leg_control 同源硬件） */
 void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void);
 #endif /* CY_CORE_CM7_1 */
 

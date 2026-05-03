@@ -8,7 +8,7 @@ static float step_vofa_bottom_row;
 static float step_vofa_height_pix;
 static float step_vofa_dist_raw_mm;
 static float step_vofa_dist_filt_mm;
-/* VOFA CH5：视觉跳跃影子调试（仅 CM7_1 且启用 VISUAL_JUMP 时每圈更新；否则 VOFA 侧发 0） */
+/* VOFA CH5：视觉跳跃影子（前置进度 / armed；仅 CM7_1 且启用 VISUAL_JUMP 时每圈更新；否则 VOFA 侧发 0） */
 static float step_vofa_jump_dbg;
 
 static void step_vofa_snapshot(int top, int bot, float hpix, float raw_mm, uint8 frame_ok)
@@ -372,70 +372,43 @@ void step_reset_distance_tracking(void)
  *---------------------------------------------------------------------------*/
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
 
-#if defined(CY_CORE_CM7_1)
-/* 影子 FSM：仅 bottom_row_raw + N 帧连续 0，不受 jump_allowed/jump_active 等门控（便于电机关调试误触发） */
-static uint16 shadow_prev_bottom;
-static uint8 shadow_in_confirm;
-static uint8 shadow_zero_cnt;
-
-static void step_vjump_vofa_shadow_tick(uint16 curr)
-{
-    float out = 0.0f;
-
-    if (shadow_in_confirm != 0u)
-    {
-        if (curr != 0u)
-        {
-            shadow_in_confirm = 0u;
-            shadow_zero_cnt = 0u;
-        }
-        else
-        {
-            shadow_zero_cnt++;
-            if (shadow_zero_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
-            {
-                out = 1.0f;
-                shadow_in_confirm = 0u;
-                shadow_zero_cnt = 0u;
-            }
-            else
-            {
-                out = (float)shadow_zero_cnt / (float)VISUAL_JUMP_ZERO_CONFIRM_FRAMES;
-            }
-        }
-    }
-    else if (shadow_prev_bottom > 0u && curr == 0u)
-    {
-        shadow_in_confirm = 1u;
-        shadow_zero_cnt = 1u;
-        if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
-        {
-            out = 1.0f;
-            shadow_in_confirm = 0u;
-            shadow_zero_cnt = 0u;
-        }
-        else
-        {
-            out = (float)shadow_zero_cnt / (float)VISUAL_JUMP_ZERO_CONFIRM_FRAMES;
-        }
-    }
-
-    shadow_prev_bottom = curr;
-    step_vofa_jump_dbg = out;
-}
-#endif /* CY_CORE_CM7_1 */
-
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
 static volatile uint16 step_vjump_post_cooldown_ticks_remaining;
 #endif
 
-/* 上一拍的 bottom_row_raw，用于检测 >0 → 0 下降沿 */
-static uint16 step_vjump_prev_bottom_raw;
+/* pit0_ch0 每 1ms 累计：bottom_row_raw > ARM_MIN 时递增，否则清零 */
+static volatile uint16 step_vjump_arm_ms;
+static volatile uint8 step_vjump_armed;
+
+#if defined(CY_CORE_CM7_1)
+/* VOFA CH5 影子：不受 jump_allowed/jump_active 门控；反映前置毫秒进度与 armed / 接近触发 */
+static void step_vjump_vofa_shadow_tick(uint16 curr)
+{
+    const float arm_denom = (VISUAL_JUMP_ARM_TIME_MS > 0u) ? (float)VISUAL_JUMP_ARM_TIME_MS : 1.0f;
+    uint16 ms = step_vjump_arm_ms;
+    uint8 armed = step_vjump_armed;
+
+    float out;
+    if (armed != 0u)
+        out = 1.0f + ((curr > VISUAL_JUMP_TRIGGER_THRESHOLD) ? 0.2f : 0.0f);
+    else
+    {
+        out = (float)ms / arm_denom;
+        if (out > 1.0f)
+            out = 1.0f;
+    }
+    step_vofa_jump_dbg = out;
+}
+#endif /* CY_CORE_CM7_1 */
+
+static void step_vjump_reset_arm_prereq(void)
+{
+    step_vjump_arm_ms = 0u;
+    step_vjump_armed = 0u;
+}
+
 /* 上一拍 dualcore snapshot 的 jump_active（与 jump_flag 同步） */
 static uint8 step_vjump_prev_jump_active;
-/* 1：已捕获下降沿，正在累计连续为 0 的次数 */
-static uint8 step_vjump_in_zero_confirm;
-static uint8 step_vjump_zero_confirm_cnt;
 static uint8 step_vjump_done_count;
 /* 1：已达 VISUAL_JUMP_MAX_COUNT，不再自动发跳 */
 static uint8 step_vjump_lockout;
@@ -448,13 +421,9 @@ void step_visual_jump_after_step(void)
     dualcore_ctrl_to_ui_t dcj;
     dualcore_ctrl_to_ui_pull(&dcj);
 
-    /* jump_active 上升沿：清空沿状态，避免起跳前 bottom 状态带入落地后首帧 */
+    /* jump_active 上升沿：清空前置状态 */
     if (step_vjump_prev_jump_active == 0u && dcj.jump_active != 0u)
-    {
-        step_vjump_prev_bottom_raw = 0u;
-        step_vjump_in_zero_confirm = 0u;
-        step_vjump_zero_confirm_cnt = 0u;
-    }
+        step_vjump_reset_arm_prereq();
 
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
     if (step_vjump_prev_jump_active != 0u && dcj.jump_active == 0u)
@@ -466,74 +435,36 @@ void step_visual_jump_after_step(void)
     uint16 curr = step_data.bottom_row_raw;
 
     if (step_vjump_lockout != 0u)
-    {
-        step_vjump_prev_bottom_raw = curr;
         return;
-    }
 
     if (dcj.jump_allowed == 0u)
     {
-        step_vjump_in_zero_confirm = 0u;
-        step_vjump_zero_confirm_cnt = 0u;
-        step_vjump_prev_bottom_raw = curr;
+        step_vjump_reset_arm_prereq();
         return;
     }
 
     if (dcj.jump_active != 0u)
     {
-        step_vjump_in_zero_confirm = 0u;
-        step_vjump_zero_confirm_cnt = 0u;
-        step_vjump_prev_bottom_raw = curr;
+        step_vjump_reset_arm_prereq();
         return;
     }
 
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
     if (step_vjump_post_cooldown_ticks_remaining > 0u)
     {
-        step_vjump_in_zero_confirm = 0u;
-        step_vjump_zero_confirm_cnt = 0u;
-        step_vjump_prev_bottom_raw = curr;
+        step_vjump_reset_arm_prereq();
         return;
     }
 #endif
 
-    if (step_vjump_in_zero_confirm != 0u)
+    if (step_vjump_armed != 0u && curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
     {
-        if (curr != 0u)
-        {
-            step_vjump_in_zero_confirm = 0u;
-            step_vjump_zero_confirm_cnt = 0u;
-        }
-        else
-        {
-            step_vjump_zero_confirm_cnt++;
-            if (step_vjump_zero_confirm_cnt >= VISUAL_JUMP_ZERO_CONFIRM_FRAMES)
-            {
-                (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
-                step_vjump_done_count++;
-                if (step_vjump_done_count >= VISUAL_JUMP_MAX_COUNT)
-                    step_vjump_lockout = 1u;
-                step_vjump_in_zero_confirm = 0u;
-                step_vjump_zero_confirm_cnt = 0u;
-            }
-        }
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
+        step_vjump_done_count++;
+        if (step_vjump_done_count >= VISUAL_JUMP_MAX_COUNT)
+            step_vjump_lockout = 1u;
+        step_vjump_reset_arm_prereq();
     }
-    else if (step_vjump_prev_bottom_raw > 0u && curr == 0u)
-    {
-        step_vjump_in_zero_confirm = 1u;
-        step_vjump_zero_confirm_cnt = 1u;
-        if (VISUAL_JUMP_ZERO_CONFIRM_FRAMES <= 1u)
-        {
-            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
-            step_vjump_done_count++;
-            if (step_vjump_done_count >= VISUAL_JUMP_MAX_COUNT)
-                step_vjump_lockout = 1u;
-            step_vjump_in_zero_confirm = 0u;
-            step_vjump_zero_confirm_cnt = 0u;
-        }
-    }
-
-    step_vjump_prev_bottom_raw = curr;
 }
 
 #else
@@ -549,19 +480,39 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
 {
     /*
      * 不用 PIT_CH1：其与 CM7_0 的 TCPWM0->GRP[2].CNT[1]/leg_control 冲突（见 init.c CM7_1 注释）。
-     * VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS 仍为「每 5ms 减一档」语义：pit0_ch0 每 1ms 进本函数，内部 ÷5 后递减；
-     * 预处理条件与读写 step_vjump_* 必须与 step_visual_jump_after_step() 活跃块一致，否则编译无静态变量引用。
+     * 每 1ms：视觉跳跃前置毫秒累计（bottom_row_raw）。
+     * VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS：仍为「每 5ms 减一档」语义，内部 ÷5 后递减落地冷却。
      */
-#if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE && (VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u)
+#if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
+    {
+        uint16 bot = step_data.bottom_row_raw;
+        if (bot > VISUAL_JUMP_ARM_MIN_THRESHOLD)
+        {
+            uint16 ms = (uint16)(step_vjump_arm_ms + 1u);
+            if (ms > VISUAL_JUMP_ARM_TIME_MS)
+                ms = VISUAL_JUMP_ARM_TIME_MS;
+            step_vjump_arm_ms = ms;
+            if (step_vjump_arm_ms >= VISUAL_JUMP_ARM_TIME_MS)
+                step_vjump_armed = 1u;
+        }
+        else
+        {
+            step_vjump_arm_ms = 0u;
+            step_vjump_armed = 0u;
+        }
+    }
+#if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
     static uint8 ms_agg_for_vjump_cd;
     ms_agg_for_vjump_cd++;
-    if (ms_agg_for_vjump_cd < 5u)
-        return;
-    ms_agg_for_vjump_cd = 0u;
-    uint16 r = step_vjump_post_cooldown_ticks_remaining;
-    if (r > 0u)
-        step_vjump_post_cooldown_ticks_remaining = (uint16)(r - 1u);
+    if (ms_agg_for_vjump_cd >= 5u)
+    {
+        ms_agg_for_vjump_cd = 0u;
+        uint16 r = step_vjump_post_cooldown_ticks_remaining;
+        if (r > 0u)
+            step_vjump_post_cooldown_ticks_remaining = (uint16)(r - 1u);
+    }
 #endif
+#endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
 }
 #endif /* CY_CORE_CM7_1 */
 
