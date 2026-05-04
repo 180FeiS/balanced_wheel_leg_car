@@ -1212,6 +1212,12 @@
             <name>$PROJ_DIR$\..\..\code\UI.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\image.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\image.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\vmc.c</name>
         </file>
         <file>

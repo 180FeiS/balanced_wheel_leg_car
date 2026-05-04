@@ -31,6 +31,7 @@
 * 2024-12-19        Bron            V2.0.1         移植到新工程，重新整理菜单
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
+#include "image.h"
 #if defined(CY_CORE_CM7_1)
 #include "dualcore_shared.h"
 static dualcore_ctrl_to_ui_t s_ui_dc;
@@ -663,7 +664,6 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
 
 void GUI_2_1_1(void) // 台阶检测
 {
-
     GUI_Display_Level3_ImageDetect(1);
 
     ips200_show_string(0,ROW_7,"Detected:");
@@ -676,8 +676,13 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(0,ROW_9,"Height:");
     ips200_show_uint(88,ROW_9,step_data.step_height_pix,3);
     ips200_show_string(136,ROW_9,"pix");
-    /* 与台阶检测算法一致：显示当前灰度帧（mt9v03x_image），由 10ms 软任务 step_detect 拉取新帧后更新。 */
-    ips200_show_gray_image(0,ROW_10,mt9v03x_image[0],MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
+
+    /*
+     * ips200_show_gray_image(x, y, image, width, height, dis_width, dis_height, threshold)
+     *   同上：台阶页仅一幅全场 RAW，与同页算法共用 mt9v03x_image。
+     */
+    ips200_show_gray_image(0,ROW_10,mt9v03x_image[0],
+                           MT9V03X_W, MT9V03X_H, MT9V03X_W, MT9V03X_H, 0);
 
 }
 void ACT_2_1_1()
@@ -693,11 +698,17 @@ void GUI_2_1_2(void) // 单边桥检测
 {
     GUI_Display_Level3_ImageDetect(2);
 
-    ips200_show_string(0,ROW_8,"Single Bridge");
-    ips200_show_string(0,ROW_9,"Reserved Page");
-    ips200_show_string(0,ROW_11,"Use this page");
-    ips200_show_string(0,ROW_12,"for future image");
-    ips200_show_string(0,ROW_13,"detection logic.");
+    ips200_show_string(0,ROW_7,"Bridge");
+    /* 与当前曝光/增益下同一帧：先做 1/2 抽样再放大到与 RAW 相同显示区域，便于单独观察（台阶页仅保留全场图）。 */
+    ips200_show_string(0,ROW_8,"曝光:1/2灰度");
+    image_gray_compress_from_full(mt9v03x_image[0]);
+    /*
+     * ips200_show_gray_image(x, y, image, width, height, dis_width, dis_height, threshold)
+     *   缓冲为 IMAGE_COMPRESS_W×H，dis 用 MT9V03X_W×H 拉至与台阶页同尺寸；内容对应当前摄像头输出（含曝光效果）。
+     */
+    ips200_show_gray_image(0,ROW_10,image_gray_compress[0],
+                           IMAGE_COMPRESS_W,IMAGE_COMPRESS_H,
+                           MT9V03X_W,MT9V03X_H,0);
 }
 void ACT_2_1_2()
 {
