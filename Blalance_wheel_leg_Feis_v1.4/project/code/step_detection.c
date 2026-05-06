@@ -384,11 +384,28 @@ static volatile uint8 step_vjump_fallback_pending;
 static volatile uint16 step_vjump_fallback_zero_ms;
 static volatile uint8 step_vjump_fallback_ready;
 
+/* 已成功投递的视觉跳跃次数；下一次触发选用对应 VISUAL_JUMP_TRIGGER_THRESHOLD* */
+static uint8 step_vjump_done_count;
+
+static uint16 step_vjump_trigger_threshold_for_pending_jump(void)
+{
+    switch (step_vjump_done_count)
+    {
+    case 0u:
+        return (uint16)VISUAL_JUMP_TRIGGER_THRESHOLD;
+    case 1u:
+        return (uint16)VISUAL_JUMP_TRIGGER_THRESHOLD_2ND;
+    default:
+        return (uint16)VISUAL_JUMP_TRIGGER_THRESHOLD_3RD;
+    }
+}
+
 #if defined(CY_CORE_CM7_1)
 /* VOFA CH5 影子：不受 jump_allowed/jump_active 门控；反映前置毫秒进度与 armed / 接近触发 */
 static void step_vjump_vofa_shadow_tick(uint16 curr)
 {
     const float arm_denom = (VISUAL_JUMP_ARM_TIME_MS > 0u) ? (float)VISUAL_JUMP_ARM_TIME_MS : 1.0f;
+    const uint16 trig = step_vjump_trigger_threshold_for_pending_jump();
     uint16 ms = step_vjump_arm_ms;
     uint8 armed = step_vjump_armed;
 
@@ -396,7 +413,7 @@ static void step_vjump_vofa_shadow_tick(uint16 curr)
     if (armed != 0u)
     {
         float bump = 0.0f;
-        if (curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
+        if (curr > trig)
             bump = 0.2f;
         else if (step_vjump_fallback_ready != 0u)
             bump = 0.2f;
@@ -430,11 +447,10 @@ static void step_vjump_reset_arm_prereq(void)
     step_vjump_fallback_ready = 0u;
 }
 
-/* 上一拍 bottom_row_raw：armed 时「未超 TRIGGER 但丢边→0」保底触发 */
+/* 上一拍 bottom_row_raw：armed 时「未超触发阈值但丢边→0」保底触发 */
 static uint16 step_vjump_prev_bottom_raw;
 /* 上一拍 dualcore snapshot 的 jump_active（与 jump_flag 同步） */
 static uint8 step_vjump_prev_jump_active;
-static uint8 step_vjump_done_count;
 /* 1：已达 VISUAL_JUMP_MAX_COUNT，不再自动发跳 */
 static uint8 step_vjump_lockout;
 
@@ -492,10 +508,12 @@ void step_visual_jump_after_step(void)
     }
 #endif
 
+    const uint16 trig = step_vjump_trigger_threshold_for_pending_jump();
+
     uint8 fire = 0u;
     if (step_vjump_armed != 0u)
     {
-        if (curr > VISUAL_JUMP_TRIGGER_THRESHOLD)
+        if (curr > trig)
             fire = 1u;
         else if (step_vjump_fallback_ready != 0u)
             fire = 1u;
@@ -509,7 +527,7 @@ void step_visual_jump_after_step(void)
             step_vjump_lockout = 1u;
         step_vjump_reset_arm_prereq();
     }
-    else if (step_vjump_armed != 0u && curr == 0u && prev_b > 0u && prev_b <= VISUAL_JUMP_TRIGGER_THRESHOLD)
+    else if (step_vjump_armed != 0u && curr == 0u && prev_b > 0u && prev_b <= trig)
         step_vjump_fallback_pending = 1u;
 
     step_vjump_prev_bottom_raw = curr;

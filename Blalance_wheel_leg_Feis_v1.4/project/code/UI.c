@@ -669,6 +669,7 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(0,ROW_7,"Detected:");
     ips200_show_string(88,ROW_7,step_data.detected ? "Yes" : "No ");
 
+    ips200_show_string(0,ROW_6,"压缩灰度");
     ips200_show_string(0,ROW_8,"Distance:");
     ips200_show_float(88,ROW_8,step_data.distance_cm,3,1);
     ips200_show_string(136,ROW_8,"cm");
@@ -678,11 +679,13 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(136,ROW_9,"pix");
 
     /*
-     * ips200_show_gray_image(x, y, image, width, height, dis_width, dis_height, threshold)
-     *   同上：台阶页仅一幅全场 RAW，与同页算法共用 mt9v03x_image。
+     * 主图：1/2 压缩灰度 `image_two_value`，与视觉主域、AE 统计坐标系一致。
+     * `step_detection` 若仍基于全场 `mt9v03x_image`（raw），与屏上压缩观感可能不一致，属有意分工。
      */
-    ips200_show_gray_image(0,ROW_10,mt9v03x_image[0],
-                           MT9V03X_W, MT9V03X_H, MT9V03X_W, MT9V03X_H, 0);
+    image_photo_compress(mt9v03x_image[0]);
+    ips200_show_gray_image(0,ROW_10,image_two_value[0],
+                           IMAGE_COMPRESS_W,IMAGE_COMPRESS_H,
+                           MT9V03X_W,MT9V03X_H,0);
 
 }
 void ACT_2_1_1()
@@ -699,14 +702,14 @@ void GUI_2_1_2(void) // 单边桥检测
     GUI_Display_Level3_ImageDetect(2);
 
     ips200_show_string(0,ROW_7,"Bridge");
-    /* 与当前曝光/增益下同一帧：先做 1/2 抽样再放大到与 RAW 相同显示区域，便于单独观察（台阶页仅保留全场图）。 */
-    ips200_show_string(0,ROW_8,"曝光:1/2灰度");
-    image_gray_compress_from_full(mt9v03x_image[0]);
     /*
-     * ips200_show_gray_image(x, y, image, width, height, dis_width, dis_height, threshold)
-     *   缓冲为 IMAGE_COMPRESS_W×H，dis 用 MT9V03X_W×H 拉至与台阶页同尺寸；内容对应当前摄像头输出（含曝光效果）。
+     * 单列「压缩·AE 后」：本页不叠双图，避免竖向两窗占位不足、dis_* 强压畸变；与台阶页对照请切菜单。
+     * `image_camera_auto_exposure()` 内有界迭代，可能短时阻塞；AE 后在当前曝光下再压一帧用于显示。
      */
-    ips200_show_gray_image(0,ROW_10,image_gray_compress[0],
+    ips200_show_string(0,ROW_8,"压缩 AE后");
+    image_camera_auto_exposure();
+    image_photo_compress(mt9v03x_image[0]);
+    ips200_show_gray_image(0,ROW_10,image_two_value[0],
                            IMAGE_COMPRESS_W,IMAGE_COMPRESS_H,
                            MT9V03X_W,MT9V03X_H,0);
 }

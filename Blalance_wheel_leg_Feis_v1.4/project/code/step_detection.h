@@ -18,9 +18,9 @@
 /* 边缘检测：CH2/CH3 抖动时优先调大 GRAD_THRESH 或 MIN_DIV；检不到台阶则反向调 */
 #define STEP_EDGE_ROW_DELTA    2   /* 纵向梯度用 i±此行距，越小边缘定位越细 */
 #define STEP_EDGE_GRAD_THRESH  50  /* 灰度差阈值，场地亮/反光强可调到 60~80 */
-/* 软阈值直方图：白台面→蓝台阶时过曝/对比弱，强阈值下 edge 计数不够；须小于 GRAD_THRESH；0=不建软直方图 */
-#define STEP_EDGE_GRAD_SOFT_THRESH 32
-#define STEP_EDGE_MIN_DIV      3   /* 水平边缘最少计数 = MT9V03X_W / 本值，越大越严 */
+/* 软阈值直方图：白台面→蓝台阶时过曝/对比弱，强阈值下 edge 计数不够；须小于 GRAD_THRESH；0=不建软直方图，看不到二级台阶，减小这个 */
+#define STEP_EDGE_GRAD_SOFT_THRESH 25
+#define STEP_EDGE_MIN_DIV      3   /* 水平边缘最少计数 = MT9V03X_W / 本值，越小越严 */
 #define STEP_HEIGHT_MED_WIN    5   /* 像素高中值滤波窗口（进入测距公式前） */
 
 /* 下沿纵向 ROI：仅搜 [H/STEP_BOTTOM_ROW_START_DIV , H-10)。除数越大起始行越靠上，越利于“站在白台面看下一级”（边常出现在画面中上部）；除数过小易等同只搜下半幅导致 CH1 恒为 0 */
@@ -57,7 +57,7 @@ void step_reset_distance_tracking(void);
  *  CH2  step_height_pix  用于测距的像素高（经 STEP_HEIGHT_MED_WIN 帧中值）；与距离公式直接相关
  *  CH3  dist_raw_mm       本帧由 calculate_step_distance 算出的原始距离（未做 10 帧均值）
  *  CH4  dist_filt_mm     与 step_data.distance_mm 一致（滤波后或失败时保持的上次有效值）
- *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > TRIGGER 或 armed 且丢边保底接近发跳时约 1.2；否则为 0
+ *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > 当前跳触发阈值（VISUAL_JUMP_TRIGGER_THRESHOLD / _2ND / _3RD）或丢边保底接近发跳时约 1.2；否则为 0
  *
  * 在 VOFA 里如何判断问题出在谁：
  *  1) CH2 波动大、CH3 跟着跳 → 边缘检测不稳或光照变化，优先改梯度阈值/ROI/对 step_height 做中值滤波
@@ -83,9 +83,10 @@ void step_reset_distance_tracking(void);
  *   仅当 bottom_row_raw > VISUAL_JUMP_ARM_MIN_THRESHOLD 时递增毫秒计数；
  *   一旦 bottom_row_raw <= VISUAL_JUMP_ARM_MIN_THRESHOLD 则计数清零并取消前置完成；
  *   计数达到 VISUAL_JUMP_ARM_TIME_MS 后置「前置完成」，允许触发判定。
- * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里：
- *   1) bottom_row_raw > VISUAL_JUMP_TRIGGER_THRESHOLD → dualcore_ui_cmd_push(JUMP)；
- *   2) 保底丢边：上一拍为 (0, TRIGGER] 且变为 0 后，须由 pit0_ch0 连续判定 bottom_row_raw==0
+ * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里（触发阈值按已成功跳跃次数选对）：
+ *   第 1 跳：VISUAL_JUMP_TRIGGER_THRESHOLD；第 2 跳：VISUAL_JUMP_TRIGGER_THRESHOLD_2ND；第 3 跳及以上：VISUAL_JUMP_TRIGGER_THRESHOLD_3RD。
+ *   1) bottom_row_raw > 当前跳的触发阈值 → dualcore_ui_cmd_push(JUMP)；
+ *   2) 保底丢边：上一拍为 (0, 当前触发阈值] 且变为 0 后，须由 pit0_ch0 连续判定 bottom_row_raw==0
  *      满 VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 毫秒才发跳；
  * 触发后清零前置计数与完成标志，需重新满足前置才可再次触发。
  *
@@ -100,13 +101,19 @@ void step_reset_distance_tracking(void);
 #define VISUAL_JUMP_AUTO_ENABLE 1u /* 0=关闭自动跳跃 */
 #endif
 #ifndef VISUAL_JUMP_TRIGGER_THRESHOLD
-#define VISUAL_JUMP_TRIGGER_THRESHOLD 106u /* 前置完成后：bottom_row_raw 大于本值则发跳 */
+#define VISUAL_JUMP_TRIGGER_THRESHOLD 106u /* 第 1 跳：前置完成后 bottom_row_raw 大于本值则发跳 */
+#endif
+#ifndef VISUAL_JUMP_TRIGGER_THRESHOLD_2ND
+#define VISUAL_JUMP_TRIGGER_THRESHOLD_2ND 106u /* 第 2 跳专用触发阈值 */
+#endif
+#ifndef VISUAL_JUMP_TRIGGER_THRESHOLD_3RD
+#define VISUAL_JUMP_TRIGGER_THRESHOLD_3RD 106u /* 第 3 跳及以后（与默认 106 一致，可按场布覆盖）*/
 #endif
 #ifndef VISUAL_JUMP_ARM_MIN_THRESHOLD
 #define VISUAL_JUMP_ARM_MIN_THRESHOLD 50u /* 仅当 bottom_row_raw 大于本值时累计前置毫秒；否则清零 */
 #endif
 #ifndef VISUAL_JUMP_ARM_TIME_MS
-#define VISUAL_JUMP_ARM_TIME_MS 80u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
+#define VISUAL_JUMP_ARM_TIME_MS 40u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
 #endif
 #ifndef VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS
 #define VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 10u /* 保底丢边：bottom_row_raw==0 须连续保持本毫秒数（1ms ISR）才允许发跳 */

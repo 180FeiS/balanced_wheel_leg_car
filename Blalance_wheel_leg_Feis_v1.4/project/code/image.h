@@ -1,10 +1,11 @@
 /*********************************************************************************************************************
  * @file    image.h
- * @brief   摄像头灰度图 1/2 抽样压缩、大津法（Otsu）阈值、缓冲区二值化；思路来自 TC387 camera 模块，与全场 raw 分离缓冲。
+ * @brief   TC387 camera 模块迁入：1/2 压缩 `image_two_value`、大津、二值化、边线/最长白列、软件自动曝光等。
  *
  * @note
- *   - MT9V03X_H、MT9V03X_W 须为偶数：每 2×2 像素取左上角一点，等效长宽各减半。
- *   - 二值化请使用独立缓冲区（如压缩图的副本），勿直接覆盖仍用于显示或上游算法的 `mt9v03x_image`。
+ *   - MT9V03X_H、MT9V03X_W 须为偶数；压缩尺寸为 `IMAGE_COMPRESS_H/W`。
+ *   - 遍历/识别建议以 `image_two_value` 为坐标系（与同尺寸二值图一致）。
+ *   - `step_detection.c` 若仍用全场 `mt9v03x_image`，与菜单压缩显示可能不一致，见 UI 注释。
  *********************************************************************************************************************/
 #ifndef PROJECT_CODE_IMAGE_H_
 #define PROJECT_CODE_IMAGE_H_
@@ -16,46 +17,69 @@
 #error "MT9V03X_H/W must be even for 1/2 compress"
 #endif
 
-/** 压缩图行数（高度），为全场 MT9V03X_H 的 1/2，单位：像素行 */
 #define IMAGE_COMPRESS_H    (MT9V03X_H / 2)
-/** 压缩图列数（宽度），为全场 MT9V03X_W 的 1/2，单位：像素列 */
 #define IMAGE_COMPRESS_W    (MT9V03X_W / 2)
 
-/** 二值化后「黑」侧写入的灰度值，固定 0x00 */
 #define IMAGE_BIN_BLACK     ((uint8)0x00)
-/** 二值化后「白」侧写入的灰度值，固定 0xff */
 #define IMAGE_BIN_WHITE     ((uint8)0xff)
+/** TC：`IMG_BLACK` / `IMG_WHITE`，与二值化占位一致 */
+#define IMG_BLACK           IMAGE_BIN_BLACK
+#define IMG_WHITE           IMAGE_BIN_WHITE
 
-/** 1/2 抽样后的灰度图；4 字节对齐，利于与裸机习惯一致 */
-extern uint8 image_gray_compress[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W]
+/** 当前写入摄像头的曝光时间；与 TC `Camera_exposure` 对应，由 `mt9v03x_set_exposure_time` 下发 */
+extern uint16 image_camera_exposure;
+
+/** 压缩灰度 + 二值/巡线共用缓冲（TC `image_two_value`） */
+extern uint8 image_two_value[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W]
     __attribute__((aligned(4)));
 
-/**
- * @brief  从全场采集缓冲做 1/2 行列抽样，结果写入 `image_gray_compress`。
- * @param  src_full_row0 全场图像第 0 行首地址，通常为 `mt9v03x_image[0]`；
- *                       行宽为 MT9V03X_W，共 MT9V03X_H 行，布局与 `zf_device_mt9v03x` 一致。
- */
-void image_gray_compress_from_full(const uint8 *src_full_row0);
+extern int    int_test_printf;
+extern int    hd_threshold;
+extern float  Cammer_Err;
+extern int    end_line;
+extern int    white_sum;
+extern int    Threshold;
+extern int    test_printf_light;
+
+extern volatile int Search_Stop_Line;
+extern volatile int Left_Line[IMAGE_COMPRESS_H];
+extern volatile int Right_Line[IMAGE_COMPRESS_H];
+extern volatile int Mid_Line[IMAGE_COMPRESS_H];
+extern volatile int Boundry_Start_Left;
+extern volatile int Boundry_Start_Right;
+extern volatile int Left_Lost_Time;
+extern volatile int Right_Lost_Time;
+extern volatile int Both_Lost_Time;
+extern volatile int Road_Wide[IMAGE_COMPRESS_H];
+extern volatile int White_Column[IMAGE_COMPRESS_W];
+
+extern int Longest_White_Column_Left[2];
+extern int Longest_White_Column_Right[2];
+
+void    image_photo_compress        (const uint8 *src_full_row0);
+/** 与 `image_photo_compress` 等价，旧代码/菜单仍可用此名 */
+void    image_gray_compress_from_full(const uint8 *src_full_row0);
+
+uint8   image_otsu_threshold        (const uint8 *image, uint16 col, uint16 row);
+/** 对当前 `image_two_value` 做大津，结果写入 `Threshold` 可选由调用方读取 */
+uint8   image_otsu_on_process_buf   (void);
+
+void    image_binarize_buffer       (uint8 *buf, uint16 col, uint16 row,
+                                     int threshold, uint8 black, uint8 white);
+/** 就地二值化，仅处理 `image_two_value`（TC `Image_Binarization`） */
+void    image_binarization_inplace    (int threshold);
+
+void    hd_whitemax                 (int bw_Threshold);
+void    camera_huidu                (int bw_Threshold);
+void    Longest_White_Column        (void);
+
+float   Err_Sum                     (void);
+float   Err_bx_Sum                  (void);
 
 /**
- * @brief  大津法计算灰度分割阈值（最大化类间方差）。
- * @param  image 灰度数据，行优先（row-major）：第 (r,c) 像素下标为 `r * col + c`。
- * @param  col   图像宽度（列数），单位：像素。
- * @param  row   图像高度（行数），单位：像素。
- * @return       最优阈值，范围 0~255；若仅单色或两灰度等退化情形，返回约定值便于直接使用。
+ * @brief TC `v_iftc_camera_autoexposure`：在压缩 ROI 上统计亮度闭环调节 `image_camera_exposure`。
+ * @note 不修改 `mt9v03x_finish_flag`（与台阶检测等共用场中断时的约定）；单次调用内有界迭代。
  */
-uint8 image_otsu_threshold(const uint8 *image, uint16 col, uint16 row);
-
-/**
- * @brief  对缓冲区就地二值化（不读写 `mt9v03x_image`）。
- * @param  buf       灰度缓冲区，行优先：第 (r,c) 为 `buf[r * col + c]`。
- * @param  col       宽度（列数）。
- * @param  row       高度（行数）。
- * @param  threshold 分割阈值：`buf[i] >= threshold` 写 `white`，否则写 `black`。
- * @param  black     低于阈值时写入的值，通常为 IMAGE_BIN_BLACK。
- * @param  white     不低于阈值时写入的值，通常为 IMAGE_BIN_WHITE。
- */
-void image_binarize_buffer(uint8 *buf, uint16 col, uint16 row,
-                           int threshold, uint8 black, uint8 white);
+void    image_camera_auto_exposure  (void);
 
 #endif /* PROJECT_CODE_IMAGE_H_ */

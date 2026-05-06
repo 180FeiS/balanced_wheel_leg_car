@@ -1,4 +1,5 @@
 #include "zf_common_headfile.h"
+#include "image.h"
 
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -201,7 +202,10 @@ void my_camera_init(void)
 void camera_init_ips200(void)
 {
   ips200_show_init();
-  mt9v03x_init();
+  if (mt9v03x_init() == 0u)
+  {
+    (void)mt9v03x_set_exposure_time(image_camera_exposure);
+  }
   ips200_show_string(0, 0, "mt9v03x_init...");
   ips200_show_string(0, 16, "init success...");
   ips200_clear();
