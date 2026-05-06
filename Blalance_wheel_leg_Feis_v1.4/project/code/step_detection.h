@@ -57,7 +57,7 @@ void step_reset_distance_tracking(void);
  *  CH2  step_height_pix  用于测距的像素高（经 STEP_HEIGHT_MED_WIN 帧中值）；与距离公式直接相关
  *  CH3  dist_raw_mm       本帧由 calculate_step_distance 算出的原始距离（未做 10 帧均值）
  *  CH4  dist_filt_mm     与 step_data.distance_mm 一致（滤波后或失败时保持的上次有效值）
- *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0，bottom_row_raw > 当前跳触发阈值（VISUAL_JUMP_TRIGGER_THRESHOLD / _2ND / _3RD）或丢边保底接近发跳时约 1.2；否则为 0
+ *  CH5  jump_shadow       CM7_1 且启用视觉跳跃时：前置毫秒进度 ~[0,1]；armed 后置约 1.0；若 bottom_row_raw 大于当前跳主触发阈值，或 fallback_ready／丢边零保持进程中，可加约 0~0.2 至合计约 1.2；否则 ≤1.0
  *
  * 在 VOFA 里如何判断问题出在谁：
  *  1) CH2 波动大、CH3 跟着跳 → 边缘检测不稳或光照变化，优先改梯度阈值/ROI/对 step_height 做中值滤波
@@ -73,22 +73,28 @@ void step_reset_distance_tracking(void);
 #endif
 
 /*---------------------------------------------------------------------------
- * 视觉自动跳跃（bottom_row_raw 阈值 + 前置持续时间，经双核命令发往 CM7_0）
+ * 视觉自动跳跃（bottom_row_raw + 前置毫秒 + 主触发阈值 / 丢边保底；经双核发往 CM7_0）
  *
  * 仅在 !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE 时
  * step_visual_jump_after_step() 内有实际逻辑；否则为空实现（含 CM7_0 工程链接）。
  *
  * 判定量：step_data.bottom_row_raw（与 VOFA CH1 同语义）。
- * 前置（由 CM7_1 的 pit0_ch0 每 1ms 调用 step_visual_jump_post_jump_cooldown_on_cm7_1_1ms() 累计）：
- *   仅当 bottom_row_raw > VISUAL_JUMP_ARM_MIN_THRESHOLD 时递增毫秒计数；
- *   一旦 bottom_row_raw <= VISUAL_JUMP_ARM_MIN_THRESHOLD 则计数清零并取消前置完成；
- *   计数达到 VISUAL_JUMP_ARM_TIME_MS 后置「前置完成」，允许触发判定。
- * 触发：前置完成后，在主循环 step_visual_jump_after_step() 里（触发阈值按已成功跳跃次数选对）：
- *   第 1 跳：VISUAL_JUMP_TRIGGER_THRESHOLD；第 2 跳：VISUAL_JUMP_TRIGGER_THRESHOLD_2ND；第 3 跳及以上：VISUAL_JUMP_TRIGGER_THRESHOLD_3RD。
- *   1) bottom_row_raw > 当前跳的触发阈值 → dualcore_ui_cmd_push(JUMP)；
- *   2) 保底丢边：上一拍为 (0, 当前触发阈值] 且变为 0 后，须由 pit0_ch0 连续判定 bottom_row_raw==0
- *      满 VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 毫秒才发跳；
- * 触发后清零前置计数与完成标志，需重新满足前置才可再次触发。
+ *
+ * 【前置】在 pit0_ch0 每 1ms ISR（step_visual_jump_post_jump_cooldown_on_cm7_1_1ms）中：
+ *   仅当 bottom_row_raw > VISUAL_JUMP_ARM_MIN_THRESHOLD 时递增「强项 streak」毫秒；
+ *   未维持强项时每拍清零该 streak（step_vjump_arm_ms），不因 bot==0 或弱值而擅自清除 step_vjump_armed，
+ *   否则会使得「丢边后连续 bot==0 再保持 FALLBACK_ZERO_HOLD_MS」永远无法成立。
+ *   streak 达 VISUAL_JUMP_ARM_TIME_MS 后置 step_vjump_armed（前置完成），允许主循环判跳。
+ *
+ * 【主触发】前置完成后在主循环：（阈值按已成功跳跃次数 VISUAL_JUMP_TRIGGER_THRESHOLD / _2ND / _3RD）
+ *   bottom_row_raw > 当前跳的触发阈值 且 armed → dualcore_ui_cmd_push(JUMP)；无需先变 0。
+ *
+ * 【丢边保底】不依赖大于主触发阈值：主循环若 armed、本帧 curr==0、上一帧 prev > ARM_MIN，
+ *   则置 fallback_pending；ISR 在 pending 期间须 bottom_row_raw 连续 ==0 累计满
+ *   VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 后置 fallback_ready，主循环再发跳。
+ *   余项下沿再次出现（bot>ARM_MIN）时 ISR 作废 pending，防止假丢边误跳。
+ *
+ * 触发成功或互锁发生时清零前置／丢边，需重新攒前置才可再次判定。
  *
  * 与跳跃互锁：dualcore_ctrl_to_ui.jump_active==1（CM7_0 的 jump_flag）时不发跳；
  * jump_active 上升沿时清空内部前置状态；jump_allowed==0、落地冷却内同样清空前置状态。
@@ -110,13 +116,13 @@ void step_reset_distance_tracking(void);
 #define VISUAL_JUMP_TRIGGER_THRESHOLD_3RD 106u /* 第 3 跳及以后（与默认 106 一致，可按场布覆盖）*/
 #endif
 #ifndef VISUAL_JUMP_ARM_MIN_THRESHOLD
-#define VISUAL_JUMP_ARM_MIN_THRESHOLD 50u /* 仅当 bottom_row_raw 大于本值时累计前置毫秒；否则清零 */
+#define VISUAL_JUMP_ARM_MIN_THRESHOLD 50u /* ISR：用于「强项 streak」阈值；主循环 latch 保底要求上一帧 prev_b 大于本值 */
 #endif
 #ifndef VISUAL_JUMP_ARM_TIME_MS
-#define VISUAL_JUMP_ARM_TIME_MS 40u /* 连续满足 ARM_MIN 所需毫秒数（1ms 节拍累加） */
+#define VISUAL_JUMP_ARM_TIME_MS 40u /* ISR：bottom>ARM_MIN 连续本毫秒后置 armed（前置完成） */
 #endif
 #ifndef VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS
-#define VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 10u /* 保底丢边：bottom_row_raw==0 须连续保持本毫秒数（1ms ISR）才允许发跳 */
+#define VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 10u /* ISR：fallback_pending 时须 bot==0 连续本毫秒才置 fallback_ready（与主阈值无关） */
 #endif
 #ifndef VISUAL_JUMP_MAX_COUNT
 #define VISUAL_JUMP_MAX_COUNT 3u /* 成功投递跳跃命令次数上限，满后 lockout 直至复位 */
@@ -131,10 +137,10 @@ void step_reset_distance_tracking(void);
 #endif
 #endif
 
-/* CM7_1：在 step_detect() 之后调用；读 dualcore_ctrl_to_ui 的 jump_allowed / jump_active，满足时 dualcore_ui_cmd_push(JUMP) */
+/* CM7_1：在 step_detect() 之后调用；门控后主触发或 fallback_ready → dualcore_ui_cmd_push(JUMP) */
 void step_visual_jump_after_step(void);
 #if defined(CY_CORE_CM7_1)
-/* CM7_1：pit0_ch0_isr（1ms）每拍调用：视觉跳跃前置毫秒累计 + 每 5 次递减落地冷却一档；勿用 PIT_CH1（与 CM7_0 leg_control 同源硬件） */
+/* CM7_1：pit0_ch0_isr（1ms）：强项 streak→armed；pending 下 bot==0 零保持；勿在 bot==0 无脑清 armed。另含落地冷却÷5（若配置了 POST_JUMP）。勿用 PIT_CH1（与 CM7_0 leg_control 同源）。 */
 void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void);
 #endif /* CY_CORE_CM7_1 */
 

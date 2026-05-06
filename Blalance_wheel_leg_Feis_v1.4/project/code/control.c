@@ -545,11 +545,11 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 
 /*---------- 跳跃参数（障碍跨越）----------*/
 #define JUMP_PID_SCALE          0.4f  // 跳跃时angle/speed的kp缩放，维持稳定
-#define JUMP_TAKEOFF_P          14.0f // 起跳爆发目标腿长（直通伸腿）
+#define JUMP_TAKEOFF_P          12.5f // 起跳爆发目标腿长（直通伸腿）
 #define JUMP_RETRACT_P          5.5f // 收腿阶段目标腿长（起跳爆发后空中收回一小段，直通到达；实车可调）
-#define JUMP_PREPARE_P          6.5f // 准备缓冲目标腿长（起跳后伸腿高度）
+#define JUMP_PREPARE_P          7.5f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
-#define JUMP_BUFFER_STEP_P_MAX  0.2f  // 执行缓冲时每5ms腿高最大变化
+#define JUMP_BUFFER_STEP_P_MAX  0.16f  // 执行缓冲时每5ms腿高最大变化
 #define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
 #define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
 #define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
@@ -559,9 +559,9 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
  */
 const jump_control_struct jump_control_config[] =
     {
-        {0,  3,  jump_set_step, "起跳"},                                      // 伸腿爆发
-        {3, 8,  jump_set_step, "收腿"},                                       // 空中收回一小段
-        {8, 9, jump_set_step, "准备缓冲"},                                   // 过渡到缓冲前姿态
+        {0,  4,  jump_set_step, "起跳"},                                      // 伸腿爆发
+        {4, 7,  jump_set_step, "收腿"},                                       // 空中收回一小段
+        {7, 9, jump_set_step, "准备缓冲"},                                   // 过渡到缓冲前姿态
         {9, 9 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},          // 落地缓冲（步进收腿）
 };
 const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);

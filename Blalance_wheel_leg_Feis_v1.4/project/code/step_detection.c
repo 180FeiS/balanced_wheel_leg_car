@@ -376,17 +376,26 @@ void step_reset_distance_tracking(void)
 static volatile uint16 step_vjump_post_cooldown_ticks_remaining;
 #endif
 
-/* pit0_ch0 每 1ms 累计：bottom_row_raw > ARM_MIN 时递增，否则清零 */
+/**
+ * step_vjump_arm_ms：连续满足「强项下沿」的毫秒计数（1ms ISR 递增，仅当 bot>ARM_MIN）。
+ * 达 VISUAL_JUMP_ARM_TIME_MS 后置 step_vjump_armed；未维持强项时每拍清零本条 streak，不自动撤 armed。
+ */
 static volatile uint16 step_vjump_arm_ms;
+/** 前置是否完成：允许主循环做「curr>trig」主触发或丢边保底。 */
 static volatile uint8 step_vjump_armed;
-/* 保底丢边：主循环 latch pending；ISR 在 armed&&pending 且 bot==0 时累计毫秒至 FALLBACK_ZERO_HOLD_MS 后置 ready */
+/**
+ * step_vjump_fallback_pending：主循环在「armed 且本帧丢边(curr==0) 且上一帧为强项(prev_b>ARM_MIN)」时置 1。
+ * step_vjump_fallback_zero_ms：pending 期间 bot==0 的连续毫秒计数（ISR）。
+ * step_vjump_fallback_ready：零保持满 VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS 后置 1，主循环据此发保底跳（无需 curr>trig）。
+ */
 static volatile uint8 step_vjump_fallback_pending;
 static volatile uint16 step_vjump_fallback_zero_ms;
 static volatile uint8 step_vjump_fallback_ready;
 
-/* 已成功投递的视觉跳跃次数；下一次触发选用对应 VISUAL_JUMP_TRIGGER_THRESHOLD* */
+/** 已成功投递的视觉跳跃次数；供 step_vjump_trigger_threshold_for_pending_jump() 分档主触发阈值。 */
 static uint8 step_vjump_done_count;
 
+/** 仅主触发路径：返回当前待执行跳（第 1/2/3…）对应的 VISUAL_JUMP_TRIGGER_THRESHOLD*。 */
 static uint16 step_vjump_trigger_threshold_for_pending_jump(void)
 {
     switch (step_vjump_done_count)
@@ -401,7 +410,11 @@ static uint16 step_vjump_trigger_threshold_for_pending_jump(void)
 }
 
 #if defined(CY_CORE_CM7_1)
-/* VOFA CH5 影子：不受 jump_allowed/jump_active 门控；反映前置毫秒进度与 armed / 接近触发 */
+/**
+ * VOFA CH5 jump_shadow：不受 jump_allowed/jump_active 门控。
+ * 未 armed：arm_ms 进度约 [0,1)；armed：约 1.0，若 curr>trig 或 fallback_ready 或丢边计时中再加 0~0.2。
+ * 通道含义详见 step_detection.h 中 VOFA 六路说明。
+ */
 static void step_vjump_vofa_shadow_tick(uint16 curr)
 {
     const float arm_denom = (VISUAL_JUMP_ARM_TIME_MS > 0u) ? (float)VISUAL_JUMP_ARM_TIME_MS : 1.0f;
@@ -438,6 +451,7 @@ static void step_vjump_vofa_shadow_tick(uint16 curr)
 }
 #endif /* CY_CORE_CM7_1 */
 
+/** 清空前置/丢边：发跳成功、jump_allowed 为 0、jump_active、落地冷却、jump_active 上升沿等。 */
 static void step_vjump_reset_arm_prereq(void)
 {
     step_vjump_arm_ms = 0u;
@@ -447,13 +461,18 @@ static void step_vjump_reset_arm_prereq(void)
     step_vjump_fallback_ready = 0u;
 }
 
-/* 上一拍 bottom_row_raw：armed 时「未超触发阈值但丢边→0」保底触发 */
+/** 主循环上一帧的 bottom_row_raw，用于丢边沿检测（curr==0 且 prev_b>ARM_MIN 时 latch pending）。 */
 static uint16 step_vjump_prev_bottom_raw;
-/* 上一拍 dualcore snapshot 的 jump_active（与 jump_flag 同步） */
+/** dualcore_ctrl_to_ui 上一拍的 jump_active，用于上升沿清空视觉跳状态（与 CM7_0 jump_flag 同步）。 */
 static uint8 step_vjump_prev_jump_active;
-/* 1：已达 VISUAL_JUMP_MAX_COUNT，不再自动发跳 */
+/** 已达 VISUAL_JUMP_MAX_COUNT 次成功投跳后锁死，直至逻辑外复位。 */
 static uint8 step_vjump_lockout;
 
+/**
+ * CM7_1 主循环：在 step_detect() 后调用。
+ * 拉取 jump_allowed / jump_active；若 armed 则「curr>trig」主触发或「fallback_ready」保底触发；
+ * 否则在 armed 且丢边时置 fallback_pending。禁止在 bot==0 的 ISR 里无条件清 armed（见 1ms 函数注释）。
+ */
 void step_visual_jump_after_step(void)
 {
 #if defined(CY_CORE_CM7_1)
@@ -527,7 +546,7 @@ void step_visual_jump_after_step(void)
             step_vjump_lockout = 1u;
         step_vjump_reset_arm_prereq();
     }
-    else if (step_vjump_armed != 0u && curr == 0u && prev_b > 0u && prev_b <= trig)
+    else if (step_vjump_armed != 0u && curr == 0u && prev_b > VISUAL_JUMP_ARM_MIN_THRESHOLD)
         step_vjump_fallback_pending = 1u;
 
     step_vjump_prev_bottom_raw = curr;
@@ -546,12 +565,15 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
 {
     /*
      * 不用 PIT_CH1：其与 CM7_0 的 TCPWM0->GRP[2].CNT[1]/leg_control 冲突（见 init.c CM7_1 注释）。
-     * 每 1ms：视觉跳跃前置毫秒累计（bottom_row_raw）。
+     * 每 1ms：视觉跳跃——强项累计置 armed、丢边零保持置 fallback_ready。
+     * 禁止在 bot==0 时先于保底逻辑执行 step_vjump_armed=0，否则丢边 10ms 保底无法生效。
      * VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS：仍为「每 5ms 减一档」语义，内部 ÷5 后递减落地冷却。
      */
 #if !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE
     {
-        uint16 bot = step_data.bottom_row_raw;
+        const uint16 bot = step_data.bottom_row_raw;
+
+        /* --- 强项下沿：累计前置 streak，并作废「伪丢边」保底 --- */
         if (bot > VISUAL_JUMP_ARM_MIN_THRESHOLD)
         {
             uint16 ms = (uint16)(step_vjump_arm_ms + 1u);
@@ -560,42 +582,44 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
             step_vjump_arm_ms = ms;
             if (step_vjump_arm_ms >= VISUAL_JUMP_ARM_TIME_MS)
                 step_vjump_armed = 1u;
-        }
-        else
-        {
-            step_vjump_arm_ms = 0u;
-            step_vjump_armed = 0u;
+
             step_vjump_fallback_pending = 0u;
             step_vjump_fallback_zero_ms = 0u;
             step_vjump_fallback_ready = 0u;
         }
-
-        /* 保底丢边：须连续 bot==0 满 FALLBACK_ZERO_HOLD_MS */
-        if (step_vjump_fallback_pending != 0u && step_vjump_armed != 0u)
-        {
-            if (bot == 0u)
-            {
-                uint16 hold = VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS;
-                if (hold == 0u)
-                    hold = 1u;
-                uint16 z = (uint16)(step_vjump_fallback_zero_ms + 1u);
-                if (z > hold)
-                    z = hold;
-                step_vjump_fallback_zero_ms = z;
-                if (z >= hold)
-                    step_vjump_fallback_ready = 1u;
-            }
-            else
-            {
-                step_vjump_fallback_zero_ms = 0u;
-                step_vjump_fallback_pending = 0u;
-                step_vjump_fallback_ready = 0u;
-            }
-        }
         else
         {
-            step_vjump_fallback_zero_ms = 0u;
-            step_vjump_fallback_ready = 0u;
+            /* 本拍未维持强项：只清零 streak，不因此而撤 armed（丢边阶段 bot 常为 0） */
+            step_vjump_arm_ms = 0u;
+
+            if (step_vjump_armed == 0u)
+            {
+                step_vjump_fallback_pending = 0u;
+                step_vjump_fallback_zero_ms = 0u;
+                step_vjump_fallback_ready = 0u;
+            }
+            else if (step_vjump_fallback_pending != 0u)
+            {
+                /* --- 保底：须连续 bot==0 满 FALLBACK_ZERO_HOLD_MS；非零弱值撤回 pending --- */
+                if (bot == 0u)
+                {
+                    uint16 hold = VISUAL_JUMP_FALLBACK_ZERO_HOLD_MS;
+                    if (hold == 0u)
+                        hold = 1u;
+                    uint16 z = (uint16)(step_vjump_fallback_zero_ms + 1u);
+                    if (z > hold)
+                        z = hold;
+                    step_vjump_fallback_zero_ms = z;
+                    if (z >= hold)
+                        step_vjump_fallback_ready = 1u;
+                }
+                else
+                {
+                    step_vjump_fallback_zero_ms = 0u;
+                    step_vjump_fallback_pending = 0u;
+                    step_vjump_fallback_ready = 0u;
+                }
+            }
         }
     }
 #if VISUAL_JUMP_POST_JUMP_COOLDOWN_5MS_TICKS > 0u
