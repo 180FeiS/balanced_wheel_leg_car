@@ -82,6 +82,26 @@ static int jump_time = 0;
 
 uint8 speed_flag = 0;
 
+/*---------------------------------------------------------------------------
+ * 台阶速度加量（按跳跃正常完成次数）：仅 jump_control() 时序走完进入 else 前计数；
+ * 0=未到「第一跳后加速」；1=已在第一跳后、第二跳前，pid 中对 speed_target 叠 STAIR_JUMP_SPEED_BOOST_AFTER_FIRST。
+ * LORA/导航完整跳同样会计数；中途 jump_stop() 中止不计。
+ *---------------------------------------------------------------------------*/
+static uint8 stair_jump_speed_boost_phase;
+
+/* 跳跃时序正常结束（最后一格已过）：第一跳后置 phase=1，第二跳后置 phase=0。 */
+static void stair_jump_on_normal_sequence_done(void)
+{
+    if (stair_jump_speed_boost_phase == 0u)
+    {
+        stair_jump_speed_boost_phase = 1u;
+    }
+    else
+    {
+        stair_jump_speed_boost_phase = 0u;
+    }
+}
+
 /* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
 uint8 Motor_Runaway_Latch = 0;
 
@@ -549,7 +569,7 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 #define JUMP_RETRACT_P          5.5f // 收腿阶段目标腿长（起跳爆发后空中收回一小段，直通到达；实车可调）
 #define JUMP_PREPARE_P          7.5f // 准备缓冲目标腿长（起跳后伸腿高度）
 #define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
-#define JUMP_BUFFER_STEP_P_MAX  0.16f  // 执行缓冲时每5ms腿高最大变化
+#define JUMP_BUFFER_STEP_P_MAX  0.14f  // 执行缓冲时每5ms腿高最大变化
 #define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
 #define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
 #define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
@@ -735,6 +755,15 @@ void pid_ctrl_Run(void)
          * 调试建议同时观察 motor_user_speed_cmd / speed_target_effective / car_speed。
          */
         speed_target_effective = Nag_GetControlSpeedTarget();
+        if (stair_jump_speed_boost_phase != 0u)
+        {
+            float dir = motor_user_speed_cmd;
+            if (dir == 0.0f)
+            {
+                dir = speed_target_effective;
+            }
+            speed_target_effective += ((dir >= 0.0f) ? 1.0f : -1.0f) * STAIR_JUMP_SPEED_BOOST_AFTER_FIRST;
+        }
         pid_set_target(&speed, -speed_target_effective);
         pid_get_observation(&speed, -motor_value.receive_left_speed_data + motor_value.receive_right_speed_data);
 
@@ -1170,6 +1199,7 @@ void jump_control(void)
         }
         else
         {
+            stair_jump_on_normal_sequence_done();
             jump_stop();
         }
     }

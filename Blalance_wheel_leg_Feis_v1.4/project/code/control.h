@@ -36,6 +36,11 @@ extern float dt_pid_turn_gyro;
 extern float motor_user_speed_cmd;
 extern float speed_target_effective;      //真正送入速度环的目标速度，已叠加导航限速/元素限速
 
+/* 两级台阶脚本：整条跳跃序列在 jump_control() 内正常结束时计数；第一次结束后在速度目标上叠加本幅值（符号随车），第二次结束后撤销。详见 control.c stair_jump_* */
+#ifndef STAIR_JUMP_SPEED_BOOST_AFTER_FIRST
+#define STAIR_JUMP_SPEED_BOOST_AFTER_FIRST  (100.0f)
+#endif
+
 void motor_user_speed_cmd_set_from_pc(float cmd);
 void motor_poll_switch2_speed_baseline(void);
 extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
