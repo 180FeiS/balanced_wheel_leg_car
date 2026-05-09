@@ -20,7 +20,7 @@ struct dualcore_remote_to_ctrl;
 #endif
 /* 1：前进方向与摇杆相反时整体取反 */
 #ifndef REMOTE_LORA_VALIDATE_SPEED_INVERT
-#define REMOTE_LORA_VALIDATE_SPEED_INVERT  1
+#define REMOTE_LORA_VALIDATE_SPEED_INVERT  0
 #endif
 
 /* 右摇杆 right_x：目标偏航角速度满偏（°/s），与 control.c 中 STEER_RATE_TARGET_MAX_DPS 同量级便于实车调参 */

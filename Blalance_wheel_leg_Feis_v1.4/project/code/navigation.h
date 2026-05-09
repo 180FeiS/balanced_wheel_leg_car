@@ -125,12 +125,12 @@
  */
 typedef enum
 {
-       NAG_EVENT_TYPE_GENERIC = 0,       // 通用占位类型（默认未接入动作）
+       NAG_EVENT_TYPE_SPIN = 0,          // 原地自旋元素
        NAG_EVENT_TYPE_TURNAROUND = 1,    // 掉头元素
-       NAG_EVENT_TYPE_SPIN = 2,          // 原地自旋元素
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 3, // 单边桥元素
-       NAG_EVENT_TYPE_BUMP = 4,          // 减速带/颠簸元素
-       NAG_EVENT_TYPE_JUMP = 5,          // 跳跃元素
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 2, // 单边桥元素
+       NAG_EVENT_TYPE_BUMP = 3,          // 减速带/颠簸元素
+       NAG_EVENT_TYPE_JUMP = 4,          // 跳跃元素
+       NAG_EVENT_TYPE_COUNT = 5,         // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
 /* 元素状态机枚举：
