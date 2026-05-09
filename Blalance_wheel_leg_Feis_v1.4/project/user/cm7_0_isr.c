@@ -365,8 +365,9 @@ void uart4_isr(void)
     if (Cy_SCB_GetRxInterruptMask(get_scb_module(UART_4)) & CY_SCB_UART_RX_NOT_EMPTY) // 串口4接收中断
     {
         Cy_SCB_ClearRxInterrupt(get_scb_module(UART_4), CY_SCB_UART_RX_NOT_EMPTY); // 清除接收中断标志位
-
-        uart_control_callback();
+#if GNSS_MODULE_ENABLE
+        gnss_uart_callback();            // GPS模块回调函数      
+#endif
     }
     else if (Cy_SCB_GetTxInterruptMask(get_scb_module(UART_4)) & CY_SCB_UART_TX_DONE) // 串口4发送中断
     {

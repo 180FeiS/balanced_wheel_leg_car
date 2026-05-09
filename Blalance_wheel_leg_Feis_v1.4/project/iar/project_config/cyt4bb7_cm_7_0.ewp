@@ -1134,18 +1134,6 @@
             <name>$PROJ_DIR$\..\..\code\flash.h</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\GPS_deal.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\GPS_deal.h</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\GPS_flash.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\GPS_flash.h</name>
-        </file>
-        <file>
             <name>$PROJ_DIR$\..\..\code\init.c</name>
         </file>
         <file>

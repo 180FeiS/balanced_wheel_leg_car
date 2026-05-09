@@ -31,6 +31,7 @@
 #define SWITCH2                 (P21_6)
 
 #define LEG_DEBUG_MODE          (0)   // 0:正常模式(五连杆解算)  1:腿部调试模式(VOFA串口控制pwm)
+#define GNSS_MODULE_ENABLE      (1)   // 0:关闭GPS初始化      1:开启TAU1201 GPS初始化
 /*********************************************************************参数*********************************************************************/
 
 
@@ -40,6 +41,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag, uint8 imu
 /* 双核分工：CM7_0 仅运动控制；CM7_1 摄像头/显示/菜单/无线 VOFA */
 void all_init_cm7_0_control(void);
 void all_init_cm7_1_ui(void);
+void gnss_module_init(void);
 
 void buzzer_init(void);                     //蜂鸣器初始化
 

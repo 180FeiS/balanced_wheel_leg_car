@@ -178,6 +178,7 @@ int main(void)
 {
   clock_init(SYSTEM_CLOCK_250M); // 时钟配置及系统初始化<务必保留>
   debug_init();                  // 调试串口信息初始化
+  gnss_module_init();
 #if DUALCORE_UI_ON_CM7_1
   all_init_cm7_0_control();
 #else
