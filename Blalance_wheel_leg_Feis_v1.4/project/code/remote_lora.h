@@ -40,11 +40,17 @@ struct dualcore_remote_to_ctrl;
 #define REMOTE_LORA_SPIN_DIR  (1)
 #endif
 
-/* 左上/左侧向键（逐飞协议 key2）：上升沿切换横滚平衡 on/off，语义同 dualcore DUALCORE_UI_CMD_ROLL_BALANCE_TOGGLE */
+/* 左上/左侧向键（逐飞协议 key2）：
+ * - 录制中：切换待录元素类型；
+ * - 非录制中：切换横滚平衡 on/off，语义同 dualcore DUALCORE_UI_CMD_ROLL_BALANCE_TOGGLE。
+ */
 #ifndef REMOTE_LORA_KEY_INDEX_ROLL_BALANCE
 #define REMOTE_LORA_KEY_INDEX_ROLL_BALANCE  (2u)
 #endif
-/* 右上/右侧向键（逐飞 key3）：上升沿触发跳跃，语义同 DUALCORE_UI_CMD_JUMP（须 jump_is_allowed 且当前未在跳） */
+/* 右上/右侧向键（逐飞 key3）：
+ * - 录制中：记录元素 enter/exit 点；
+ * - 非录制中：触发跳跃，语义同 DUALCORE_UI_CMD_JUMP（须 jump_is_allowed 且当前未在跳）。
+ */
 #ifndef REMOTE_LORA_KEY_INDEX_JUMP
 #define REMOTE_LORA_KEY_INDEX_JUMP  (3u)
 #endif
