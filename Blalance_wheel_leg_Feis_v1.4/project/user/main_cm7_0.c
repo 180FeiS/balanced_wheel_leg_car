@@ -199,6 +199,8 @@ int main(void)
   {
     run_soft_tasks();
 #if DUALCORE_UI_ON_CM7_1
+    /* 先消费 CM7_1 菜单命令，再发布快照；否则 Launch 调速、SaveSpd 保存和导航按键都不会真正落到控制核。 */
+    dualcore_ui_cmd_consume_all();
     /* 验证用：左摇杆速度 + 左杆键翻转 Motor_Switch；正式策略可迁到 control/navigation */
     remote_lora_apply_validate_motor();
     dualcore_ctrl_to_ui_publish();

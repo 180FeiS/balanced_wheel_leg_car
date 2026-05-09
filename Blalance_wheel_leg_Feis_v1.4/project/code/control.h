@@ -29,7 +29,7 @@ extern float dt_leg;
 extern float dt_pid_turn_angle;
 extern float dt_pid_turn_gyro;
 
-/* 运行中的用户速度基准（可带符号：负号表示反向），导航弯道限速等在此基础上缩放。
+/* 运行中的用户速度基准（可带符号：正号前进，负号后退），导航弯道限速等在此基础上缩放。
  * 发车页/串口调速先写 run_launch_speed，只有惯导回放进入执行态时才装载到本量；
  * LORA 遥控、导航元素接管等实时控制路径仍可直接写本量。
  * motor_poll_switch2_speed_baseline() 仍为周期调用占位，内部无操作（兼容旧 dip_switch 路径）。

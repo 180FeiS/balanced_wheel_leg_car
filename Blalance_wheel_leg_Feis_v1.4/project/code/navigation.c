@@ -690,7 +690,7 @@ uint16 Nag_GetDebugProspectIndex(void)
 }
 
 /* 速度目标合成（由 pid_ctrl_Run 每 20ms 读取一次）：
- * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令、串口 q/r/s 等），符号表示前进/后退；
+ * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令、串口 q/r/s 等），正号前进、负号后退；
  * - N.Target_Speed：导航前瞻 + 弯道强度算出的“建议上限”，再与用户基准取 MIN/比例；
  * - 本函数在非回放执行态（Nag_SystemRun_Index!=3）强制返回 0，避免待机误跑。
  */

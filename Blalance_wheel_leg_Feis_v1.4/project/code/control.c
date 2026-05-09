@@ -62,7 +62,7 @@ float leg_long = 5.5f;
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
 
-/* 运行速度基准：导航弯道限速、元素限速等均以此为上限参考；符号用于倒车方向 */
+/* 运行速度基准：导航弯道限速、元素限速等均以此为上限参考；正号前进，负号后退。 */
 float motor_user_speed_cmd = 0.0f;
 /* 发车速度设定值：菜单/串口先改这里，惯导回放真正进入执行态时才装载到 motor_user_speed_cmd。 */
 float run_launch_speed = 0.0f;
@@ -736,7 +736,8 @@ void pid_ctrl_Run(void)
 
     if (0 == timer_flag) // 速度环（20ms，与 car_speed 更新节拍保持一致）
     {
-        /* 速度环入口：motor_user_speed_cmd 为用户基准；speed_target_effective 为导航门控+弯道/元素限速后目标。
+        /* 速度环入口：motor_user_speed_cmd 为用户基准（正号前进、负号后退）；
+         * speed_target_effective 为导航门控+弯道/元素限速后目标。
          * 调试建议同时观察 motor_user_speed_cmd / speed_target_effective / car_speed。
          */
         speed_target_effective = Nag_GetControlSpeedTarget();
@@ -749,7 +750,7 @@ void pid_ctrl_Run(void)
             }
             speed_target_effective += ((dir >= 0.0f) ? 1.0f : -1.0f) * STAIR_JUMP_SPEED_BOOST_AFTER_FIRST;
         }
-        pid_set_target(&speed, -speed_target_effective);
+        pid_set_target(&speed, speed_target_effective);
         pid_get_observation(&speed, -motor_value.receive_left_speed_data + motor_value.receive_right_speed_data);
 
         pid_set_dt(&speed, dt_pid_speed);

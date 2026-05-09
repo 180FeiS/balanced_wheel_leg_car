@@ -57,7 +57,7 @@ static void task_pending_push(vuint8 *task_pending)
 void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH0); // 1ms
-    dualcore_ui_cmd_consume_all();
+    /* 双核 UI 命令在主循环消费：其中 SaveSpd 会写 flash，不能放在 1ms ISR 慢路径里执行。 */
     dip_switch_motor_sync_from_hw();
     EKF_UpData();
     EKF_V_UPData();

@@ -41,6 +41,7 @@ typedef enum
   DUALCORE_UI_CMD_KEY_NAV_STOP_REC = 16,
   DUALCORE_UI_CMD_KEY_NAV_KEY3 = 17,
   DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS = 18, /* 菜单发车速度页专用：只更新 run_launch_speed，不立即改变运行速度 */
+  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH = 19, /* Run/Flash 菜单专用：保存 run_launch_speed 到独立 flash 参数页 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct

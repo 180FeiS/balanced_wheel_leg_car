@@ -11,24 +11,24 @@
  @author          bom
  @version         V1.0
  @date            2024-12-18
- @brief           Æ½ºâ³µUI¿ØÖÆ³ÌÐò
+ @brief           å¹³è¡¡è½¦UIæŽ§åˆ¶ç¨‹åº
 
  @note
- 1. ±¾ÎÄ¼þ°üº¬Æ½ºâ³µËùÓÐUIÏÔÊ¾ºÍ¿ØÖÆ¹¦ÄÜ
- 2. Ö§³ÖLCDÏÔÊ¾¡¢´®¿Úµ÷ÊÔºÍ²ÎÊýÅäÖÃ
- 3. °üº¬ÍêÕûµÄ¶à¼¶²Ëµ¥ÏµÍ³
+ 1. æœ¬æ–‡ä»¶åŒ…å«å¹³è¡¡è½¦æ‰€æœ‰UIæ˜¾ç¤ºå’ŒæŽ§åˆ¶åŠŸèƒ½
+ 2. æ”¯æŒLCDæ˜¾ç¤ºã€ä¸²å£è°ƒè¯•å’Œå‚æ•°é…ç½®
+ 3. åŒ…å«å®Œæ•´çš„å¤šçº§èœå•ç³»ç»Ÿ
 ********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* ÐÞ¸Ä¼ÇÂ¼
-* ÈÕÆÚ              ×÷Õß             °æ±¾           ËµÃ÷
-* 2024-07-24        Bron            V1.0.0         ´î½¨ÐÂ¹¤³Ì
-* 2024-07-27        Bron            V1.0.2         ´î½¨ÁË¶þ¼¶²Ëµ¥µÄ¿ò¼Ü
-* 2024-07-30        Bron            V1.1.1         ¸ü»»ÁËxºÍyµÄ±íÊ¾·½Ê½£¬ÍêÉÆÁË¼¶²Ëµ¥
-* 2024-07-31        Bron            V1.1.2         ¸üÐÂÁËpidµ÷²Î²Ëµ¥·½Ê½£¬¼ÓÈëflash
-* 2024-08-01        Bron            V1.1.4         Î¢µ÷ÁËpid²ÎÊýÕûÊýÐ¡ÊýÎ»ÊýÏÔÊ¾
-* 2024-08-02        Bron            V1.2.0         ½«ÖØ¸´ÏÔÊ¾µÄÄÚÈÝ¹æÕûµ½º¯ÊýÖÐ
-* 2024-12-19        Bron            V2.0.1         ÒÆÖ²µ½ÐÂ¹¤³Ì£¬ÖØÐÂÕûÀí²Ëµ¥
+* ä¿®æ”¹è®°å½•
+* æ—¥æœŸ              ä½œè€…             ç‰ˆæœ¬           è¯´æ˜Ž
+* 2024-07-24        Bron            V1.0.0         æ­å»ºæ–°å·¥ç¨‹
+* 2024-07-27        Bron            V1.0.2         æ­å»ºäº†äºŒçº§èœå•çš„æ¡†æž¶
+* 2024-07-30        Bron            V1.1.1         æ›´æ¢äº†xå’Œyçš„è¡¨ç¤ºæ–¹å¼ï¼Œå®Œå–„äº†çº§èœå•
+* 2024-07-31        Bron            V1.1.2         æ›´æ–°äº†pidè°ƒå‚èœå•æ–¹å¼ï¼ŒåŠ å…¥flash
+* 2024-08-01        Bron            V1.1.4         å¾®è°ƒäº†pidå‚æ•°æ•´æ•°å°æ•°ä½æ•°æ˜¾ç¤º
+* 2024-08-02        Bron            V1.2.0         å°†é‡å¤æ˜¾ç¤ºçš„å†…å®¹è§„æ•´åˆ°å‡½æ•°ä¸­
+* 2024-12-19        Bron            V2.0.1         ç§»æ¤åˆ°æ–°å·¥ç¨‹ï¼Œé‡æ–°æ•´ç†èœå•
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
@@ -39,7 +39,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "control.h"
 #endif
 
-/* Run£ºÐëÓë pos 3.1~3.3 µÄ menuMember ¼ýÍ·ÐÐÒ»ÖÂ£¬·ñÔò HashPeer ÇÐÏîÊ±»­ÃæÓëÕæÊµ pos ²»Í¬²½¡£ÎðÔÚ pos¡¸3¡¹ÉÏÓÃ´Ë±í¡£ */
+/* Runï¼šé¡»ä¸Ž pos 3.1~3.3 çš„ menuMember ç®­å¤´è¡Œä¸€è‡´ï¼Œå¦åˆ™ HashPeer åˆ‡é¡¹æ—¶ç”»é¢ä¸ŽçœŸå®ž pos ä¸åŒæ­¥ã€‚å‹¿åœ¨ posã€Œ3ã€ä¸Šç”¨æ­¤è¡¨ã€‚ */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 
 void ui_pull_ctrl_snapshot(void)
@@ -51,56 +51,56 @@ void ui_pull_ctrl_snapshot(void)
 }
 
 /*********************************************************************************************************************
-* ¶à¼¶²Ëµ¥¿ò¼Ü
+* å¤šçº§èœå•æ¡†æž¶
 *********************************************************************************************************************
-* 1. ²âÊÔÍâÉèÄ£Ê½ (GUI_1)
-*    - 1_1. ²âÊÔµç»ú
-*      - 1_1_1. µç»úÏêÏ¸ÐÅÏ¢
-*    - 1_2. ²âÊÔ±àÂëÆ÷
-*      - 1_2_1. ±àÂëÆ÷ÏêÏ¸ÐÅÏ¢
-*    - 1_3. ²âÊÔÉãÏñÍ·
-*      - 1_3_1. ÉãÏñÍ·ÏêÏ¸ÐÅÏ¢
-*    - 1_4. ²âÊÔÍÓÂÝÒÇ
-*      - 1_4_1. ÍÓÂÝÒÇÏêÏ¸ÐÅÏ¢
+* 1. æµ‹è¯•å¤–è®¾æ¨¡å¼ (GUI_1)
+*    - 1_1. æµ‹è¯•ç”µæœº
+*      - 1_1_1. ç”µæœºè¯¦ç»†ä¿¡æ¯
+*    - 1_2. æµ‹è¯•ç¼–ç å™¨
+*      - 1_2_1. ç¼–ç å™¨è¯¦ç»†ä¿¡æ¯
+*    - 1_3. æµ‹è¯•æ‘„åƒå¤´
+*      - 1_3_1. æ‘„åƒå¤´è¯¦ç»†ä¿¡æ¯
+*    - 1_4. æµ‹è¯•é™€èžºä»ª
+*      - 1_4_1. é™€èžºä»ªè¯¦ç»†ä¿¡æ¯
 *
-* 2. µ÷ÊÔÄ£Ê½ (GUI_2)
-*    - 2_1. Í¼ÏñÉèÖÃ
-*      - 2_1_1. Ì¨½×¼ì²â
-*      - 2_1_2. µ¥±ßÇÅ¼ì²â
-*      - 2_1_3. µßô¤Â·¶Î¼ì²â
-*    - 2_2. ËÙ¶È»·ÉèÖÃ
-*      - 2_2_1. ½ÇËÙ¶È»·P
-*      - 2_2_2. ½ÇËÙ¶È»·I
-*      - 2_2_3. ½Ç¶È»·P
-*      - 2_2_4. ½ÇËÙ¶È»·D
-*      - 2_2_5. ËÙ¶È»·P
-*      - 2_2_6. ËÙ¶È»·D
-*    - 2_3. ×ªÏò»·ÉèÖÃ
-*      - 2_3_1. ×ªÏòÄÚ»·P
-*      - 2_3_2. ×ªÏòÄÚ»·D
-*      - 2_3_3. ×ªÏòÍâ»·P
-*      - 2_3_4. ×ªÏòÍâ»·D
-*    - 2_4. ËÙ¶ÈÉèÖÃ
-*    - 2_5. ¸üÐÂFlash²ÎÊý
-*    - 2_6. Çå¿ÕFLASH»º´æÇø
+* 2. è°ƒè¯•æ¨¡å¼ (GUI_2)
+*    - 2_1. å›¾åƒè®¾ç½®
+*      - 2_1_1. å°é˜¶æ£€æµ‹
+*      - 2_1_2. å•è¾¹æ¡¥æ£€æµ‹
+*      - 2_1_3. é¢ ç°¸è·¯æ®µæ£€æµ‹
+*    - 2_2. é€Ÿåº¦çŽ¯è®¾ç½®
+*      - 2_2_1. è§’é€Ÿåº¦çŽ¯P
+*      - 2_2_2. è§’é€Ÿåº¦çŽ¯I
+*      - 2_2_3. è§’åº¦çŽ¯P
+*      - 2_2_4. è§’é€Ÿåº¦çŽ¯D
+*      - 2_2_5. é€Ÿåº¦çŽ¯P
+*      - 2_2_6. é€Ÿåº¦çŽ¯D
+*    - 2_3. è½¬å‘çŽ¯è®¾ç½®
+*      - 2_3_1. è½¬å‘å†…çŽ¯P
+*      - 2_3_2. è½¬å‘å†…çŽ¯D
+*      - 2_3_3. è½¬å‘å¤–çŽ¯P
+*      - 2_3_4. è½¬å‘å¤–çŽ¯D
+*    - 2_4. é€Ÿåº¦è®¾ç½®
+*    - 2_5. æ›´æ–°Flashå‚æ•°
+*    - 2_6. æ¸…ç©ºFLASHç¼“å­˜åŒº
 *
-* 3. ÔËÐÐÄ£Ê½ ¡ª¡ª GUI ±ØÐëÓë pos ²ã¼¶Ò»ÖÂ£¨Ò×´í£ºÒ»¼¶¡¸3¡¹Óë¶þ¼¶¡¸3.1¡¹Îð»­Í¬Ò»¿é×Ó²Ëµ¥£©£º
-*    - GUI_3 ½ö pos ¡¸3¡¹£º¶¥²ã Test/Debug/Run ÈýÐÐÖÐÓë GUI_1/2 Í¬Ô´µÄÒ»¼¶ Run¡£
-*    - GUI_3_1¡«GUI_3_3 ½ö pos ¡¸3.1¡«3.3¡¹£º¶þ¼¶ÁÐ±í Launch/Flash/More£¬ÈýÒ³Ó¦ÓÃÍ¬Ò»ÎÄ±¾¡¢²»Í¬¼ýÍ·ÐÐ£¬ÅäºÏ HashPeer ÇÐ»»¡£
-*    - GUI_3_1_1 ½ö pos ¡¸3.1.1¡¹£ºLaunch ÏÂÈý¼¶·¢³µËÙ¶È¿Ç£»·¢³µ UI/Âß¼­²»Ó¦ÈûÔÚ GUI_3_1£¬·ñÔò»áÆÆ»µ¡¸Ñ¡ÖÐÔÙ½øÈë¡¹µÄÊ÷¡£
+* 3. è¿è¡Œæ¨¡å¼ â€”â€” GUI å¿…é¡»ä¸Ž pos å±‚çº§ä¸€è‡´ï¼ˆæ˜“é”™ï¼šä¸€çº§ã€Œ3ã€ä¸ŽäºŒçº§ã€Œ3.1ã€å‹¿ç”»åŒä¸€å—å­èœå•ï¼‰ï¼š
+*    - GUI_3 ä»… pos ã€Œ3ã€ï¼šé¡¶å±‚ Test/Debug/Run ä¸‰è¡Œä¸­ä¸Ž GUI_1/2 åŒæºçš„ä¸€çº§ Runã€‚
+*    - GUI_3_1ï½žGUI_3_3 ä»… pos ã€Œ3.1ï½ž3.3ã€ï¼šäºŒçº§åˆ—è¡¨ Launch/Flash/Moreï¼Œä¸‰é¡µåº”ç”¨åŒä¸€æ–‡æœ¬ã€ä¸åŒç®­å¤´è¡Œï¼Œé…åˆ HashPeer åˆ‡æ¢ã€‚
+*    - GUI_3_1_1 ä»… pos ã€Œ3.1.1ã€ï¼šLaunch ä¸‹ä¸‰çº§å‘è½¦é€Ÿåº¦å£³ï¼›å‘è½¦ UI/é€»è¾‘ä¸åº”å¡žåœ¨ GUI_3_1ï¼Œå¦åˆ™ä¼šç ´åã€Œé€‰ä¸­å†è¿›å…¥ã€çš„æ ‘ã€‚
 *********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* ÏÔÊ¾Ä£Ê½¶¨Òå
+* æ˜¾ç¤ºæ¨¡å¼å®šä¹‰
 *********************************************************************************************************************/
 typedef enum {
-    DISPLAY_MODE_IPS200,   // Òº¾§Ä£Ê½
-    DISPLAY_MODE_SERIAL  // ´®¿ÚÄ£Ê½
+    DISPLAY_MODE_IPS200,   // æ¶²æ™¶æ¨¡å¼
+    DISPLAY_MODE_SERIAL  // ä¸²å£æ¨¡å¼
 } DisplayMode;
 
-DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // Ä¬ÈÏÏÔÊ¾Ä£Ê½ÎªÒº¾§Ä£Ê½
+DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // é»˜è®¤æ˜¾ç¤ºæ¨¡å¼ä¸ºæ¶²æ™¶æ¨¡å¼
 float FPS = 0;
-/*ÄÚ²¿º¯ÊýÉùÃ÷*/
+/*å†…éƒ¨å‡½æ•°å£°æ˜Ž*/
 static void GUI_Display_FPS(void)__attribute__((unused));
 static void GUI_Display_Image_Sidebar()__attribute__((unused));
 static void GUI_Display_Image_Below(void)__attribute__((unused));
@@ -117,7 +117,7 @@ static void GUI_Display_Level3_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common4(void)__attribute__((unused));
 static void GUI_Display_Level3_Common5(void)__attribute__((unused));
 /*********************************************************************************************************************
-* Ò»¼¶²Ëµ¥º¯Êý
+* ä¸€çº§èœå•å‡½æ•°
 *********************************************************************************************************************/
 static void GUI_Display_FPS(void)
 {
@@ -134,7 +134,7 @@ static void GUI_Display_Level1_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1(void) // ²âÊÔÍâÉèÄ£Ê½
+void GUI_1(void) // æµ‹è¯•å¤–è®¾æ¨¡å¼
 {
     GUI_Display_Level1_Common1();
 
@@ -155,7 +155,7 @@ void ACT_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2(void) // µ÷ÊÔÄ£Ê½
+void GUI_2(void) // è°ƒè¯•æ¨¡å¼
 {
     GUI_Display_Level1_Common1();
 
@@ -176,7 +176,7 @@ void ACT_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3(void) // pos¡¸3¡¹£ºÒ»¼¶ Run£¨Óë GUI_1/2 Í¬Ô´£©£»×ÓÁÐ±í½öÊôÓÚ pos 3.1¡«3.3
+void GUI_3(void) // posã€Œ3ã€ï¼šä¸€çº§ Runï¼ˆä¸Ž GUI_1/2 åŒæºï¼‰ï¼›å­åˆ—è¡¨ä»…å±žäºŽ pos 3.1ï½ž3.3
 {
     GUI_Display_Level1_Common1();
 
@@ -198,7 +198,7 @@ void ACT_3()
 }
 
 /*********************************************************************************************************************
-* ¶þ¼¶²Ëµ¥º¯Êý
+* äºŒçº§èœå•å‡½æ•°
 *********************************************************************************************************************/
 static void GUI_Display_Level2_Common1(void)
 {
@@ -208,7 +208,7 @@ static void GUI_Display_Level2_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1_1(void) // ²âÊÔµç»ú
+void GUI_1_1(void) // æµ‹è¯•ç”µæœº
 {
     GUI_Display_Level2_Common1();
 
@@ -220,7 +220,7 @@ void GUI_1_1(void) // ²âÊÔµç»ú
 
     ips200_show_string(48,ROW_6,"-->");//8*6
     ips200_show_string(136,ROW_6,"<--");//8*6
-    // ÊµÏÖ²âÊÔµç»úµÄÂß¼­
+    // å®žçŽ°æµ‹è¯•ç”µæœºçš„é€»è¾‘
 }
 void ACT_1_1()
 {
@@ -231,9 +231,9 @@ void ACT_1_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_2(void) // ²âÊÔ±àÂëÆ÷
+void GUI_1_2(void) // æµ‹è¯•ç¼–ç å™¨
 {
-    // ÊµÏÖ²âÊÔ±àÂëÆ÷µÄÂß¼­
+    // å®žçŽ°æµ‹è¯•ç¼–ç å™¨çš„é€»è¾‘
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
@@ -254,9 +254,9 @@ void ACT_1_2()
     ReadPos[4] = 0x00;      
 }
 
-void GUI_1_3(void) // ²âÊÔÉãÏñÍ·
+void GUI_1_3(void) // æµ‹è¯•æ‘„åƒå¤´
 {
-    // ÊµÏÖ²âÊÔÉãÏñÍ·µÄÂß¼­
+    // å®žçŽ°æµ‹è¯•æ‘„åƒå¤´çš„é€»è¾‘
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
@@ -277,9 +277,9 @@ void ACT_1_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_4(void) // ²âÊÔÍÓÂÝÒÇ
+void GUI_1_4(void) // æµ‹è¯•é™€èžºä»ª
 {
-    // ÊµÏÖ²âÊÔÍÓÂÝÒÇµÄÂß¼­
+    // å®žçŽ°æµ‹è¯•é™€èžºä»ªçš„é€»è¾‘
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
@@ -301,7 +301,7 @@ void ACT_1_4()
 }
 
 // /*********************************************************************************************************************
-// * µ÷ÊÔÄ£Ê½Ñ¡Ôñ½çÃæ
+// * è°ƒè¯•æ¨¡å¼é€‰æ‹©ç•Œé¢
 // *********************************************************************************************************************/
 static void GUI_Display_Level2_Common2(void)
 {
@@ -311,7 +311,7 @@ static void GUI_Display_Level2_Common2(void)
     GUI_Display_FPS();
 }
 
-void GUI_2_1(void) // Í¼ÏñÉèÖÃ
+void GUI_2_1(void) // å›¾åƒè®¾ç½®
 {
     GUI_Display_Level2_Common2();
     
@@ -336,7 +336,7 @@ void ACT_2_1()
 }
 
 
-void GUI_2_2(void) // µ÷ÊÔÁÐ±í£ºNavDbg ÐÐÑ¡ÖÐ£¨ÓëÆäËüÏîÒ»ÖÂÎªÁÐ±íÌ¬£»°´¡¸ÓÒ¡¹½øÈë GUI_2_2_1£©
+void GUI_2_2(void) // è°ƒè¯•åˆ—è¡¨ï¼šNavDbg è¡Œé€‰ä¸­ï¼ˆä¸Žå…¶å®ƒé¡¹ä¸€è‡´ä¸ºåˆ—è¡¨æ€ï¼›æŒ‰ã€Œå³ã€è¿›å…¥ GUI_2_2_1ï¼‰
 {
     GUI_Display_Level2_Common2();
 
@@ -359,7 +359,7 @@ void ACT_2_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2_2_1(void) // ¹ßµ¼µ÷ÊÔ½çÃæ£¨Ðë´Ó 2.2 °´¡¸ÓÒ¡¹½øÈë£©
+void GUI_2_2_1(void) // æƒ¯å¯¼è°ƒè¯•ç•Œé¢ï¼ˆé¡»ä»Ž 2.2 æŒ‰ã€Œå³ã€è¿›å…¥ï¼‰
 {
     GUI_Display_Level2_Common2();
 
@@ -406,7 +406,7 @@ void ACT_2_2_1()
 }
 
 
-void GUI_2_3(void) // ×ªÏò»·ÉèÖÃ
+void GUI_2_3(void) // è½¬å‘çŽ¯è®¾ç½®
 {
     GUI_Display_Level2_Common2();
     
@@ -430,7 +430,7 @@ void ACT_2_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2_4(void) // ËÙ¶ÈÉèÖÃ
+void GUI_2_4(void) // é€Ÿåº¦è®¾ç½®
 {
     GUI_Display_Level2_Common2();
     
@@ -454,7 +454,7 @@ void ACT_2_4()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2_5(void) // ¸üÐÂFlash²ÎÊý
+void GUI_2_5(void) // æ›´æ–°Flashå‚æ•°
 {
     GUI_Display_Level2_Common2();
     
@@ -487,7 +487,7 @@ void ACT_2_5()
 #endif
 }
 
-void GUI_2_6(void) // Çå¿ÕFLASH»º´æÇø
+void GUI_2_6(void) // æ¸…ç©ºFLASHç¼“å­˜åŒº
 {
     GUI_Display_Level2_Common2();
     
@@ -520,7 +520,7 @@ void ACT_2_6()
 #endif
 }
 // *********************************************************************************************************************
-// * Run ¶þ¼¶/Èý¼¶£ºCommon3 ¶¥À¸ + ÁÐ±í»ò·¢³µÒ³¡£Ò»¼¶ GUI_3 ²»µÃ¸´ÓÃÏÂÁÐÁÐ±í£¬·ñÔòÓë menu Ê÷´íÎ»¡£
+// * Run äºŒçº§/ä¸‰çº§ï¼šCommon3 é¡¶æ  + åˆ—è¡¨æˆ–å‘è½¦é¡µã€‚ä¸€çº§ GUI_3 ä¸å¾—å¤ç”¨ä¸‹åˆ—åˆ—è¡¨ï¼Œå¦åˆ™ä¸Ž menu æ ‘é”™ä½ã€‚
 // *********************************************************************************************************************
 static void GUI_Display_Level2_Common3(void)
 {
@@ -530,7 +530,7 @@ static void GUI_Display_Level2_Common3(void)
     GUI_Display_FPS();
 }
 
-/** ¶þ¼¶ Run ÁÐ±í£ºÓë GUI_2_1 °æÊ½¶ÔÆë£»selected_row_index ±ØÐëÓëµ±Ç° pos Ä©Î» 1/2/3 Ò»ÖÂ */
+/** äºŒçº§ Run åˆ—è¡¨ï¼šä¸Ž GUI_2_1 ç‰ˆå¼å¯¹é½ï¼›selected_row_index å¿…é¡»ä¸Žå½“å‰ pos æœ«ä½ 1/2/3 ä¸€è‡´ */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -538,7 +538,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     GUI_Display_Level2_Common3();
 
     ips200_show_string(80, ROW_8, " Launch ");
-    ips200_show_string(80, ROW_10, " Flash  ");
+    ips200_show_string(80, ROW_10, " SaveSpd ");
     ips200_show_string(80, ROW_12, " More   ");
 
     switch (selected_row_index)
@@ -555,9 +555,13 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     }
     ips200_show_string(48, ay, "-->");
     ips200_show_string(152, ay, "<--");
+    if (selected_row_index == 1u)
+    {
+        ips200_show_string(24, ROW_15, "KEY3: save speed");
+    }
 }
 
-void GUI_3_1(void) // Launch ¶þ¼¶Ïî£ºÁÐ±í¼ýÍ·µÚÒ»ÐÐ
+void GUI_3_1(void) // Launch äºŒçº§é¡¹ï¼šåˆ—è¡¨ç®­å¤´ç¬¬ä¸€è¡Œ
 {
     GUI_Run_ShowSubmenuList(0u);
 }
@@ -596,7 +600,7 @@ void ACT_3_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3_1_1(void) // ·¢³µËÙ¶ÈÈý¼¶Ò³£ºKEY1 ÇÐ 0/500/1000£¬KEY2/3 Î¢µ÷ run_launch_speed
+void GUI_3_1_1(void) // å‘è½¦é€Ÿåº¦ä¸‰çº§é¡µï¼šKEY1 åˆ‡ 0/500/1000ï¼ŒKEY2/3 å¾®è°ƒ run_launch_speed
 {
     GUI_Display_Level2_Common3();
 
@@ -629,11 +633,11 @@ void ACT_3_1_1()
     ReadPos[4] = '1';
 }
 /*********************************************************************************************************************
-* Èý¼¶²Ëµ¥º¯Êý
+* ä¸‰çº§èœå•å‡½æ•°
 *********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* Í¼Ïñ½çÃæ
+* å›¾åƒç•Œé¢
 *********************************************************************************************************************/
 static void GUI_Display_Level3_Common1(void)
 {
@@ -642,7 +646,7 @@ static void GUI_Display_Level3_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1_1_1(void) // ²âÊÔµç»ú
+void GUI_1_1_1(void) // æµ‹è¯•ç”µæœº
 {
     GUI_Display_Level3_Common1();
     ips200_show_string(0,ROW_1,"Motor ");
@@ -724,14 +728,14 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
     }
 }
 
-void GUI_2_1_1(void) // Ì¨½×¼ì²â
+void GUI_2_1_1(void) // å°é˜¶æ£€æµ‹
 {
     GUI_Display_Level3_ImageDetect(1);
 
     ips200_show_string(0,ROW_7,"Detected:");
     ips200_show_string(88,ROW_7,step_data.detected ? "Yes" : "No ");
 
-    ips200_show_string(0,ROW_6,"Ñ¹Ëõ»Ò¶È");
+    ips200_show_string(0,ROW_6,"åŽ‹ç¼©ç°åº¦");
     ips200_show_string(0,ROW_8,"Distance:");
     ips200_show_float(88,ROW_8,step_data.distance_cm,3,1);
     ips200_show_string(136,ROW_8,"cm");
@@ -741,8 +745,8 @@ void GUI_2_1_1(void) // Ì¨½×¼ì²â
     ips200_show_string(136,ROW_9,"pix");
 
     /*
-     * Ö÷Í¼£º1/2 Ñ¹Ëõ»Ò¶È `image_two_value`£¬ÓëÊÓ¾õÖ÷Óò¡¢AE Í³¼Æ×ø±êÏµÒ»ÖÂ¡£
-     * `step_detection` ÈôÈÔ»ùÓÚÈ«³¡ `mt9v03x_image`£¨raw£©£¬ÓëÆÁÉÏÑ¹Ëõ¹Û¸Ð¿ÉÄÜ²»Ò»ÖÂ£¬ÊôÓÐÒâ·Ö¹¤¡£
+     * ä¸»å›¾ï¼š1/2 åŽ‹ç¼©ç°åº¦ `image_two_value`ï¼Œä¸Žè§†è§‰ä¸»åŸŸã€AE ç»Ÿè®¡åæ ‡ç³»ä¸€è‡´ã€‚
+     * `step_detection` è‹¥ä»åŸºäºŽå…¨åœº `mt9v03x_image`ï¼ˆrawï¼‰ï¼Œä¸Žå±ä¸ŠåŽ‹ç¼©è§‚æ„Ÿå¯èƒ½ä¸ä¸€è‡´ï¼Œå±žæœ‰æ„åˆ†å·¥ã€‚
      */
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -759,16 +763,16 @@ void ACT_2_1_1()
     ReadPos[4] = '1';
 }
 
-void GUI_2_1_2(void) // µ¥±ßÇÅ¼ì²â
+void GUI_2_1_2(void) // å•è¾¹æ¡¥æ£€æµ‹
 {
     GUI_Display_Level3_ImageDetect(2);
 
     ips200_show_string(0,ROW_7,"Bridge");
     /*
-     * µ¥ÁÐ¡¸Ñ¹Ëõ¡¤AE ºó¡¹£º±¾Ò³²»µþË«Í¼£¬±ÜÃâÊúÏòÁ½´°Õ¼Î»²»×ã¡¢dis_* Ç¿Ñ¹»û±ä£»ÓëÌ¨½×Ò³¶ÔÕÕÇëÇÐ²Ëµ¥¡£
-     * `image_camera_auto_exposure()` ÄÚÓÐ½çµü´ú£¬¿ÉÄÜ¶ÌÊ±×èÈû£»AE ºóÔÚµ±Ç°ÆØ¹âÏÂÔÙÑ¹Ò»Ö¡ÓÃÓÚÏÔÊ¾¡£
+     * å•åˆ—ã€ŒåŽ‹ç¼©Â·AE åŽã€ï¼šæœ¬é¡µä¸å åŒå›¾ï¼Œé¿å…ç«–å‘ä¸¤çª—å ä½ä¸è¶³ã€dis_* å¼ºåŽ‹ç•¸å˜ï¼›ä¸Žå°é˜¶é¡µå¯¹ç…§è¯·åˆ‡èœå•ã€‚
+     * `image_camera_auto_exposure()` å†…æœ‰ç•Œè¿­ä»£ï¼Œå¯èƒ½çŸ­æ—¶é˜»å¡žï¼›AE åŽåœ¨å½“å‰æ›å…‰ä¸‹å†åŽ‹ä¸€å¸§ç”¨äºŽæ˜¾ç¤ºã€‚
      */
-    ips200_show_string(0,ROW_8,"Ñ¹Ëõ AEºó");
+    ips200_show_string(0,ROW_8,"åŽ‹ç¼© AEåŽ");
     image_camera_auto_exposure();
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -784,7 +788,7 @@ void ACT_2_1_2()
     ReadPos[4] = '2';
 }
 
-void GUI_2_1_3(void) // µßô¤Â·¶Î¼ì²â
+void GUI_2_1_3(void) // é¢ ç°¸è·¯æ®µæ£€æµ‹
 {
     GUI_Display_Level3_ImageDetect(3);
 
@@ -803,7 +807,7 @@ void ACT_2_1_3()
     ReadPos[4] = '3';
 }
 
-// void GUI_1_3_1(void) // ²âÊÔÉãÏñÍ·
+// void GUI_1_3_1(void) // æµ‹è¯•æ‘„åƒå¤´
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Image");
@@ -818,7 +822,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_1_4_1(void) // ²âÊÔÍÓÂÝÒÇ
+// void GUI_1_4_1(void) // æµ‹è¯•é™€èžºä»ª
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Gyro");
@@ -851,17 +855,17 @@ void ACT_2_1_3()
 
 
 // // /*********************************************************************************************************************
-// // * Ö±Á¢»·µ÷ÊÔ½çÃæ
+// // * ç›´ç«‹çŽ¯è°ƒè¯•ç•Œé¢
 // // *********************************************************************************************************************/
 // static void GUI_Display_Level3_Common2(void)
 // {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//ºáÏß
+//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//æ¨ªçº¿
 //     ips200_show_string(0,ROW_1,"Image");
-//     ips200_draw_line(188,20,188,319,IPS200_DEFAULT_PENCOLOR);//ÊúÏß
+//     ips200_draw_line(188,20,188,319,IPS200_DEFAULT_PENCOLOR);//ç«–çº¿
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_1_1(void) // Ô­Ê¼Í¼Ïñ + ¶þÖµ»¯
+// void GUI_2_1_1(void) // åŽŸå§‹å›¾åƒ + äºŒå€¼åŒ–
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -880,7 +884,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_2_1_2(void) // ¶þÖµ»¯ + Á¬Ðø±ßÏß
+// void GUI_2_1_2(void) // äºŒå€¼åŒ– + è¿žç»­è¾¹çº¿
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -900,7 +904,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '2';
 // }
 
-// void GUI_2_1_3(void) // Á¬Ðø±ßÏß + ÀëÉ¢±ßÏß
+// void GUI_2_1_3(void) // è¿žç»­è¾¹çº¿ + ç¦»æ•£è¾¹çº¿
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -926,11 +930,11 @@ void ACT_2_1_3()
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_2_1(void) // ½ÇËÙ¶È»·P
+// void GUI_2_2_1(void) // è§’é€Ÿåº¦çŽ¯P
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -955,12 +959,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_2(void) // ½ÇËÙ¶È»·I
+// void GUI_2_2_2(void) // è§’é€Ÿåº¦çŽ¯I
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -980,12 +984,12 @@ void ACT_2_1_3()
 //     }
 // }   
 
-// void GUI_2_2_3(void) // ½Ç¶È»·P
+// void GUI_2_2_3(void) // è§’åº¦çŽ¯P
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1005,12 +1009,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_4(void) // ½ÇËÙ¶È»·D
+// void GUI_2_2_4(void) // è§’é€Ÿåº¦çŽ¯D
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1030,12 +1034,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_5(void) // ËÙ¶È»·P
+// void GUI_2_2_5(void) // é€Ÿåº¦çŽ¯P
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(50,208,112,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,224,112,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,208,50,224,IPS200_DEFAULT_PENCOLOR);
@@ -1055,12 +1059,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_6(void) // ËÙ¶È»·D
+// void GUI_2_2_6(void) // é€Ÿåº¦çŽ¯D
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(168,208,238,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,224,238,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,208,168,224,IPS200_DEFAULT_PENCOLOR);
@@ -1082,21 +1086,21 @@ void ACT_2_1_3()
 // }
 
 // // /*********************************************************************************************************************
-// // * ×ªÏò»·µ÷Ê½½çÃæ
+// // * è½¬å‘çŽ¯è°ƒå¼ç•Œé¢
 // // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common4(void) // ×ªÏò»·µ÷ÊÔ½çÃæ
+// static void GUI_Display_Level3_Common4(void) // è½¬å‘çŽ¯è°ƒè¯•ç•Œé¢
 // {
 //     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
 //     ips200_show_string(0,ROW_1,"Dir_Pid ");
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_3_1(void) // ×ªÏòÄÚ»·P
+// void GUI_2_3_1(void) // è½¬å‘å†…çŽ¯P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -1116,12 +1120,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_2(void) // ×ªÏòÄÚ»·D
+// void GUI_2_3_2(void) // è½¬å‘å†…çŽ¯D
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -1141,12 +1145,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_3(void) // ×ªÏòÍâ»·P
+// void GUI_2_3_3(void) // è½¬å‘å¤–çŽ¯P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1166,12 +1170,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_4(void) // ×ªÏòÍâ»·D 
+// void GUI_2_3_4(void) // è½¬å‘å¤–çŽ¯D 
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //»­¿ò
+//     //ç”»æ¡†
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1192,7 +1196,7 @@ void ACT_2_1_3()
 // }
 
 // // /*********************************************************************************************************************
-// // * ËÙ¶È¾ö²ßÉèÖÃ½çÃæ
+// // * é€Ÿåº¦å†³ç­–è®¾ç½®ç•Œé¢
 // // *********************************************************************************************************************/
 // static void GUI_Display_Level3_Common5(void)
 // {
@@ -1215,10 +1219,10 @@ void ACT_2_1_3()
 // }
 
 /*********************************************************************************************************************
-* ÆäËû¸¨Öúº¯Êý
+* å…¶ä»–è¾…åŠ©å‡½æ•°
 *********************************************************************************************************************/
 
-// static void GUI_Display_Image_Sidebar(void) // Í¼Ïñ½çÃæ²à±ßÀ¸ÏÔÊ¾ÄÚÈÝ
+// static void GUI_Display_Image_Sidebar(void) // å›¾åƒç•Œé¢ä¾§è¾¹æ æ˜¾ç¤ºå†…å®¹
 // {
 //     ips200_show_string(192,ROW_3,"Th");         ips200_show_int(192,ROW_4,Threshold,3);
 //     ips200_show_string(192,ROW_5,"Pitch");      ips200_show_float(192,ROW_6,Gyro.pitch,3,1);
@@ -1230,7 +1234,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_Display_Image_Below(void) // Í¼Ïñ½çÃæÏÂ·½ÏÔÊ¾ÄÚÈÝ
+// static void GUI_Display_Image_Below(void) // å›¾åƒç•Œé¢ä¸‹æ–¹æ˜¾ç¤ºå†…å®¹
 // {
 //     switch(ElementStatusMachine.CurrentStatus)
 //     {
@@ -1318,10 +1322,10 @@ void ACT_2_1_3()
     
 //     ips200_draw_line(0,21+(IMAGE_H - ImagePst.AimIndex),239,21+(IMAGE_H - ImagePst.AimIndex),IPS200_DEFAULT_PENCOLOR);
 
-//     //¹Õµã»­Ïß
+//     //æ‹ç‚¹ç”»çº¿
 //     for(uint8 i = 0;i < 6;i++)
 //     {
-//         //ÓÒÏÂ
+//         //å³ä¸‹
 //         if(RightCorner[0].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 + i,0,187),Clip16(RightCorner[0].Position.y*2 - i + 21,21,209),RGB565_RED);
@@ -1329,7 +1333,7 @@ void ACT_2_1_3()
 //             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 - i,0,187),Clip16(RightCorner[0].Position.y*2 - i + 21,21,209),RGB565_RED);
 //             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 - i,0,187),Clip16(RightCorner[0].Position.y*2 + i + 21,21,209),RGB565_RED);
 //         }
-//         //×óÏÂ
+//         //å·¦ä¸‹
 //         if(LeftCorner[0].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 + i,0,187),Clip16(LeftCorner[0].Position.y*2 - i + 21,21,209),RGB565_YELLOW);
@@ -1338,7 +1342,7 @@ void ACT_2_1_3()
 //             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 - i,0,187),Clip16(LeftCorner[0].Position.y*2 + i + 21,21,209),RGB565_YELLOW);
 //         }
 
-//         //ÓÒÖÐ
+//         //å³ä¸­
 //         if(RightCorner[1].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 + i,0,187),Clip16(RightCorner[1].Position.y*2 - i + 21,21,209),RGB565_RED);
@@ -1346,7 +1350,7 @@ void ACT_2_1_3()
 //             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 - i,0,187),Clip16(RightCorner[1].Position.y*2 - i + 21,21,209),RGB565_RED);
 //             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 - i,0,187),Clip16(RightCorner[1].Position.y*2 + i + 21,21,209),RGB565_RED);
 //         }
-//         //×óÖÐ
+//         //å·¦ä¸­
 //         if(LeftCorner[1].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 + i,0,187),Clip16(LeftCorner[1].Position.y*2 - i + 21,21,209),RGB565_BLUE);
@@ -1355,7 +1359,7 @@ void ACT_2_1_3()
 //             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 - i,0,187),Clip16(LeftCorner[1].Position.y*2 + i + 21,21,209),RGB565_BLUE);
 //         }
 
-//         //ÓÒÉÏ
+//         //å³ä¸Š
 //         if(RightCorner[2].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 + i,0,187),Clip16(RightCorner[2].Position.y*2 - i + 21,21,209),RGB565_MAGENTA);
@@ -1363,7 +1367,7 @@ void ACT_2_1_3()
 //             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 - i,0,187),Clip16(RightCorner[2].Position.y*2 - i + 21,21,209),RGB565_MAGENTA);
 //             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 - i,0,187),Clip16(RightCorner[2].Position.y*2 + i + 21,21,209),RGB565_MAGENTA);
 //         }
-//         //×óÉÏ
+//         //å·¦ä¸Š
 //         if(LeftCorner[2].Find == 1)
 //         {
 //             ips200_draw_point(Clip16(LeftCorner[2].Position.x*2 + i,0,187),Clip16(LeftCorner[2].Position.y*2 - i + 21,21,209),RGB565_BROWN);
@@ -1424,7 +1428,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_SetAngleLoop(void) // Ö±Á¢»·ÉèÖÃ½çÃæ
+// static void GUI_SetAngleLoop(void) // ç›´ç«‹çŽ¯è®¾ç½®ç•Œé¢
 // {
 //     ips200_show_string(0,ROW_3,"AngleDot");
 //     ips200_show_string(0,ROW_4,"Dot_Kp");   ips200_show_float(64,ROW_4,AngleDotPID.Kp,4,1);
@@ -1452,7 +1456,7 @@ void ACT_2_1_3()
 //     ips200_show_string(0,ROW_18,"Pwm");         ips200_show_float(64,ROW_18,DirPwm,4,1);
 // }
 
-// static void GUI_SetDirLoop(void) // ×ªÏò»·ÉèÖÃ½çÃæ
+// static void GUI_SetDirLoop(void) // è½¬å‘çŽ¯è®¾ç½®ç•Œé¢
 // {
 //     ips200_show_string(0,ROW_3,"Dir_In");
 //     ips200_show_string(0,ROW_4,"In_Kp");   ips200_show_float(64,ROW_4,DirAngleDotPID.Kp,4,1);

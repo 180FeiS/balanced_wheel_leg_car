@@ -3,6 +3,11 @@
 
 static uint8 nag_flash_index_read = 0;
 
+static uint32 flash_RunLaunchSpeedChecksum(uint32 speed_raw)
+{
+    return Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Speed_Version ^ speed_raw;
+}
+
 static uint32 flash_Nag_EventChecksum(uint8 event_count)
 {
     uint32 checksum = Nag_Event_Version ^ (uint32)event_count;
@@ -110,6 +115,54 @@ static void flash_Nag_ReadEventPage(void)
     if (expect_checksum != event_checksum)
     {
         flash_Nag_ClearEventTable();
+    }
+    flash_buffer_clear();
+}
+
+/* 保存 Run 发车速度设定值：
+ * 这里只持久化 run_launch_speed，真正运行速度 motor_user_speed_cmd 仍由惯导回放进入执行态前统一装载。
+ */
+void flash_RunLaunchSpeed_Write(void)
+{
+    flash_buffer_clear();
+    flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Speed_Version;
+    flash_union_buffer[3].float_type = run_launch_speed;
+    flash_union_buffer[2].uint32_type = flash_RunLaunchSpeedChecksum(flash_union_buffer[3].uint32_type);
+
+    if (flash_check(0, Nag_Run_Launch_Speed_Page))
+    {
+        flash_erase_page(0, Nag_Run_Launch_Speed_Page);
+    }
+    flash_write_page_from_buffer(0, Nag_Run_Launch_Speed_Page, FLASH_PAGE_LENGTH);
+    flash_buffer_clear();
+}
+
+/* 上电读回 Run 发车速度。校验失败时保持 control.c 中的默认值，避免空页误写速度。 */
+void flash_RunLaunchSpeed_Read(void)
+{
+    uint32 speed_magic = 0;
+    uint32 speed_version = 0;
+    uint32 speed_checksum = 0;
+    uint32 speed_raw = 0;
+
+    if (!flash_check(0, Nag_Run_Launch_Speed_Page))
+    {
+        return;
+    }
+
+    flash_buffer_clear();
+    flash_read_page_to_buffer(0, Nag_Run_Launch_Speed_Page, FLASH_PAGE_LENGTH);
+    speed_magic = flash_union_buffer[0].uint32_type;
+    speed_version = flash_union_buffer[1].uint32_type;
+    speed_checksum = flash_union_buffer[2].uint32_type;
+    speed_raw = flash_union_buffer[3].uint32_type;
+
+    if ((speed_magic == Nag_Run_Launch_Speed_Magic) &&
+        (speed_version == Nag_Run_Launch_Speed_Version) &&
+        (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))
+    {
+        run_launch_speed = flash_union_buffer[3].float_type;
     }
     flash_buffer_clear();
 }

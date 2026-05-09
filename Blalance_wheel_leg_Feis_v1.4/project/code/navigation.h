@@ -88,6 +88,15 @@
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
 #define Nag_Event_Version 1u
 
+/* Run 发车速度参数页：
+ * 1. yaw 轨迹仍放在页 2~45；
+ * 2. 元素表固定使用页 46；
+ * 3. 页 47 只保存 run_launch_speed 设定值，不保存运行中的 motor_user_speed_cmd。
+ */
+#define Nag_Run_Launch_Speed_Page 47u
+#define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
+#define Nag_Run_Launch_Speed_Version 1u
+
 /* 自转元素示范参数：
  * 这组参数只是给默认的 Nag_Hook_Spin_* 一个“能跑通模板”的最小接法，
  * 后续你可以把它改成来自菜单、事件参数表，或完全替换成自己的实现。

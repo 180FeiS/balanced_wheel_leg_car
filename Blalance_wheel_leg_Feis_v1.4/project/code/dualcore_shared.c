@@ -9,6 +9,7 @@
 #include "ekf.h"
 #include "control.h"
 #include "navigation.h"
+#include "flash.h"
 #endif
 
 #if defined(CY_CORE_CM7_0)
@@ -159,6 +160,10 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS:
     /* 菜单发车速度页专用命令：只更新发车设定值，不代表 PC 协议，也不立即写 motor_user_speed_cmd。 */
     run_launch_speed = s->arg_f32;
+    break;
+  case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH:
+    /* Run/Flash 菜单专用命令：持久化发车设定值，不修改运行中的 motor_user_speed_cmd。 */
+    flash_RunLaunchSpeed_Write();
     break;
   case DUALCORE_UI_CMD_KEY_NAV_RECORD:
     Nag_Begin_Record();

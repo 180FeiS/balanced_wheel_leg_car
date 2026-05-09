@@ -65,6 +65,7 @@
 #include "dualcore_shared.h"
 #if defined(CY_CORE_CM7_0)
 #include "control.h"
+#include "flash.h"
 #endif
 
 /* 全局变量定义 */
@@ -102,9 +103,11 @@ static void MenuKeyEventPush(menu_key_nav_enum nav);
 static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 static uint8 MenuIsNavDebugPage(void);
 static uint8 MenuIsRunLaunchSpeedPage(void);
+static uint8 MenuIsRunFlashPage(void);
 static void MenuApplyRunLaunchSpeed(float speed);
 static void MenuAdjustRunLaunchSpeed(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
+static uint8 MenuTryHandleRunFlashKeyEvent(void);
 
 /* 发车速度页三档设定值。KEY1 在 0/500/1000 三档间循环，KEY2/KEY3 只调整当前下标对应的档位。 */
 static float s_run_launch_speed_presets[3] = {0.0f, 500.0f, 1000.0f};
@@ -228,6 +231,10 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -301,6 +308,10 @@ void menu_key_capture_event(void)
     }
 #endif
    if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
    {
         return;
    }
@@ -486,6 +497,12 @@ static uint8 MenuIsRunLaunchSpeedPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.1.1") == 0);
 }
 
+/* Run/Flash 二级项没有真实下级；在该页按 KEY3（进入）时解释为保存 run_launch_speed 到 flash。 */
+static uint8 MenuIsRunFlashPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.2") == 0);
+}
+
 /* 应用发车速度设定值：只写 run_launch_speed，不直接写 motor_user_speed_cmd。
  * 真正运行速度仍由惯导回放进入执行态前统一装载。
  */
@@ -526,6 +543,23 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
     {
         MenuAdjustRunLaunchSpeed(100.0f);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* 返回 1 表示 Run/Flash 页已消费 KEY3 保存动作；KEY1/KEY2/KEY4 仍走普通菜单导航。 */
+static uint8 MenuTryHandleRunFlashKeyEvent(void)
+{
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH, 0, 0.0f);
+#else
+        flash_RunLaunchSpeed_Write();
+#endif
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
         return 1u;

@@ -64,6 +64,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
   {
     flash_init();//CYT系列独有的Flash初始化。!!!!!!!!!
     Init_Nag();
+    flash_RunLaunchSpeed_Read();
   }
   // 姿态解算初始化
   if (ekf_flag == 1)
