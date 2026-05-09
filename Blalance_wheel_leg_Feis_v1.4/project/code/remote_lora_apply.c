@@ -7,9 +7,11 @@
  * - 左上/侧向键 key[REMOTE_LORA_KEY_INDEX_ROLL_BALANCE] 上升沿切换横滚平衡 roll_balance_en；
  * - 右上/侧向键 key[REMOTE_LORA_KEY_INDEX_JUMP] 上升沿在满足 jump_is_allowed 且未在跳时置 jump_flag；
  * - 左拨码：首帧只同步前态不判沿，避免首包/掉线重连假沿进回放；沿 1→0 → Nag_Begin_Replay（可改 REMOTE_LORA_REPLAY_ON_SW0_RISING）；[0]=1 时 [1] 录/停沿（见 remote_lora.h）；
+ * - MENU_INPUT_REMOTE_MENU_FIRST==1：遥控拨码 4（switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX]）电平=REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL 时为板载调试，本函数不再映射摇杆/键/左拨码（仅拨码 4 仍被读入用于切换）。
  * - 失控锁存时禁止用遥控将电机从 OFF 置 ON。
  *********************************************************************************************************************/
 #include "dualcore_shared.h"
+#include "Menu.h"
 #include "remote_lora.h"
 #include "control.h"
 #include "navigation.h"
@@ -69,6 +71,28 @@ void remote_lora_apply_validate_motor(void)
     uint8 rising_r;
 
     dualcore_remote_pull(&r);
+
+#if MENU_INPUT_REMOTE_MENU_FIRST
+    if ((r.enabled == 0u) || (r.online == 0u))
+    {
+        g_remote_local_keys_debug = 0u;
+    }
+    else
+    {
+        uint8 swv = 0u;
+#if REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX < 4u
+        swv = (r.switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX] != 0u) ? 1u : 0u;
+#endif
+        g_remote_local_keys_debug = (uint8)((swv == REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL) ? 1u : 0u);
+    }
+
+    if (g_remote_local_keys_debug != 0u)
+    {
+        remote_lora_steer_snapshot_valid = 0u;
+        remote_lora_steer_rate_cmd_dps = 0.0f;
+        return;
+    }
+#endif /* MENU_INPUT_REMOTE_MENU_FIRST */
 
     if ((r.enabled == 0u) || (r.online == 0u))
     {

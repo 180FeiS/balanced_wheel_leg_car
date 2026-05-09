@@ -93,12 +93,12 @@ int main(void)
         remote_lora_update_from_driver_and_publish();
 
         step_detect();
-        step_visual_jump_after_step(); /* 视觉自动跳跃：见 step_detection.c / VISUAL_JUMP_* */
+        //step_visual_jump_after_step(); /* 视觉自动跳跃：见 step_detection.c / VISUAL_JUMP_* */
         static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
-        cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
+        //cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
     }
 }
 

@@ -162,6 +162,8 @@ extern volatile float remote_lora_steer_rate_cmd_dps;
 /* 1：最近一次 remote_lora_apply 在 enabled&&online 下已更新横向通道；0：离线或未使能 */
 extern volatile uint8 remote_lora_steer_snapshot_valid;
 
+extern uint8 g_remote_local_keys_debug; /* 1：板载调试路径；由 remote_lora_apply 更新，dualcore publish 给 CM7_1 */
+
 uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
 uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */
 

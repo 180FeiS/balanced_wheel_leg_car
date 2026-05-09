@@ -20,7 +20,7 @@ struct dualcore_remote_to_ctrl;
 #endif
 /* 1：前进方向与摇杆相反时整体取反 */
 #ifndef REMOTE_LORA_VALIDATE_SPEED_INVERT
-#define REMOTE_LORA_VALIDATE_SPEED_INVERT  0
+#define REMOTE_LORA_VALIDATE_SPEED_INVERT  1
 #endif
 
 /* 右摇杆 right_x：目标偏航角速度满偏（°/s），与 control.c 中 STEER_RATE_TARGET_MAX_DPS 同量级便于实车调参 */
@@ -60,6 +60,14 @@ struct dualcore_remote_to_ctrl;
 #endif
 #ifndef REMOTE_LORA_REPLAY_ON_SW0_RISING
 #define REMOTE_LORA_REPLAY_ON_SW0_RISING  (0u)
+#endif
+
+/* MENU_INPUT_REMOTE_MENU_FIRST==1 时：switch_key 下标 REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX 与宏一致电平 = 板载按键/拨码调试 */
+#ifndef REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX
+#define REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX  (3u)
+#endif
+#ifndef REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL
+#define REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL  (0u)
 #endif
 
 void remote_lora_init(void);

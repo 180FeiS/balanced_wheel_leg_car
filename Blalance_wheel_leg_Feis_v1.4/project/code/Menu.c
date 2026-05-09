@@ -55,6 +55,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dualcore_shared.h"
+#if defined(CY_CORE_CM7_0)
+#include "control.h"
+#endif
 
 /* 全局变量定义 */
 HASH_TABLE_t hashMenu;    // 储存菜单项的哈希表
@@ -150,8 +153,11 @@ void dip_switch_motor_sync_from_hw(void)
     (void)0;
 #else
 #if MENU_INPUT_REMOTE_MENU_FIRST
-    /* 遥控优先（方案 B）：不读 SWITCH；Runaway 锁存不靠拨码清除。 */
-    return;
+    /* 遥控优先且非板载调试：不读 SWITCH；板载调试时读 GPIO，等同宏=0。 */
+    if (g_remote_local_keys_debug == 0u)
+    {
+        return;
+    }
 #endif
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
 
@@ -186,13 +192,15 @@ void dip_switch_motor_sync_from_hw(void)
 
 void menu_key_capture_event(void)
 {
-#if MENU_INPUT_REMOTE_MENU_FIRST
-    /* 遥控优先：板载键不进入菜单/导航事件队列。 */
-    return;
-#endif
 #if defined(CY_CORE_CM7_1)
    dualcore_ctrl_to_ui_t dc;
    dualcore_ctrl_to_ui_pull(&dc);
+#if MENU_INPUT_REMOTE_MENU_FIRST
+   if (dc.remote_local_keys_debug == 0u)
+   {
+       return;
+   }
+#endif
    uint8 nav_recording_active = dc.nav_recording_active;
    uint8 event_active = dc.event_active;
    if(MenuIsNavDebugPage())
@@ -261,6 +269,12 @@ void menu_key_capture_event(void)
         }
    }
 #else
+#if MENU_INPUT_REMOTE_MENU_FIRST
+    if (g_remote_local_keys_debug == 0u)
+    {
+        return;
+    }
+#endif
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -456,6 +470,12 @@ void selectMenu(void)
     uint8 motor_sw_sel = Motor_Switch;
 #endif
 #if MENU_INPUT_REMOTE_MENU_FIRST
+#if defined(CY_CORE_CM7_1)
+    if (dc_s.remote_local_keys_debug == 0u)
+#else
+    if (g_remote_local_keys_debug == 0u)
+#endif
+    {
     switch (Menu_command)
     {
     case 'a':
@@ -591,6 +611,7 @@ void selectMenu(void)
         Nag_Notify_Event_Done();
 #endif
         break;
+    }
     }
 #else
     /* 按键+拨码模式：不消费串口单字节菜单命令，避免与按键双触发。 */

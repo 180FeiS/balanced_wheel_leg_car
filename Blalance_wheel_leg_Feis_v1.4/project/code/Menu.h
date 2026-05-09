@@ -27,12 +27,13 @@
 
 /*
  * 菜单输入源（编译期）：改后需重编译烧录。
- * 1 = 遥控优先：板载键不进入菜单/导航；CM7_0 侧 dip_switch_motor_sync_from_hw 不读 SWITCH1/2（方案 B）；
- *    Motor_Runaway_Latch 不能靠拨码清除，须后续遥控协议或复位；保护性关断仍以 control.c 为准。
- * 0 = 按键+拨码恢复原有同步；selectMenu 不执行 Menu_command 的 switch，避免与按键双触发。
+ * 0 = 按键+拨码：板载键与 SWITCH1/2；不读遥控快照做模式切换；selectMenu 不执行 Menu_command 的 switch，避免与按键双触发。
+ * 1 = 遥控优先：初始为全遥控（板载键与本地拨码默认不介入）；CM7_0 侧 dip_switch_motor_sync_from_hw 默认不读 SWITCH1/2；
+ *    可用遥控第 4 路拨码电平（remote_lora.h：REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX / REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL）
+ *    切到「板载调试」：与宏=0 类似的按键与本地拨码路径；全遥控时 Motor_Runaway_Latch 不能靠拨码清除；保护性关断仍以 control.c 为准。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 0
+#define MENU_INPUT_REMOTE_MENU_FIRST 1
 #endif
 
 /*

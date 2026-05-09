@@ -206,7 +206,7 @@ vuint8 steer_yaw_delayed_by_spin = 0;
 volatile float steer_yaw_request_deg = 0.0f;
 
 /* 上电航向：约 300ms 后仅锁存一次 euler_angle.yaw；yaw_hold_poweron_en=1 时 ISR 内补发目标（见 yaw_hold_poweron_request_if_needed） */
-#define YAW_POWERON_REF_LATCH_MS  300u
+#define YAW_POWERON_REF_LATCH_MS  0u
 uint8 yaw_hold_poweron_en = 1;
 float yaw_poweron_ref = 0.0f;
 static uint8 yaw_poweron_ref_latched = 0;
@@ -216,6 +216,9 @@ static uint16 yaw_poweron_latch_count = 0;
 volatile float remote_lora_steer_rate_cmd_dps = 0.0f;
 /* 本次周期是否具备有效 LORA 遥控数据（在线且摇杆/键语义有效时置 1，离线或禁用时由 apply 清 0） */
 volatile uint8 remote_lora_steer_snapshot_valid = 0u;
+
+/* 1：遥控优先工程下已切到板载按键/拨码调试（见 remote_lora_apply）；仅 MENU_INPUT_REMOTE_MENU_FIRST 时由 apply 更新 */
+uint8 g_remote_local_keys_debug = 0u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)
