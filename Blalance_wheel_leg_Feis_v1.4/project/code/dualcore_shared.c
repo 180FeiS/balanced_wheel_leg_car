@@ -63,6 +63,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->save_index = (uint32)N.Save_index;
   c->flash_page_index = (uint32)N.Flash_page_index;
   c->motor_user_speed_cmd = motor_user_speed_cmd;
+  c->run_launch_speed = run_launch_speed;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
   c->spin_done = spin_done;
@@ -138,10 +139,10 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     steer_request_relative_yaw(s->arg_f32);
     break;
   case DUALCORE_UI_CMD_SPEED_DELTA:
-    motor_user_speed_cmd += s->arg_f32;
+    run_launch_speed += s->arg_f32;
     break;
   case DUALCORE_UI_CMD_SPEED_SET_ABS:
-    motor_user_speed_cmd = s->arg_f32;
+    run_launch_speed = s->arg_f32;
     break;
   case DUALCORE_UI_CMD_NAG_EVENT_MARK:
     Nag_Request_Event_Mark();
@@ -154,6 +155,10 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     break;
   case DUALCORE_UI_CMD_MOTOR_SPEED_FROM_PC:
     motor_user_speed_cmd_set_from_pc(s->arg_f32);
+    break;
+  case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS:
+    /* 菜单发车速度页专用命令：只更新发车设定值，不代表 PC 协议，也不立即写 motor_user_speed_cmd。 */
+    run_launch_speed = s->arg_f32;
     break;
   case DUALCORE_UI_CMD_KEY_NAV_RECORD:
     Nag_Begin_Record();

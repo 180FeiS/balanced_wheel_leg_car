@@ -33,8 +33,13 @@
  *    切到「板载调试」：与宏=0 类似的按键与本地拨码路径；全遥控时 Motor_Runaway_Latch 不能靠拨码清除；保护性关断仍以 control.c 为准。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 1
+#define MENU_INPUT_REMOTE_MENU_FIRST 0
 #endif
+
+/*
+ * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。
+ * 物理键/串口字节如何对应到它们，一律只在 Menu.c 的 selectMenu_Key 与 Menu_command 分支中处理。
+ */
 
 /*
  * 菜单位置编码说明：
@@ -70,11 +75,11 @@ typedef struct HASH_VTBL
     uint8_t (*insert)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);            // 向哈希表中插入新菜单项
     uint8_t (*search)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str); // 根据位置编码查找菜单项
 
-    // 菜单导航操作
-    uint8_t (*searchLeft)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);  // 查找同级菜单中的上一个选项
-    uint8_t (*searchRight)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember); // 进入当前选项的子菜单
-    uint8_t (*searchUp)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);    // 查找当前菜单中的上一个选项
-    uint8_t (*searchDown)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);  // 查找当前菜单中的下一个选项
+    // 菜单导航操作（结构语义：与参考工程 Balance_Car_initial Menu.c HashTableCtor 一致）
+    uint8_t (*searchLeft)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);  // 切换到上一个同级选项
+    uint8_t (*searchRight)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember); // 切换到下一个同级选项
+    uint8_t (*searchUp)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);    // 返回上级菜单
+    uint8_t (*searchDown)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember); // 进入当前选项的子菜单
 } HASH_VTBL_t;
 
 // 全局变量：当前选中的菜单项

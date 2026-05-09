@@ -35,7 +35,12 @@
 #if defined(CY_CORE_CM7_1)
 #include "dualcore_shared.h"
 static dualcore_ctrl_to_ui_t s_ui_dc;
+#else
+#include "control.h"
 #endif
+
+/* Run：须与 pos 3.1~3.3 的 menuMember 箭头行一致，否则 HashPeer 切项时画面与真实 pos 不同步。勿在 pos「3」上用此表。 */
+static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 
 void ui_pull_ctrl_snapshot(void)
 {
@@ -79,10 +84,10 @@ void ui_pull_ctrl_snapshot(void)
 *    - 2_5. 更新Flash参数
 *    - 2_6. 清空FLASH缓存区
 *
-* 3. 运行模式 (GUI_3)
-*    - 3_1. 预留参数设置1
-*    - 3_2. 预留参数设置2
-*    - 3_3. 预留参数设置3
+* 3. 运行模式 —— GUI 必须与 pos 层级一致（易错：一级「3」与二级「3.1」勿画同一块子菜单）：
+*    - GUI_3 仅 pos 「3」：顶层 Test/Debug/Run 三行中与 GUI_1/2 同源的一级 Run。
+*    - GUI_3_1～GUI_3_3 仅 pos 「3.1～3.3」：二级列表 Launch/Flash/More，三页应用同一文本、不同箭头行，配合 HashPeer 切换。
+*    - GUI_3_1_1 仅 pos 「3.1.1」：Launch 下三级发车速度壳；发车 UI/逻辑不应塞在 GUI_3_1，否则会破坏「选中再进入」的树。
 *********************************************************************************************************************/
 
 /*********************************************************************************************************************
@@ -171,7 +176,7 @@ void ACT_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3(void) // 运行模式
+void GUI_3(void) // pos「3」：一级 Run（与 GUI_1/2 同源）；子列表仅属于 pos 3.1～3.3
 {
     GUI_Display_Level1_Common1();
 
@@ -514,9 +519,9 @@ void ACT_2_6()
     }
 #endif
 }
-// /*********************************************************************************************************************
-// * 方案选择界面
-// *********************************************************************************************************************/
+// *********************************************************************************************************************
+// * Run 二级/三级：Common3 顶栏 + 列表或发车页。一级 GUI_3 不得复用下列列表，否则与 menu 树错位。
+// *********************************************************************************************************************
 static void GUI_Display_Level2_Common3(void)
 {
     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
@@ -524,11 +529,37 @@ static void GUI_Display_Level2_Common3(void)
 
     GUI_Display_FPS();
 }
-void GUI_3_1(void) // 预留参数设置1
+
+/** 二级 Run 列表：与 GUI_2_1 版式对齐；selected_row_index 必须与当前 pos 末位 1/2/3 一致 */
+static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
-    // 预留参数设置1
+    int16 ay;
+
     GUI_Display_Level2_Common3();
 
+    ips200_show_string(80, ROW_8, " Launch ");
+    ips200_show_string(80, ROW_10, " Flash  ");
+    ips200_show_string(80, ROW_12, " More   ");
+
+    switch (selected_row_index)
+    {
+    default:
+        ay = ROW_8;
+        break;
+    case 1u:
+        ay = ROW_10;
+        break;
+    case 2u:
+        ay = ROW_12;
+        break;
+    }
+    ips200_show_string(48, ay, "-->");
+    ips200_show_string(152, ay, "<--");
+}
+
+void GUI_3_1(void) // Launch 二级项：列表箭头第一行
+{
+    GUI_Run_ShowSubmenuList(0u);
 }
 void ACT_3_1()
 {
@@ -539,10 +570,9 @@ void ACT_3_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3_2(void) // 预留参数设置2
+void GUI_3_2(void)
 {
-    // 预留参数设置2
-    GUI_Display_Level2_Common3();
+    GUI_Run_ShowSubmenuList(1u);
 }
 void ACT_3_2()
 {
@@ -553,10 +583,9 @@ void ACT_3_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3_3(void) // 预留参数设置3
+void GUI_3_3(void)
 {
-    // 预留参数设置3
-    GUI_Display_Level2_Common3();
+    GUI_Run_ShowSubmenuList(2u);
 }
 void ACT_3_3()
 {
@@ -565,6 +594,39 @@ void ACT_3_3()
     ReadPos[2] = '3';
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
+}
+
+void GUI_3_1_1(void) // 发车速度三级页：KEY1 切 0/500/1000，KEY2/3 微调 run_launch_speed
+{
+    GUI_Display_Level2_Common3();
+
+    ips200_show_string(56, ROW_3, "Launch Spd");
+    ips200_draw_line(24, ROW_5 - 1, 215, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24, ROW_5, "KEY1: preset next");
+    ips200_show_string(24, ROW_6, "KEY2/3: -/+100");
+    ips200_show_string(24, ROW_7, "KEY4: back");
+
+    ips200_draw_line(24, ROW_9, 215, ROW_9, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24, ROW_10, "Launch:");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_float(96, ROW_10, (double)s_ui_dc.run_launch_speed, 5, 1);
+#else
+    ips200_show_float(96, ROW_10, (double)run_launch_speed, 5, 1);
+#endif
+
+    ips200_show_string(24, ROW_14, "Preset: 0/500/1000");
+    ips200_show_string(24, ROW_15, "LED1 blink on key Short");
+}
+
+void ACT_3_1_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
 }
 /*********************************************************************************************************************
 * 三级菜单函数

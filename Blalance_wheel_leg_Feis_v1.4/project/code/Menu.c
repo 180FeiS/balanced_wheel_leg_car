@@ -25,11 +25,19 @@
        - 设置 menuMember.pos (菜单位置编号，如"1"、"1.1"等)
        - 调用 hashMenu.vPtr->insert() 插入菜单项
 
- 4. 菜单控制接口:
-    - hashMenu.vPtr->searchUp(): 切换到上一个同级菜单
-    - hashMenu.vPtr->searchDown(): 切换到下一个同级菜单
-    - hashMenu.vPtr->searchLeft(): 返回上级菜单
-    - hashMenu.vPtr->searchRight(): 进入下级菜单
+ 4. 菜单控制接口（与参考工程结构语义一致；板载键在 selectMenu_Key 中映射到此语义）:
+    - hashMenu.vPtr->searchUp(): 返回上级菜单
+    - hashMenu.vPtr->searchDown(): 进入下级菜单
+    - hashMenu.vPtr->searchLeft(): 切换到上一个同级菜单
+    - hashMenu.vPtr->searchRight(): 切换到下一个同级菜单
+
+    【易错点：虚表语义 vs 板载键名】（避免以后再改回去踩坑）
+    - vtable 四个指针名的历史含义必须与「菜单树」一致（与 Balance_Car_initial Menu.c 相同）：
+      searchDown=进子(HashDepthDown)、searchUp=返父(HashDepthUp)、Left/Right=同级(HashPeerLeft/PeerRight)。
+    - 曾有人把 HashTableCtor 写成「按键方向语义」（例如把 Up/Down 绑成同级、Left/Right 绑成返父/进子），
+      这样与参考工程及 HashDepth/HashPeer 函数名完全对不上，Run/Debug 等分支行为会整体错位。
+    - 本工程板载习惯是 KEY1/2 切同级、KEY3 进入、KEY4 返回：只能在 selectMenu_Key()（及串口 a/b/c/d）
+      里把物理事件映射到上述四个 search*，不要再改 HashTableCtor 去「迎合键名」。
 
  5. 注意事项:
     - 菜单位置编号格式为: "1"、"2"(一级菜单)，"1.1"、"1.2"(二级菜单)
@@ -93,6 +101,14 @@ static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
 static void MenuKeyEventPush(menu_key_nav_enum nav);
 static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 static uint8 MenuIsNavDebugPage(void);
+static uint8 MenuIsRunLaunchSpeedPage(void);
+static void MenuApplyRunLaunchSpeed(float speed);
+static void MenuAdjustRunLaunchSpeed(float delta);
+static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
+
+/* 发车速度页三档设定值。KEY1 在 0/500/1000 三档间循环，KEY2/KEY3 只调整当前下标对应的档位。 */
+static float s_run_launch_speed_presets[3] = {0.0f, 500.0f, 1000.0f};
+static uint8 s_run_launch_speed_preset_index = 0u;
 
 /*-------------------------------------------------------------------------
  * 菜单接口函数-用户只需更改此部分
@@ -108,7 +124,7 @@ static uint8 MenuIsNavDebugPage(void);
 
 /* 返回 1：整帧已由扩展协议消费，ReadDataFromPc 不应再写入 Menu_command。
  * selectMenu() 仅处理单字节；多字节 V<数值> 在本函数解析。
- * 格式：V<数值>  例 V1200 / V0 / V-800（写入 motor_user_speed_cmd，无速度锁；SWITCH2 仍可改写）
+ * 格式：V<数值>  例 V1200 / V0 / V-800（写入 run_launch_speed；仅惯导回放进入执行态时装载）
  */
 uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 {
@@ -141,7 +157,7 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 
 /*-------------------------------------------------------------------------
  * 拨码与速度基准（须周期性调用，如 selectMenu_Key / selectMenu 内）：
- * 1. SWITCH2：motor_poll_switch2_speed_baseline() 按档位/边沿刷新 motor_user_speed_cmd（1000/1500）。
+ * 1. SWITCH2：不再通过 motor_poll_switch2_speed_baseline() 改写 motor_user_speed_cmd（函数为空占位）。
  * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
  * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
  * 4. Motor_Runaway_Latch：最高优先级关电机；遥控优先关闭时须 SWITCH1 到 OFF 后才清除锁存。
@@ -190,6 +206,11 @@ void dip_switch_motor_sync_from_hw(void)
 #endif /* !CY_CORE_CM7_1 */
 }
 
+/*
+ * 按键扫描入队：MENU_KEY_NAV_* 只表示「队列里的方向事件类型」，语义在 selectMenu_Key() 才落到 hash 虚表。
+ * 例如 KEY3 推到 MENU_KEY_NAV_RIGHT，但实际菜单动作是「进入下级」，对应 hash 侧应调 searchDown()，
+ * 不要看到 RIGHT 字面就去绑 searchRight()（那会变成同级切换）。
+ */
 void menu_key_capture_event(void)
 {
 #if defined(CY_CORE_CM7_1)
@@ -203,6 +224,10 @@ void menu_key_capture_event(void)
 #endif
    uint8 nav_recording_active = dc.nav_recording_active;
    uint8 event_active = dc.event_active;
+   if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -275,6 +300,10 @@ void menu_key_capture_event(void)
         return;
     }
 #endif
+   if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -377,28 +406,32 @@ void selectMenu_Key(void)
    uint8 motor_sw_key = Motor_Switch;
 #endif
 
+   /*
+    * 板载映射（保持手感）：KEY1 同级上一项、KEY2 同级下一项、KEY3 进入下级、KEY4 返回上级。
+    * 对应 vPtr：searchLeft / searchRight / searchDown / searchUp（均为菜单树语义，勿与 MENU_KEY_NAV_* 字面混读）。
+    */
    while(MenuKeyEventPop(&nav))
    {
         switch(nav)
         {
         case MENU_KEY_NAV_LEFT:
-             /* 左：返回上一级 */
-             hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
+             /* KEY4：返回上一级（结构语义 searchUp） */
+             hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_RIGHT:
-             /* 右：进入下一级 */
-             hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
-             menu_nav = 1;
-             break;
-        case MENU_KEY_NAV_DOWN:
-             /* 下：切换到下一个同级项 */
+             /* KEY3：进入下一级（结构语义 searchDown） */
              hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
+        case MENU_KEY_NAV_DOWN:
+             /* KEY2：同级下一项（结构语义 searchRight） */
+             hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
+             menu_nav = 1;
+             break;
         case MENU_KEY_NAV_UP:
-             /* 上：切换到上一个同级项 */
-             hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
+             /* KEY1：同级上一项（结构语义 searchLeft） */
+             hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         default:
@@ -447,6 +480,59 @@ static uint8 MenuIsNavDebugPage(void)
     return (uint8)(strcmp(menuMember.pos, "2.2.1") == 0);
 }
 
+/* 仅发车速度三级页拦截 KEY1/2/3；不要扩大到 "3.1" 的 Launch 二级列表页。 */
+static uint8 MenuIsRunLaunchSpeedPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.1.1") == 0);
+}
+
+/* 应用发车速度设定值：只写 run_launch_speed，不直接写 motor_user_speed_cmd。
+ * 真正运行速度仍由惯导回放进入执行态前统一装载。
+ */
+static void MenuApplyRunLaunchSpeed(float speed)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS, 0, speed);
+#else
+    run_launch_speed = speed;
+#endif
+}
+
+/* 调整当前三档里的选中档位，并立即同步到 run_launch_speed 设定值。 */
+static void MenuAdjustRunLaunchSpeed(float delta)
+{
+    s_run_launch_speed_presets[s_run_launch_speed_preset_index] += delta;
+    MenuApplyRunLaunchSpeed(s_run_launch_speed_presets[s_run_launch_speed_preset_index]);
+}
+
+/* 返回 1 表示 KEY1/2/3 已被发车速度页消费，必须避免再进入 MenuKeyEventPush 导航队列。 */
+static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
+{
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        s_run_launch_speed_preset_index = (uint8)((s_run_launch_speed_preset_index + 1u) % 3u);
+        MenuApplyRunLaunchSpeed(s_run_launch_speed_presets[s_run_launch_speed_preset_index]);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+        MenuAdjustRunLaunchSpeed(-100.0f);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_2);
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+        MenuAdjustRunLaunchSpeed(100.0f);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
 /*
  * @Function: selectMenu
  * @Description: 菜单选择处理函数
@@ -476,25 +562,32 @@ void selectMenu(void)
     if (g_remote_local_keys_debug == 0u)
 #endif
     {
+    /* 全遥控时 Menu_command 的单字节导航：语义须与 selectMenu_Key 一致。
+     * 注意：老的 Balance_Car_initial（System_startup.c）里曾为 a/b=c/d / c=Down / d=Up，
+     * 与此处不同；改串口脚本或上位机前务必对照本节与 selectMenu_Key。 */
     switch (Menu_command)
     {
     case 'a':
-        hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
+        /* 与板载键一致：同级上一项 */
+        hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
         ips200_clear();
         break;
 
     case 'b':
-        hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
-        ips200_clear();
-        break;
-
-    case 'c':
+        /* 与板载键一致：同级下一项 */
         hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
         ips200_clear();
         break;
 
+    case 'c':
+        /* 与板载键一致：进入下级 */
+        hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
+        ips200_clear();
+        break;
+
     case 'd':
-        hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
+        /* 与板载键一致：返回上级 */
+        hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
         ips200_clear();
         break;
         /*
@@ -573,21 +666,21 @@ void selectMenu(void)
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_DELTA, 0, 500.0f);
 #else
-        motor_user_speed_cmd += 500.0f;
+        run_launch_speed += 500.0f;
 #endif
         break;
     case 'r':
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_DELTA, 0, -500.0f);
 #else
-        motor_user_speed_cmd -= 500.0f;
+        run_launch_speed -= 500.0f;
 #endif
         break;
     case 's':
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_SPEED_SET_ABS, 0, 0.0f);
 #else
-        motor_user_speed_cmd = 0.0f;
+        run_launch_speed = 0.0f;
 #endif
         break;
     case 't':
@@ -725,6 +818,11 @@ void MenuInit()
     menuMember.act = ACT_3_3;
     strcpy(menuMember.pos, "3.3");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_1_1;
+    menuMember.act = ACT_3_1_1;
+    strcpy(menuMember.pos, "3.1.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
     
     menuMember.gui = GUI_1_1_1;
     menuMember.act = ACT_1_1_1;
@@ -853,15 +951,12 @@ static void HashTableCtor(HASH_TABLE_t *const This)
 
     vTable.insert = HashInsert;
     vTable.search = FindHashValue;
-    /* 对外接口按按键方向语义绑定：
-     * Up/Down   -> 同级切换
-     * Left      -> 返回上级
-     * Right     -> 进入下级
-     */
-    vTable.searchDown = HashPeerRight;
-    vTable.searchUp = HashPeerLeft;
-    vTable.searchLeft = HashDepthUp;
-    vTable.searchRight = HashDepthDown;
+    /* 固定为「菜单树语义」绑定，参见文件头「易错点」。
+     * 若把 Down/Right 等对调成「按键字面」，会与 HashPeer/ HashDepth 实现及参考工程语义全部冲突 */
+    vTable.searchDown = HashDepthDown;
+    vTable.searchUp = HashDepthUp;
+    vTable.searchLeft = HashPeerLeft;
+    vTable.searchRight = HashPeerRight;
 
     This->vPtr = &vTable;
 }

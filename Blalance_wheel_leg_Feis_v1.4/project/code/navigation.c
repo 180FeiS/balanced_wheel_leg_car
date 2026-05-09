@@ -690,7 +690,7 @@ uint16 Nag_GetDebugProspectIndex(void)
 }
 
 /* 速度目标合成（由 pid_ctrl_Run 每 20ms 读取一次）：
- * - motor_user_speed_cmd：用户层基准（拨码 SWITCH2、串口 V、串口 q/r/s），符号表示前进/后退；
+ * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令、串口 q/r/s 等），符号表示前进/后退；
  * - N.Target_Speed：导航前瞻 + 弯道强度算出的“建议上限”，再与用户基准取 MIN/比例；
  * - 本函数在非回放执行态（Nag_SystemRun_Index!=3）强制返回 0，避免待机误跑。
  */
@@ -700,9 +700,9 @@ float Nag_GetControlSpeedTarget(void)
     float abs_user_speed = fabsf((float)motor_user_speed_cmd);
 
     /* 安全门控：正常模式下只有导航真正进入回放执行态(case 3)后，速度目标才允许生效。
-     * 这样可以把 SWITCH2 预选的 1000/1500 先写进 motor_user_speed_cmd，但在上电、待机、录制、
-     * 以及回放准备阶段（Nag_SystemRun_Index==2, 仍在读 flash）时，速度环统一拿到 0。
-     * 调试时若发现 motor_user_speed_cmd 已经是 1000/1500，但车还没动，优先看两件事：
+     * 这样用户设定的 motor_user_speed_cmd 在上电、待机、录制、以及回放准备阶段
+     * （Nag_SystemRun_Index==2, 仍在读 flash）时不会直接驱动速度环（本函数返回 0）。
+     * 调试时若发现 motor_user_speed_cmd 非零但车还没动，优先看两件事：
      * 1. N.Nag_SystemRun_Index 是否已经到 3；
      * 2. Motor_Switch 是否为 ON（由 SWITCH1 决定，失控锁存时强制关）。
      */
@@ -923,7 +923,7 @@ void Nag_Begin_Record(void)
     N.Nag_SystemRun_Index = 1;
 }
 
-/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 后进入 3，速度环才放行 Nag_GetControlSpeedTarget */
+/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 后进入 3，才装载 run_launch_speed 并放行速度环。 */
 void Nag_Begin_Replay(void)
 {
     N.Mileage_All = 0;
@@ -931,7 +931,7 @@ void Nag_Begin_Replay(void)
     N.Mileage_Debug_Total = 0;
     N.Speed_Forward = 0;
     N.Curve_Strength = 0;
-    N.Target_Speed = fabsf((float)motor_user_speed_cmd);
+    N.Target_Speed = 0.0f;
     N.Angle_Run = 0;
     N.Run_index = 0;
     N.Prospect_index = 0;
@@ -1093,6 +1093,11 @@ void NagFlashRead(){
   N.Prospect_index = 0;
   N.Nag_Stop_f = 0;
   N.Curve_Strength = 0;
+  if (N.Nag_SystemRun_Index == 2u)
+  {
+    /* 发车设定值只在惯导回放真正进入执行态前装载，避免待机/读 flash 阶段改动实际速度基准。 */
+    motor_user_speed_cmd = run_launch_speed;
+  }
   N.Target_Speed = fabsf((float)motor_user_speed_cmd);
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[0] / 100.0f) : (float)Nag_Yaw;
   N.Requested_Target_Yaw = 0;

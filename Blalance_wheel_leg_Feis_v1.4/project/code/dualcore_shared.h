@@ -40,6 +40,7 @@ typedef enum
   DUALCORE_UI_CMD_KEY_NAV_RECORD = 15,
   DUALCORE_UI_CMD_KEY_NAV_STOP_REC = 16,
   DUALCORE_UI_CMD_KEY_NAV_KEY3 = 17,
+  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS = 18, /* 菜单发车速度页专用：只更新 run_launch_speed，不立即改变运行速度 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -65,6 +66,7 @@ typedef struct
   uint32 save_index;
   uint32 flash_page_index;
   float motor_user_speed_cmd;
+  float run_launch_speed; /* 发车速度设定值，仅惯导回放进入执行态时装载 */
   float speed_target_effective;
   uint8 spin_enable;
   uint8 spin_done;

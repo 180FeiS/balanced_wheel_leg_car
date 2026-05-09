@@ -29,11 +29,14 @@ extern float dt_leg;
 extern float dt_pid_turn_angle;
 extern float dt_pid_turn_gyro;
 
-/* 用户期望的基准速度（可带符号：负号表示反向），导航弯道限速等在此基础上缩放。
- * 来源：拨码 SWITCH2（1000/1500，边沿刷新）、串口 V<数值>、串口 q/r/s 微调；后两者写入后仍可能被 SWITCH2 拨动覆盖。
+/* 运行中的用户速度基准（可带符号：负号表示反向），导航弯道限速等在此基础上缩放。
+ * 发车页/串口调速先写 run_launch_speed，只有惯导回放进入执行态时才装载到本量；
+ * LORA 遥控、导航元素接管等实时控制路径仍可直接写本量。
+ * motor_poll_switch2_speed_baseline() 仍为周期调用占位，内部无操作（兼容旧 dip_switch 路径）。
  * 旧工程中的 set_speed 已合并为该变量，请勿在模块外随意直接写全局，优先调用 motor_* API。
  */
 extern float motor_user_speed_cmd;
+extern float run_launch_speed;            //发车速度设定值，仅在惯导回放进入执行态时装载到 motor_user_speed_cmd
 extern float speed_target_effective;      //真正送入速度环的目标速度，已叠加导航限速/元素限速
 
 /* 两级台阶脚本：整条跳跃序列在 jump_control() 内正常结束时计数；第一次结束后在速度目标上叠加本幅值（符号随车），第二次结束后撤销。详见 control.c stair_jump_* */
@@ -42,7 +45,7 @@ extern float speed_target_effective;      //真正送入速度环的目标速度
 #endif
 
 void motor_user_speed_cmd_set_from_pc(float cmd);
-void motor_poll_switch2_speed_baseline(void);
+void motor_poll_switch2_speed_baseline(void); /* 无操作，兼容 dip_switch 调用 */
 extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
 uint8 jump_is_allowed(void);              // 1=允许跳跃：MOTOR_ON 且无 Motor_Runaway_Latch；否则禁止
 void jump_stop(void);                     // 终止跳跃，清时序，leg_long 回默认；保护/关电机时调用

@@ -53,24 +53,20 @@ float leg_long = 5.5f;
 // float leg_high_integral = 0;
 
 /*---------------------------------------------------------------------------
- * 用户速度与拨码（与 Menu.c dip_switch_motor_sync_from_hw 配合）：
- * - motor_user_speed_cmd：导航/速度环的“用户期望基准”，符号表示前进/后退；
- * - motor_poll_switch2_speed_baseline()：周期调用，按 SWITCH2 档位/边沿同步 motor_dip_switch2_speed_fast/slow；
- * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 直接写基准（无速度锁；SWITCH2 档位变化时仍会同步为上述两档）；
+ * 用户速度（与 Menu.c dip_switch_motor_sync_from_hw 配合）：
+ * - run_launch_speed：发车速度设定值；串口 V、菜单/Run、双核调速命令只改这个值；
+ * - motor_user_speed_cmd：运行中的用户速度基准；只有惯导回放进入执行态时从 run_launch_speed 装载，
+ *   LORA 遥控和导航元素临时接管等实时路径仍可直接写入；
+ * - motor_poll_switch2_speed_baseline()：周期调用占位，逻辑为空（拨码 SWITCH2 不再改写 motor_user_speed_cmd，避免与菜单调速冲突）；
+ * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 更新发车速度设定值；
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
 
-/* 用户速度基准：导航弯道限速、元素限速等均以此为上限参考；符号用于倒车方向 */
+/* 运行速度基准：导航弯道限速、元素限速等均以此为上限参考；符号用于倒车方向 */
 float motor_user_speed_cmd = 0.0f;
+/* 发车速度设定值：菜单/串口先改这里，惯导回放真正进入执行态时才装载到 motor_user_speed_cmd。 */
+float run_launch_speed = 0.0f;
 float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的速度环目标，供调试对比 */
-
-/* 拨码 SWITCH2 边沿检测状态，集中在控制层，避免 Menu 与串口解析各写一套 */
-static uint8 motor_dip_speed_inited = 0u;
-static uint8 motor_dip_last_fast = 0u;
-
-/* SWITCH2：dip_speed_fast==1（GPIO_LOW）与另一档对应的 motor_user_speed_cmd 基准，按需改 */
-static float motor_dip_switch2_speed_fast = 0.0f;
-static float motor_dip_switch2_speed_slow = -300.0f;
 
 /* jump_flag：1=跳跃流程进行中；仅应在 jump_is_allowed()==1 时由外部（LORA/双核/导航等）置 1。
  * jump_step_index：当前阶段 0=起跳 1=收腿 2=准备缓冲 3=执行缓冲，由 jump_control() 每 20ms 更新。
@@ -133,26 +129,12 @@ void jump_stop(void)
 
 void motor_user_speed_cmd_set_from_pc(float cmd)
 {
-    motor_user_speed_cmd = cmd;
+    run_launch_speed = cmd;
 }
 
 void motor_poll_switch2_speed_baseline(void)
 {
-    uint8 dip_speed_fast = (gpio_get_level(SWITCH2) == GPIO_LOW) ? 1u : 0u;
-
-    if (!motor_dip_speed_inited)
-    {
-        motor_dip_last_fast = dip_speed_fast;
-        motor_dip_speed_inited = 1u;
-        motor_user_speed_cmd = dip_speed_fast ? motor_dip_switch2_speed_fast : motor_dip_switch2_speed_slow;
-        return;
-    }
-
-    if (dip_speed_fast != motor_dip_last_fast)
-    {
-        motor_dip_last_fast = dip_speed_fast;
-        motor_user_speed_cmd = dip_speed_fast ? motor_dip_switch2_speed_fast : motor_dip_switch2_speed_slow;
-    }
+    /* 原 SWITCH2 两档边沿同步 motor_user_speed_cmd 已停用；保留函数供 dip_switch 周期调用。 */
 }
 
 // 速度环输出，供腿部倾斜角使用
@@ -206,8 +188,8 @@ vuint8 steer_yaw_delayed_by_spin = 0;
 volatile float steer_yaw_request_deg = 0.0f;
 
 /* 上电航向：约 300ms 后仅锁存一次 euler_angle.yaw；yaw_hold_poweron_en=1 时 ISR 内补发目标（见 yaw_hold_poweron_request_if_needed） */
-#define YAW_POWERON_REF_LATCH_MS  0u
-uint8 yaw_hold_poweron_en = 1;
+#define YAW_POWERON_REF_LATCH_MS  100u
+uint8 yaw_hold_poweron_en = 0;
 float yaw_poweron_ref = 0.0f;
 static uint8 yaw_poweron_ref_latched = 0;
 static uint16 yaw_poweron_latch_count = 0;
