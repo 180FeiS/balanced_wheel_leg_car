@@ -198,6 +198,12 @@ int main(void)
 
   while (true)
   {
+    if (gnss_flag)
+    {
+      gnss_flag = 0;
+      gnss_data_parse();
+    }
+
     run_soft_tasks();
 #if DUALCORE_UI_ON_CM7_1
     /* 先消费 CM7_1 菜单命令，再发布快照；否则 Launch 调速、SaveSpd 保存和导航按键都不会真正落到控制核。 */

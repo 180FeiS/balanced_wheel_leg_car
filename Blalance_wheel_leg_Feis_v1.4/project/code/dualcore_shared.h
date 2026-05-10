@@ -74,6 +74,20 @@ typedef struct
   uint8 jump_allowed; /* jump_is_allowed()，为 0 时不应再发视觉跳跃命令 */
   uint8 jump_active;  /* jump_flag!=0，跳跃流程进行中 */
   uint8 remote_local_keys_debug; /* 1：MENU_INPUT_REMOTE_MENU_FIRST==1 且遥控拨码=板载调试电平；CM7_1 菜单/拨码路径对齐宏=0。仅 CM7_0 写入 */
+  uint8 gps_valid; /* 1：已解析到至少一帧 GNSS 数据 */
+  uint16 gps_year;
+  uint8 gps_month;
+  uint8 gps_day;
+  uint8 gps_hour;
+  uint8 gps_minute;
+  uint8 gps_second;
+  uint8 gps_state;
+  uint8 gps_satellite_used;
+  double gps_latitude;
+  double gps_longitude;
+  float gps_speed;
+  float gps_direction;
+  float gps_height;
   /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
   float dbg_run_index;        /* N.Run_index → 浮点 */
   float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */

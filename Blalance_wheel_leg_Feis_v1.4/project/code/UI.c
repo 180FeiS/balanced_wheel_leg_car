@@ -11,24 +11,24 @@
  @author          bom
  @version         V1.0
  @date            2024-12-18
- @brief           平衡车UI控制程序
+ @brief           平衡�?UI控制程序
 
  @note
- 1. 本文件包含平衡车所有UI显示和控制功能
- 2. 支持LCD显示、串口调试和参数配置
- 3. 包含完整的多级菜单系统
+ 1. �?文件包含平衡车所有UI显示和控制功�?
+ 2. �?持LCD显示、串口调试和参数配置
+ 3. 包含完整的�?�级菜单系统
 ********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* 修改记录
-* 日期              作者             版本           说明
-* 2024-07-24        Bron            V1.0.0         搭建新工程
-* 2024-07-27        Bron            V1.0.2         搭建了二级菜单的框架
+* �?改�?�录
+* 日期              作��?             版本           说明
+* 2024-07-24        Bron            V1.0.0         �?建新工程
+* 2024-07-27        Bron            V1.0.2         �?建了二级菜单的�?�架
 * 2024-07-30        Bron            V1.1.1         更换了x和y的表示方式，完善了级菜单
-* 2024-07-31        Bron            V1.1.2         更新了pid调参菜单方式，加入flash
-* 2024-08-01        Bron            V1.1.4         微调了pid参数整数小数位数显示
-* 2024-08-02        Bron            V1.2.0         将重复显示的内容规整到函数中
-* 2024-12-19        Bron            V2.0.1         移植到新工程，重新整理菜单
+* 2024-07-31        Bron            V1.1.2         更新了pid调参菜单方式，加�?flash
+* 2024-08-01        Bron            V1.1.4         �?调了pid参数整数小数位数显示
+* 2024-08-02        Bron            V1.2.0         将重复显示的内�?��?�整到函数中
+* 2024-12-19        Bron            V2.0.1         移�?�到新工程，重新整理菜单
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
@@ -39,7 +39,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "control.h"
 #endif
 
-/* Run：须与 pos 3.1~3.3 的 menuMember 箭头行一致，否则 HashPeer 切项时画面与真实 pos 不同步。勿在 pos「3」上用此表。 */
+/* Run：须�? pos 3.1~3.3 �? menuMember �?头�?�一致，否则 HashPeer 切项时画�?与真�? pos 不同步��勿�? pos�?3」上用�?�表�? */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 
 void ui_pull_ctrl_snapshot(void)
@@ -53,41 +53,41 @@ void ui_pull_ctrl_snapshot(void)
 /*********************************************************************************************************************
 * 多级菜单框架
 *********************************************************************************************************************
-* 1. 测试外设模式 (GUI_1)
+* 1. 测试外�?�模�? (GUI_1)
 *    - 1_1. 测试电机
 *      - 1_1_1. 电机详细信息
-*    - 1_2. 测试编码器
-*      - 1_2_1. 编码器详细信息
-*    - 1_3. 测试摄像头
-*      - 1_3_1. 摄像头详细信息
-*    - 1_4. 测试陀螺仪
-*      - 1_4_1. 陀螺仪详细信息
+*    - 1_2. 测试编码�?
+*      - 1_2_1. 编码器�?�细信息
+*    - 1_3. 测试摄像�?
+*      - 1_3_1. 摄像头�?�细信息
+*    - 1_4. 测试院�螺仪
+*      - 1_4_1. 院�螺仪详细信息
 *
 * 2. 调试模式 (GUI_2)
 *    - 2_1. 图像设置
-*      - 2_1_1. 台阶检测
-*      - 2_1_2. 单边桥检测
-*      - 2_1_3. 颠簸路段检测
-*    - 2_2. 速度环设置
-*      - 2_2_1. 角速度环P
-*      - 2_2_2. 角速度环I
+*      - 2_1_1. 台阶棢��?
+*      - 2_1_2. 单边桥�?���?
+*      - 2_1_3. 颠簸�?段�?���?
+*    - 2_2. 速度�?设置
+*      - 2_2_1. 角��度环P
+*      - 2_2_2. 角��度环I
 *      - 2_2_3. 角度环P
-*      - 2_2_4. 角速度环D
+*      - 2_2_4. 角��度环D
 *      - 2_2_5. 速度环P
 *      - 2_2_6. 速度环D
-*    - 2_3. 转向环设置
-*      - 2_3_1. 转向内环P
-*      - 2_3_2. 转向内环D
-*      - 2_3_3. 转向外环P
-*      - 2_3_4. 转向外环D
+*    - 2_3. �?向环设置
+*      - 2_3_1. �?向内环P
+*      - 2_3_2. �?向内环D
+*      - 2_3_3. �?向�?�环P
+*      - 2_3_4. �?向�?�环D
 *    - 2_4. 速度设置
 *    - 2_5. 更新Flash参数
-*    - 2_6. 清空FLASH缓存区
+*    - 2_6. 清空FLASH缓存�?
 *
-* 3. 运行模式 —— GUI 必须与 pos 层级一致（易错：一级「3」与二级「3.1」勿画同一块子菜单）：
-*    - GUI_3 仅 pos 「3」：顶层 Test/Debug/Run 三行中与 GUI_1/2 同源的一级 Run。
-*    - GUI_3_1～GUI_3_3 仅 pos 「3.1～3.3」：二级列表 Launch/Flash/More，三页应用同一文本、不同箭头行，配合 HashPeer 切换。
-*    - GUI_3_1_1 仅 pos 「3.1.1」：Launch 下三级发车速度壳；发车 UI/逻辑不应塞在 GUI_3_1，否则会破坏「选中再进入」的树。
+* 3. 运�?�模�? —��? GUI 必须�? pos 层级丢�致（易错：一级��?3」与二级�?3.1」勿画同丢�块子菜单）：
+*    - GUI_3 �? pos �?3」：顶层 Test/Debug/Run 三�?�中�? GUI_1/2 同源的一�? Run�?
+*    - GUI_3_1～GUI_3_3 �? pos �?3.1�?3.3」：二级列表 Launch/Flash/More，三页应用同丢�文本、不同�??头�?�，配合 HashPeer 切换�?
+*    - GUI_3_1_1 �? pos �?3.1.1」：Launch 下三级发车��度壳；发车 UI/逻辑不应塞在 GUI_3_1，否则会破坏「��中再进入��的树��?
 *********************************************************************************************************************/
 
 /*********************************************************************************************************************
@@ -98,7 +98,7 @@ typedef enum {
     DISPLAY_MODE_SERIAL  // 串口模式
 } DisplayMode;
 
-DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // 默认显示模式为液晶模式
+DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // 默�?�显示模式为液晶模式
 float FPS = 0;
 /*内部函数声明*/
 static void GUI_Display_FPS(void)__attribute__((unused));
@@ -117,7 +117,7 @@ static void GUI_Display_Level3_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common4(void)__attribute__((unused));
 static void GUI_Display_Level3_Common5(void)__attribute__((unused));
 /*********************************************************************************************************************
-* 一级菜单函数
+* 丢�级菜单函�?
 *********************************************************************************************************************/
 static void GUI_Display_FPS(void)
 {
@@ -134,7 +134,7 @@ static void GUI_Display_Level1_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1(void) // 测试外设模式
+void GUI_1(void) // 测试外�?�模�?
 {
     GUI_Display_Level1_Common1();
 
@@ -176,7 +176,7 @@ void ACT_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3(void) // pos「3」：一级 Run（与 GUI_1/2 同源）；子列表仅属于 pos 3.1～3.3
+void GUI_3(void) // pos�?3」：丢��? Run（与 GUI_1/2 同源）；子列表仅属于 pos 3.1�?3.3
 {
     GUI_Display_Level1_Common1();
 
@@ -220,7 +220,7 @@ void GUI_1_1(void) // 测试电机
 
     ips200_show_string(48,ROW_6,"-->");//8*6
     ips200_show_string(136,ROW_6,"<--");//8*6
-    // 实现测试电机的逻辑
+    // 实现测试电机的��辑
 }
 void ACT_1_1()
 {
@@ -231,7 +231,7 @@ void ACT_1_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_2(void) // 测试编码器
+void GUI_1_2(void) // 测试编码�?
 {
     // 实现测试编码器的逻辑
     GUI_Display_Level2_Common1();
@@ -254,7 +254,7 @@ void ACT_1_2()
     ReadPos[4] = 0x00;      
 }
 
-void GUI_1_3(void) // 测试摄像头
+void GUI_1_3(void) // 测试摄像�?
 {
     // 实现测试摄像头的逻辑
     GUI_Display_Level2_Common1();
@@ -277,9 +277,9 @@ void ACT_1_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_4(void) // 测试陀螺仪
+void GUI_1_4(void) // 测试院�螺仪
 {
-    // 实现测试陀螺仪的逻辑
+    // 实现测试院�螺仪的��辑
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
@@ -317,7 +317,7 @@ void GUI_2_1(void) // 图像设置
     
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -336,13 +336,13 @@ void ACT_2_1()
 }
 
 
-void GUI_2_2(void) // 调试列表：NavDbg 行选中（与其它项一致为列表态；按「右」进入 GUI_2_2_1）
+void GUI_2_2(void) // 调试列表：NavDbg 行��中（与其它项一致为列表态；按��右」进�? GUI_2_2_1�?
 {
     GUI_Display_Level2_Common2();
 
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -359,7 +359,7 @@ void ACT_2_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2_2_1(void) // 惯导调试界面（须从 2.2 按「右」进入）
+void GUI_2_2_1(void) // �?导调试界�?（须�? 2.2 按��右」进入）
 {
     GUI_Display_Level2_Common2();
 
@@ -406,13 +406,13 @@ void ACT_2_2_1()
 }
 
 
-void GUI_2_3(void) // 转向环设置
+void GUI_2_3(void) // �?向环设置
 {
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -430,13 +430,94 @@ void ACT_2_3()
     ReadPos[4] = 0x00;
 }
 
+void GUI_2_3_1(void)
+{
+    GUI_Display_Level2_Common2();
+
+    ips200_show_string(64,ROW_3,"GPS Data");
+    ips200_draw_line(24,ROW_5-1,215,ROW_5-1,IPS200_DEFAULT_PENCOLOR);
+
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(0,ROW_5,"year:");
+    ips200_show_uint(40,ROW_5,(uint32)s_ui_dc.gps_year,4);
+    ips200_show_string(80,ROW_5,"mon:");
+    ips200_show_uint(112,ROW_5,(uint32)s_ui_dc.gps_month,2);
+    ips200_show_string(144,ROW_5,"day:");
+    ips200_show_uint(176,ROW_5,(uint32)s_ui_dc.gps_day,2);
+
+    ips200_show_string(0,ROW_6,"time:");
+    ips200_show_uint(40,ROW_6,(uint32)s_ui_dc.gps_hour,2);
+    ips200_show_string(56,ROW_6,":");
+    ips200_show_uint(64,ROW_6,(uint32)s_ui_dc.gps_minute,2);
+    ips200_show_string(80,ROW_6,":");
+    ips200_show_uint(88,ROW_6,(uint32)s_ui_dc.gps_second,2);
+
+    ips200_show_string(0,ROW_7,"state:");
+    ips200_show_uint(48,ROW_7,(uint32)s_ui_dc.gps_state,3);
+    ips200_show_string(104,ROW_7,"sat:");
+    ips200_show_uint(136,ROW_7,(uint32)s_ui_dc.gps_satellite_used,3);
+
+    ips200_show_string(0,ROW_8,"lat:");
+    ips200_show_float(40,ROW_8,s_ui_dc.gps_latitude,4,6);
+    ips200_show_string(0,ROW_9,"lon:");
+    ips200_show_float(40,ROW_9,s_ui_dc.gps_longitude,4,6);
+    ips200_show_string(0,ROW_10,"spd:");
+    ips200_show_float(40,ROW_10,s_ui_dc.gps_speed,4,2);
+    ips200_show_string(112,ROW_10,"dir:");
+    ips200_show_float(152,ROW_10,s_ui_dc.gps_direction,4,2);
+    ips200_show_string(0,ROW_11,"h:");
+    ips200_show_float(40,ROW_11,s_ui_dc.gps_height,4,2);
+    ips200_show_string(112,ROW_11,"valid:");
+    ips200_show_uint(160,ROW_11,(uint32)s_ui_dc.gps_valid,1);
+#else
+    ips200_show_string(0,ROW_5,"year:");
+    ips200_show_uint(40,ROW_5,(uint32)gnss.time.year,4);
+    ips200_show_string(80,ROW_5,"mon:");
+    ips200_show_uint(112,ROW_5,(uint32)gnss.time.month,2);
+    ips200_show_string(144,ROW_5,"day:");
+    ips200_show_uint(176,ROW_5,(uint32)gnss.time.day,2);
+
+    ips200_show_string(0,ROW_6,"time:");
+    ips200_show_uint(40,ROW_6,(uint32)gnss.time.hour,2);
+    ips200_show_string(56,ROW_6,":");
+    ips200_show_uint(64,ROW_6,(uint32)gnss.time.minute,2);
+    ips200_show_string(80,ROW_6,":");
+    ips200_show_uint(88,ROW_6,(uint32)gnss.time.second,2);
+
+    ips200_show_string(0,ROW_7,"state:");
+    ips200_show_uint(48,ROW_7,(uint32)gnss.state,3);
+    ips200_show_string(104,ROW_7,"sat:");
+    ips200_show_uint(136,ROW_7,(uint32)gnss.satellite_used,3);
+
+    ips200_show_string(0,ROW_8,"lat:");
+    ips200_show_float(40,ROW_8,gnss.latitude,4,6);
+    ips200_show_string(0,ROW_9,"lon:");
+    ips200_show_float(40,ROW_9,gnss.longitude,4,6);
+    ips200_show_string(0,ROW_10,"spd:");
+    ips200_show_float(40,ROW_10,gnss.speed,4,2);
+    ips200_show_string(112,ROW_10,"dir:");
+    ips200_show_float(152,ROW_10,gnss.direction,4,2);
+    ips200_show_string(0,ROW_11,"h:");
+    ips200_show_float(40,ROW_11,gnss.height,4,2);
+#endif
+}
+void ACT_2_3_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '3';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
 void GUI_2_4(void) // 速度设置
 {
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -460,7 +541,7 @@ void GUI_2_5(void) // 更新Flash参数
     
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -487,13 +568,13 @@ void ACT_2_5()
 #endif
 }
 
-void GUI_2_6(void) // 清空FLASH缓存区
+void GUI_2_6(void) // 清空FLASH缓存�?
 {
     GUI_Display_Level2_Common2();
     
     ips200_show_string(80,ROW_6," Image  ");
     ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10,"Dir__PID");
+    ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
     ips200_show_string(80,ROW_16,"C_Flash ");
@@ -520,7 +601,7 @@ void ACT_2_6()
 #endif
 }
 // *********************************************************************************************************************
-// * Run 二级/三级：Common3 顶栏 + 列表或发车页。一级 GUI_3 不得复用下列列表，否则与 menu 树错位。
+// * Run 二级/三级：Common3 顶栏 + 列表或发车页。一�? GUI_3 不得复用下列列表，否则与 menu 树错位��?
 // *********************************************************************************************************************
 static void GUI_Display_Level2_Common3(void)
 {
@@ -530,7 +611,7 @@ static void GUI_Display_Level2_Common3(void)
     GUI_Display_FPS();
 }
 
-/** 二级 Run 列表：与 GUI_2_1 版式对齐；selected_row_index 必须与当前 pos 末位 1/2/3 一致 */
+/** 二级 Run 列表：与 GUI_2_1 版式对齐；selected_row_index 必须与当�? pos �?�? 1/2/3 丢��? */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -561,7 +642,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     }
 }
 
-void GUI_3_1(void) // Launch 二级项：列表箭头第一行
+void GUI_3_1(void) // Launch 二级项：列表�?头�??丢��?
 {
     GUI_Run_ShowSubmenuList(0u);
 }
@@ -600,7 +681,7 @@ void ACT_3_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3_1_1(void) // 发车速度三级页：KEY1 切 0/500/1000，KEY2/3 微调 run_launch_speed
+void GUI_3_1_1(void) // 发车速度三级页：KEY1 �? 0/500/1000，KEY2/3 �?�? run_launch_speed
 {
     GUI_Display_Level2_Common3();
 
@@ -728,7 +809,7 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
     }
 }
 
-void GUI_2_1_1(void) // 台阶检测
+void GUI_2_1_1(void) // 台阶棢��?
 {
     GUI_Display_Level3_ImageDetect(1);
 
@@ -745,8 +826,8 @@ void GUI_2_1_1(void) // 台阶检测
     ips200_show_string(136,ROW_9,"pix");
 
     /*
-     * 主图：1/2 压缩灰度 `image_two_value`，与视觉主域、AE 统计坐标系一致。
-     * `step_detection` 若仍基于全场 `mt9v03x_image`（raw），与屏上压缩观感可能不一致，属有意分工。
+     * 主图�?1/2 压缩灰度 `image_two_value`，与视�?�主域��AE 统�?�坐标系丢�致��?
+     * `step_detection` 若仍基于全场 `mt9v03x_image`（raw），与屏上压缩�?�感�?能不丢�致，属有意分工��?
      */
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -763,16 +844,16 @@ void ACT_2_1_1()
     ReadPos[4] = '1';
 }
 
-void GUI_2_1_2(void) // 单边桥检测
+void GUI_2_1_2(void) // 单边桥�?���?
 {
     GUI_Display_Level3_ImageDetect(2);
 
     ips200_show_string(0,ROW_7,"Bridge");
     /*
-     * 单列「压缩·AE 后」：本页不叠双图，避免竖向两窗占位不足、dis_* 强压畸变；与台阶页对照请切菜单。
-     * `image_camera_auto_exposure()` 内有界迭代，可能短时阻塞；AE 后在当前曝光下再压一帧用于显示。
+     * 单列「压缩·AE 后��：�?页不叠双图，避免竖向两窗占位不足、dis_* 强压畸变；与台阶页�?�照请切菜单�?
+     * `image_camera_auto_exposure()` 内有界迭代，�?能短时阻塞；AE 后在当前曝光下再压一帧用于显示��?
      */
-    ips200_show_string(0,ROW_8,"压缩 AE后");
+    ips200_show_string(0,ROW_8,"压缩 AE�?");
     image_camera_auto_exposure();
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -788,7 +869,7 @@ void ACT_2_1_2()
     ReadPos[4] = '2';
 }
 
-void GUI_2_1_3(void) // 颠簸路段检测
+void GUI_2_1_3(void) // 颠簸�?段�?���?
 {
     GUI_Display_Level3_ImageDetect(3);
 
@@ -807,7 +888,7 @@ void ACT_2_1_3()
     ReadPos[4] = '3';
 }
 
-// void GUI_1_3_1(void) // 测试摄像头
+// void GUI_1_3_1(void) // 测试摄像�?
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Image");
@@ -822,7 +903,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_1_4_1(void) // 测试陀螺仪
+// void GUI_1_4_1(void) // 测试院�螺仪
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Gyro");
@@ -855,17 +936,17 @@ void ACT_2_1_3()
 
 
 // // /*********************************************************************************************************************
-// // * 直立环调试界面
+// // * 直立�?调试界面
 // // *********************************************************************************************************************/
 // static void GUI_Display_Level3_Common2(void)
 // {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//横线
+//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//�?�?
 //     ips200_show_string(0,ROW_1,"Image");
 //     ips200_draw_line(188,20,188,319,IPS200_DEFAULT_PENCOLOR);//竖线
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_1_1(void) // 原始图像 + 二值化
+// void GUI_2_1_1(void) // 原�?�图�? + 二��化
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -884,7 +965,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_2_1_2(void) // 二值化 + 连续边线
+// void GUI_2_1_2(void) // 二��化 + 连续边线
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -930,11 +1011,11 @@ void ACT_2_1_3()
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_2_1(void) // 角速度环P
+// void GUI_2_2_1(void) // 角��度环P
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
-//     //画框
+//     //画�??
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -959,12 +1040,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_2(void) // 角速度环I
+// void GUI_2_2_2(void) // 角��度环I
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -989,7 +1070,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1009,12 +1090,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_4(void) // 角速度环D
+// void GUI_2_2_4(void) // 角��度环D
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1039,7 +1120,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(50,208,112,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,224,112,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,208,50,224,IPS200_DEFAULT_PENCOLOR);
@@ -1064,7 +1145,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(168,208,238,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,224,238,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,208,168,224,IPS200_DEFAULT_PENCOLOR);
@@ -1086,21 +1167,21 @@ void ACT_2_1_3()
 // }
 
 // // /*********************************************************************************************************************
-// // * 转向环调式界面
+// // * �?向环调式界面
 // // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common4(void) // 转向环调试界面
+// static void GUI_Display_Level3_Common4(void) // �?向环调试界面
 // {
 //     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
 //     ips200_show_string(0,ROW_1,"Dir_Pid ");
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_3_1(void) // 转向内环P
+// void GUI_2_3_1(void) // �?向内环P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -1120,12 +1201,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_2(void) // 转向内环D
+// void GUI_2_3_2(void) // �?向内环D
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -1145,12 +1226,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_3(void) // 转向外环P
+// void GUI_2_3_3(void) // �?向�?�环P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1170,12 +1251,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_4(void) // 转向外环D 
+// void GUI_2_3_4(void) // �?向�?�环D 
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //画框
+//     //画�??
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1222,7 +1303,7 @@ void ACT_2_1_3()
 * 其他辅助函数
 *********************************************************************************************************************/
 
-// static void GUI_Display_Image_Sidebar(void) // 图像界面侧边栏显示内容
+// static void GUI_Display_Image_Sidebar(void) // 图像界面侧边栏显示内�?
 // {
 //     ips200_show_string(192,ROW_3,"Th");         ips200_show_int(192,ROW_4,Threshold,3);
 //     ips200_show_string(192,ROW_5,"Pitch");      ips200_show_float(192,ROW_6,Gyro.pitch,3,1);
@@ -1234,7 +1315,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_Display_Image_Below(void) // 图像界面下方显示内容
+// static void GUI_Display_Image_Below(void) // 图像界面下方显示内�??
 // {
 //     switch(ElementStatusMachine.CurrentStatus)
 //     {
@@ -1428,7 +1509,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_SetAngleLoop(void) // 直立环设置界面
+// static void GUI_SetAngleLoop(void) // 直立�?设置界面
 // {
 //     ips200_show_string(0,ROW_3,"AngleDot");
 //     ips200_show_string(0,ROW_4,"Dot_Kp");   ips200_show_float(64,ROW_4,AngleDotPID.Kp,4,1);
@@ -1456,7 +1537,7 @@ void ACT_2_1_3()
 //     ips200_show_string(0,ROW_18,"Pwm");         ips200_show_float(64,ROW_18,DirPwm,4,1);
 // }
 
-// static void GUI_SetDirLoop(void) // 转向环设置界面
+// static void GUI_SetDirLoop(void) // �?向环设置界面
 // {
 //     ips200_show_string(0,ROW_3,"Dir_In");
 //     ips200_show_string(0,ROW_4,"In_Kp");   ips200_show_float(64,ROW_4,DirAngleDotPID.Kp,4,1);

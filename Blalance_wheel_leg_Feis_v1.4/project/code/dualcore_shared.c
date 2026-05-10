@@ -10,6 +10,7 @@
 #include "control.h"
 #include "navigation.h"
 #include "flash.h"
+#include "zf_device_gnss.h"
 #endif
 
 #if defined(CY_CORE_CM7_0)
@@ -71,6 +72,20 @@ void dualcore_ctrl_to_ui_publish(void)
   c->jump_allowed = jump_is_allowed();
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
   c->remote_local_keys_debug = g_remote_local_keys_debug;
+  c->gps_valid = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+  c->gps_year = gnss.time.year;
+  c->gps_month = gnss.time.month;
+  c->gps_day = gnss.time.day;
+  c->gps_hour = gnss.time.hour;
+  c->gps_minute = gnss.time.minute;
+  c->gps_second = gnss.time.second;
+  c->gps_state = gnss.state;
+  c->gps_satellite_used = gnss.satellite_used;
+  c->gps_latitude = gnss.latitude;
+  c->gps_longitude = gnss.longitude;
+  c->gps_speed = gnss.speed;
+  c->gps_direction = gnss.direction;
+  c->gps_height = gnss.height;
 
   /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */
   c->dbg_run_index = (float)N.Run_index;

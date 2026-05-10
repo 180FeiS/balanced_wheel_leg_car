@@ -909,6 +909,11 @@ void MenuInit()
         menuMember.act = ACT_2_2_1;
         strcpy(menuMember.pos, "2.2.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_3_1;
+        menuMember.act = ACT_2_3_1;
+        strcpy(menuMember.pos, "2.3.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
 /*
 
         menuMember.gui = GUI_2_2_1;
@@ -964,7 +969,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.1.1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
 #endif
 }
 
