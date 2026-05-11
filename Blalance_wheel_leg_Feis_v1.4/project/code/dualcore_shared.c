@@ -86,6 +86,14 @@ void dualcore_ctrl_to_ui_publish(void)
   c->gps_speed = gnss.speed;
   c->gps_direction = gnss.direction;
   c->gps_height = gnss.height;
+  c->gps_point_count = gps_point_count;
+  c->gps_save_point = save_point;
+  c->gps_show_point = show_point;
+  c->gps_recording_active = gps_recording_active;
+  c->gps_current_yuansu = gps_current_yuansu;
+  memcpy(c->gps_latitude_point, latitude_point, sizeof(c->gps_latitude_point));
+  memcpy(c->gps_longitude_point, longitude_point, sizeof(c->gps_longitude_point));
+  memcpy(c->gps_yuansu, u32yuansu, sizeof(c->gps_yuansu));
 
   /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */
   c->dbg_run_index = (float)N.Run_index;
@@ -179,6 +187,25 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH:
     /* Run/Flash 菜单专用命令：持久化发车设定值，不修改运行中的 motor_user_speed_cmd。 */
     flash_RunLaunchSpeed_Write();
+    break;
+  case DUALCORE_UI_CMD_GPS_SAVE_POINT:
+    (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);
+    break;
+  case DUALCORE_UI_CMD_GPS_CYCLE_ELEMENT:
+    (void)GPS_CycleCurrentElement();
+    break;
+  case DUALCORE_UI_CMD_GPS_SAVE_FLASH:
+    flash_GpsPoints_Write();
+    break;
+  case DUALCORE_UI_CMD_GPS_BEGIN_RECORD:
+    GPS_BeginRecord();
+    break;
+  case DUALCORE_UI_CMD_GPS_END_SAVE_FLASH:
+    GPS_EndRecord();
+    flash_GpsPoints_Write();
+    break;
+  case DUALCORE_UI_CMD_GPS_LAUNCH:
+    GPS_ApplyLaunchSpeed();
     break;
   case DUALCORE_UI_CMD_KEY_NAV_RECORD:
     Nag_Begin_Record();

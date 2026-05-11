@@ -1,7 +1,9 @@
 
 
 
+
 #include "zf_common_headfile.h"
+#include "my_gps.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -49,10 +51,13 @@ static void run_soft_tasks(void)
 {
   if (task_pending_take(&task_5ms_nav_pending))
   {
-    /* 导航已经固定在 pit0_ch0_isr 的 1ms 中断里跑，这里故意不再重复调用 Nag_System()。
-     * 保留这个 pending 只是为了以后若要把 flash 慢路径彻底迁出 ISR，可以继续沿用 5ms 软任务框架。
+    /* GPS 点到点导航轻量计算放在 5ms 软任务里跑：
+     * 1. 只有 NAV_HEADING_MODE_GPS 才会请求航向；
+     * 2. 惯导仍固定在 pit0_ch0_isr 的 1ms 中断里跑；
+     * 3. GPS 和惯导通过 nav_heading_mode 仲裁，避免同时写 steer_request_target_yaw()。
+     * 4. 模式由 GPS_ApplyLaunchSpeed() / Nag_Begin_Replay() 切换，本任务只按当前模式执行。
      */
-
+    GPS_PointNav_Run();
   }
 
 #if !DUALCORE_UI_ON_CM7_1

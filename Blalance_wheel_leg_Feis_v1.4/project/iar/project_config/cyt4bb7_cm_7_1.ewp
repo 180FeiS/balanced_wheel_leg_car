@@ -1140,6 +1140,12 @@
             <name>$PROJ_DIR$\..\..\code\Menu.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\my_gps.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\my_gps.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\remote_lora.c</name>
         </file>
         <file>

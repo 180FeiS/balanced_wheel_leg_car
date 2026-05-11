@@ -9,9 +9,11 @@
 
 #include "zf_common_headfile.h"
 #include "navigation.h"
+#include "my_gps.h"
 
 int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 Nag N;
+uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
 
@@ -779,6 +781,13 @@ void Nag_Run()
 {
     float yaw_err = 0.0f;
 
+    if (nav_heading_mode != NAV_HEADING_MODE_INS)
+    {
+        N.Final_Out = 0.0f;
+        N.Target_Request_Valid = 0u;
+        return;
+    }
+
     /* 回放态总流程：
      * 1. 先根据里程推进 Run_index；
      * 2. 再按速度得到前瞻点 Prospect_index，控制目标使用前瞻点 yaw；
@@ -924,6 +933,7 @@ void Nag_Begin_Record(void)
 /* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 后进入 3，才装载 run_launch_speed 并放行速度环。 */
 void Nag_Begin_Replay(void)
 {
+    nav_heading_mode = NAV_HEADING_MODE_INS;
     N.Mileage_All = 0;
     N.Mileage_Step = 0;
     N.Mileage_Debug_Total = 0;

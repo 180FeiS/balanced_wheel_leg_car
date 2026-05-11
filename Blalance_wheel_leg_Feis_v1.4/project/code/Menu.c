@@ -63,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dualcore_shared.h"
+#include "my_gps.h"
 #if defined(CY_CORE_CM7_0)
 #include "control.h"
 #include "flash.h"
@@ -102,12 +103,14 @@ static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
 static void MenuKeyEventPush(menu_key_nav_enum nav);
 static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 static uint8 MenuIsNavDebugPage(void);
+static uint8 MenuIsGpsDebugPage(void);
 static uint8 MenuIsRunLaunchSpeedPage(void);
 static uint8 MenuIsRunFlashPage(void);
 static void MenuApplyRunLaunchSpeed(float speed);
 static void MenuAdjustRunLaunchSpeed(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
+static uint8 MenuTryHandleGpsDebugKeyEvent(void);
 
 /* 发车速度页三档设定值。KEY1 在 0/500/1000 三档间循环，KEY2/KEY3 只调整当前下标对应的档位。 */
 static float s_run_launch_speed_presets[3] = {0.0f, 500.0f, 1000.0f};
@@ -235,6 +238,10 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsGpsDebugPage() && MenuTryHandleGpsDebugKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -312,6 +319,10 @@ void menu_key_capture_event(void)
         return;
    }
    if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsGpsDebugPage() && MenuTryHandleGpsDebugKeyEvent())
    {
         return;
    }
@@ -491,6 +502,11 @@ static uint8 MenuIsNavDebugPage(void)
     return (uint8)(strcmp(menuMember.pos, "2.2.1") == 0);
 }
 
+static uint8 MenuIsGpsDebugPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "2.3.1") == 0);
+}
+
 /* 仅发车速度三级页拦截 KEY1/2/3；不要扩大到 "3.1" 的 Launch 二级列表页。 */
 static uint8 MenuIsRunLaunchSpeedPage(void)
 {
@@ -562,6 +578,79 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
 #endif
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* GPS 调试页按 Idle/Recording 两套语义处理；Idle 下 KEY4 继续走 searchUp() 返回上级。 */
+static uint8 MenuTryHandleGpsDebugKeyEvent(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc;
+    dualcore_ctrl_to_ui_pull(&dc);
+    uint8 recording_active = dc.gps_recording_active;
+#else
+    uint8 recording_active = gps_recording_active;
+#endif
+
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        if (!recording_active)
+        {
+#if defined(CY_CORE_CM7_1)
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GPS_BEGIN_RECORD, 0, 0.0f);
+#else
+            GPS_BeginRecord();
+#endif
+        }
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GPS_END_SAVE_FLASH, 0, 0.0f);
+#else
+        GPS_EndRecord();
+        flash_GpsPoints_Write();
+#endif
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_2);
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+        if (recording_active)
+        {
+#if defined(CY_CORE_CM7_1)
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GPS_SAVE_POINT, 0, 0.0f);
+#else
+            (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);
+#endif
+        }
+        else
+        {
+#if defined(CY_CORE_CM7_1)
+            (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GPS_LAUNCH, 0, 0.0f);
+#else
+            GPS_ApplyLaunchSpeed();
+#endif
+        }
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    if (recording_active && key_get_state(KEY_4) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GPS_CYCLE_ELEMENT, 0, 0.0f);
+#else
+        (void)GPS_CycleCurrentElement();
+#endif
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_4);
         return 1u;
     }
     return 0u;
@@ -803,10 +892,10 @@ void MenuInit()
     strcpy(menuMember.pos, "1.4");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
-    // menuMember.gui=GUI_1_5;
-    // menuMember.act=ACT_1_5;
-    // strcpy(menuMember.pos,"1.5");
-    // hashMenu.vPtr->insert(&hashMenu,&menuMember);
+    menuMember.gui = GUI_1_5;
+    menuMember.act = ACT_1_5;
+    strcpy(menuMember.pos, "1.5");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
     menuMember.gui = GUI_2_1;
     menuMember.act = ACT_2_1;
@@ -866,6 +955,11 @@ void MenuInit()
         menuMember.gui = GUI_1_2_1;
         menuMember.act = ACT_1_2_1;
         strcpy(menuMember.pos, "1.2.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_1_5_1;
+        menuMember.act = ACT_1_5_1;
+        strcpy(menuMember.pos, "1.5.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
 /*
         menuMember.gui = GUI_1_3_1;

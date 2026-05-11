@@ -7,6 +7,7 @@
 
 #include "zf_common_typedef.h"
 #include "step_detection.h"
+#include "my_gps.h"
 
 /* 与 project/iar/icf/linker_directives_tviibh.icf 中 ICFEDIT_region_RAM 起始地址一致 */
 #ifndef DUALCORE_SHARED_PHYS_ADDR
@@ -42,6 +43,12 @@ typedef enum
   DUALCORE_UI_CMD_KEY_NAV_KEY3 = 17,
   DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS = 18, /* 菜单发车速度页专用：只更新 run_launch_speed，不立即改变运行速度 */
   DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH = 19, /* Run/Flash 菜单专用：保存 run_launch_speed 到独立 flash 参数页 */
+  DUALCORE_UI_CMD_GPS_SAVE_POINT = 20,
+  DUALCORE_UI_CMD_GPS_CYCLE_ELEMENT = 21,
+  DUALCORE_UI_CMD_GPS_SAVE_FLASH = 22,
+  DUALCORE_UI_CMD_GPS_BEGIN_RECORD = 23,
+  DUALCORE_UI_CMD_GPS_END_SAVE_FLASH = 24,
+  DUALCORE_UI_CMD_GPS_LAUNCH = 25,
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -88,6 +95,14 @@ typedef struct
   float gps_speed;
   float gps_direction;
   float gps_height;
+  uint8 gps_point_count;
+  uint8 gps_save_point;
+  uint8 gps_show_point;
+  uint8 gps_recording_active;
+  uint32 gps_current_yuansu;
+  double gps_latitude_point[GPS_POINT_MAX];
+  double gps_longitude_point[GPS_POINT_MAX];
+  uint32 gps_yuansu[GPS_POINT_MAX];
   /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
   float dbg_run_index;        /* N.Run_index → 浮点 */
   float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */

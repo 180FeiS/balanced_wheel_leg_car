@@ -1,11 +1,63 @@
 #include "zf_common_headfile.h"
 #include "flash.h"
+#include "my_gps.h"
 
 static uint8 nag_flash_index_read = 0;
+
+#define GPS_POINTS_PAGE 48u
+#define GPS_POINTS_MAGIC 0x47505350u
+#define GPS_POINTS_VERSION 1u
+#define GPS_POINTS_HEADER_WORDS 5u
+#define GPS_POINTS_LAT_WORDS (GPS_POINT_MAX * 2u)
+#define GPS_POINTS_LON_WORDS (GPS_POINT_MAX * 2u)
+#define GPS_POINTS_LAT_BASE GPS_POINTS_HEADER_WORDS
+#define GPS_POINTS_LON_BASE (GPS_POINTS_LAT_BASE + GPS_POINTS_LAT_WORDS)
+#define GPS_POINTS_ELEMENT_BASE (GPS_POINTS_LON_BASE + GPS_POINTS_LON_WORDS)
 
 static uint32 flash_RunLaunchSpeedChecksum(uint32 speed_raw)
 {
     return Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Speed_Version ^ speed_raw;
+}
+
+static void flash_Gps_DoubleToWords(double value, uint32 *word0, uint32 *word1)
+{
+    uint32 raw[2] = {0};
+
+    memcpy(raw, &value, sizeof(value));
+    *word0 = raw[0];
+    *word1 = raw[1];
+}
+
+static double flash_Gps_WordsToDouble(uint32 word0, uint32 word1)
+{
+    uint32 raw[2];
+    double value = 0.0;
+
+    raw[0] = word0;
+    raw[1] = word1;
+    memcpy(&value, raw, sizeof(value));
+    return value;
+}
+
+static uint32 flash_GpsPointsChecksum(uint8 point_count, uint32 current_element)
+{
+    uint32 checksum = GPS_POINTS_VERSION ^ (uint32)point_count ^ current_element;
+    uint8 index = 0;
+
+    for (index = 0; index < point_count; index++)
+    {
+        uint32 raw0 = 0;
+        uint32 raw1 = 0;
+
+        flash_Gps_DoubleToWords(latitude_point[index], &raw0, &raw1);
+        checksum ^= raw0;
+        checksum ^= raw1;
+        flash_Gps_DoubleToWords(longitude_point[index], &raw0, &raw1);
+        checksum ^= raw0;
+        checksum ^= raw1;
+        checksum ^= u32yuansu[index];
+    }
+    return checksum;
 }
 
 static uint32 flash_Nag_EventChecksum(uint8 event_count)
@@ -163,6 +215,115 @@ void flash_RunLaunchSpeed_Read(void)
         (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))
     {
         run_launch_speed = flash_union_buffer[3].float_type;
+    }
+    flash_buffer_clear();
+}
+
+void flash_GpsPoints_Write(void)
+{
+    uint8 point_count = GPS_GetValidPointCount();
+    uint8 index = 0;
+
+    flash_buffer_clear();
+    flash_union_buffer[0].uint32_type = GPS_POINTS_MAGIC;
+    flash_union_buffer[1].uint32_type = GPS_POINTS_VERSION;
+    flash_union_buffer[2].uint32_type = point_count;
+    flash_union_buffer[3].uint32_type = gps_current_yuansu;
+    flash_union_buffer[4].uint32_type = flash_GpsPointsChecksum(point_count, gps_current_yuansu);
+
+    for (index = 0; index < point_count; index++)
+    {
+        uint32 raw0 = 0;
+        uint32 raw1 = 0;
+        uint16 lat_base = (uint16)(GPS_POINTS_LAT_BASE + index * 2u);
+        uint16 lon_base = (uint16)(GPS_POINTS_LON_BASE + index * 2u);
+
+        flash_Gps_DoubleToWords(latitude_point[index], &raw0, &raw1);
+        flash_union_buffer[lat_base].uint32_type = raw0;
+        flash_union_buffer[lat_base + 1u].uint32_type = raw1;
+        flash_Gps_DoubleToWords(longitude_point[index], &raw0, &raw1);
+        flash_union_buffer[lon_base].uint32_type = raw0;
+        flash_union_buffer[lon_base + 1u].uint32_type = raw1;
+        flash_union_buffer[GPS_POINTS_ELEMENT_BASE + index].uint32_type = u32yuansu[index];
+    }
+
+    if (flash_check(0, GPS_POINTS_PAGE))
+    {
+        flash_erase_page(0, GPS_POINTS_PAGE);
+    }
+    flash_write_page_from_buffer(0, GPS_POINTS_PAGE, FLASH_PAGE_LENGTH);
+    flash_buffer_clear();
+}
+
+void flash_GpsPoints_Read(void)
+{
+    uint32 magic = 0;
+    uint32 version = 0;
+    uint32 point_count = 0;
+    uint32 current_element = 0;
+    uint32 checksum = 0;
+    uint8 index = 0;
+
+    if (!flash_check(0, GPS_POINTS_PAGE))
+    {
+        GPS_ClearPoints();
+        return;
+    }
+
+    flash_buffer_clear();
+    flash_read_page_to_buffer(0, GPS_POINTS_PAGE, FLASH_PAGE_LENGTH);
+
+    magic = flash_union_buffer[0].uint32_type;
+    version = flash_union_buffer[1].uint32_type;
+    point_count = flash_union_buffer[2].uint32_type;
+    current_element = flash_union_buffer[3].uint32_type;
+    checksum = flash_union_buffer[4].uint32_type;
+
+    if ((magic != GPS_POINTS_MAGIC) ||
+        (version != GPS_POINTS_VERSION) ||
+        (point_count > GPS_POINT_MAX) ||
+        (current_element >= GPS_ELEMENT_COUNT))
+    {
+        GPS_ClearPoints();
+        flash_buffer_clear();
+        return;
+    }
+
+    GPS_ClearPoints();
+    gps_current_yuansu = current_element;
+
+    for (index = 0; index < point_count; index++)
+    {
+        uint16 lat_base = (uint16)(GPS_POINTS_LAT_BASE + index * 2u);
+        uint16 lon_base = (uint16)(GPS_POINTS_LON_BASE + index * 2u);
+        double lat = flash_Gps_WordsToDouble(flash_union_buffer[lat_base].uint32_type,
+                                             flash_union_buffer[lat_base + 1u].uint32_type);
+        double lon = flash_Gps_WordsToDouble(flash_union_buffer[lon_base].uint32_type,
+                                             flash_union_buffer[lon_base + 1u].uint32_type);
+        uint32 element = flash_union_buffer[GPS_POINTS_ELEMENT_BASE + index].uint32_type;
+
+        if (element >= GPS_ELEMENT_COUNT)
+        {
+            GPS_ClearPoints();
+            flash_buffer_clear();
+            return;
+        }
+        GPS_SavePointFromCoord(index, lat, lon, element);
+    }
+
+    if (checksum != flash_GpsPointsChecksum((uint8)point_count, current_element))
+    {
+        GPS_ClearPoints();
+    }
+    flash_buffer_clear();
+}
+
+void flash_GpsPoints_Clear(void)
+{
+    GPS_ClearPoints();
+    if (flash_check(0, GPS_POINTS_PAGE))
+    {
+        flash_erase_page(0, GPS_POINTS_PAGE);
     }
     flash_buffer_clear();
 }

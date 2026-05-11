@@ -24,6 +24,8 @@
 *      - 1_3_1. 摄像头详细信息
 *    - 1_4. 测试陀螺仪
 *      - 1_4_1. 陀螺仪详细信息
+*    - 1_5. GPS
+*      - 1_5_1. GPS 数据
 *
 * 2. 调试模式 (GUI_2)
 *    - 2_1. 图像设置
@@ -104,6 +106,9 @@ extern void ACT_1_3();
 extern void GUI_1_4();
 extern void ACT_1_4();
 
+extern void GUI_1_5();
+extern void ACT_1_5();
+
 extern void GUI_2_1();
 extern void ACT_2_1();
 
@@ -145,6 +150,9 @@ extern void ACT_1_3_1();
 
 extern void GUI_1_4_1();
 extern void ACT_1_4_1();
+
+extern void GUI_1_5_1();
+extern void ACT_1_5_1();
 
 extern void GUI_2_1_1();
 extern void ACT_2_1_1();

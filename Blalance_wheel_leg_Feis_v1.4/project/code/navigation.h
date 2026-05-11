@@ -207,6 +207,12 @@ extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; //VOFA 调试组切换
+
+typedef enum {
+    NAV_HEADING_MODE_INS = 0u,
+    NAV_HEADING_MODE_GPS = 1u,
+} NavHeadingMode;
+extern uint8 nav_heading_mode;
 void Nag_Run(); //偏航角控制总函数
 void Run_Nag_GPS();//偏航角读取
 

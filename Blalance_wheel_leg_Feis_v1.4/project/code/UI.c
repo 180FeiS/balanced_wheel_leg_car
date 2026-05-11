@@ -7,31 +7,32 @@
  * @Description: 
  */
 /*********************************************************************************************************************
-* @ile            UI.c
- @author          bom
- @version         V1.0
- @date            2024-12-18
- @brief           å¹³è¡¡è½?UIæŽ§åˆ¶ç¨‹åº
-
- @note
- 1. æœ?æ–‡ä»¶åŒ…å«å¹³è¡¡è½¦æ‰€æœ‰UIæ˜¾ç¤ºå’ŒæŽ§åˆ¶åŠŸèƒ?
- 2. æ”?æŒLCDæ˜¾ç¤ºã€ä¸²å£è°ƒè¯•å’Œå‚æ•°é…ç½®
- 3. åŒ…å«å®Œæ•´çš„å?šçº§èœå•ç³»ç»Ÿ
+* @file            UI.c
+* @author          bom
+* @version         V1.0
+* @date            2024-12-18
+* @brief           Æ½ºâ³µ UI ¿ØÖÆ³ÌÐò
+*
+* @note
+* 1. ±¾ÎÄ¼þ°üº¬Æ½ºâ³µËùÓÐ UI ÏÔÊ¾ºÍ¿ØÖÆ¹¦ÄÜ
+* 2. Ö§³Ö LCD ÏÔÊ¾¡¢´®¿Úµ÷ÊÔºÍ²ÎÊýÅäÖÃ
+* 3. °üº¬ÍêÕûµÄ¶à¼¶²Ëµ¥ÏµÍ³
 ********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* ä¿?æ”¹è?°å½•
-* æ—¥æœŸ              ä½œè¢ã?             ç‰ˆæœ¬           è¯´æ˜Ž
-* 2024-07-24        Bron            V1.0.0         æ?å»ºæ–°å·¥ç¨‹
-* 2024-07-27        Bron            V1.0.2         æ?å»ºäº†äºŒçº§èœå•çš„æ?†æž¶
-* 2024-07-30        Bron            V1.1.1         æ›´æ¢äº†xå’Œyçš„è¡¨ç¤ºæ–¹å¼ï¼Œå®Œå–„äº†çº§èœå•
-* 2024-07-31        Bron            V1.1.2         æ›´æ–°äº†pidè°ƒå‚èœå•æ–¹å¼ï¼ŒåŠ å…?flash
-* 2024-08-01        Bron            V1.1.4         å¾?è°ƒäº†pidå‚æ•°æ•´æ•°å°æ•°ä½æ•°æ˜¾ç¤º
-* 2024-08-02        Bron            V1.2.0         å°†é‡å¤æ˜¾ç¤ºçš„å†…å?¹è?„æ•´åˆ°å‡½æ•°ä¸­
-* 2024-12-19        Bron            V2.0.1         ç§»æ?åˆ°æ–°å·¥ç¨‹ï¼Œé‡æ–°æ•´ç†èœå•
+* ÐÞ¸Ä¼ÇÂ¼
+* ÈÕÆÚ              ×÷Õß             °æ±¾           ËµÃ÷
+* 2024-07-24        Bron            V1.0.0         ´î½¨ÐÂ¹¤³Ì
+* 2024-07-27        Bron            V1.0.2         ´î½¨ÁË¶þ¼¶²Ëµ¥µÄ¿ò¼Ü
+* 2024-07-30        Bron            V1.1.1         ¸ü»»ÁË u ºÍ d µÄ±íÊ¾·½Ê½£¬ÍêÉÆÁË¼¶²Ëµ¥
+* 2024-07-31        Bron            V1.1.2         ¸üÐÂÁË pid µ÷²Î²Ëµ¥·½Ê½£¬¼ÓÈë flash
+* 2024-08-01        Bron            V1.1.4         Î¢µ÷ÁË pid ²ÎÊýÕûÊýÐ¡ÊýÎ»ÊýÏÔÊ¾
+* 2024-08-02        Bron            V1.2.0         ½«ÖØ¸´ÏÔÊ¾µÄÄÚÈÝÕûÀíµ½º¯ÊýÖÐ
+* 2024-12-19        Bron            V2.0.1         ÒÆÖ²µ½ÐÂ¹¤³Ì£¬ÖØÐÂÕûÀí²Ëµ¥
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
+#include "my_gps.h"
 #if defined(CY_CORE_CM7_1)
 #include "dualcore_shared.h"
 static dualcore_ctrl_to_ui_t s_ui_dc;
@@ -39,7 +40,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "control.h"
 #endif
 
-/* Runï¼šé¡»ä¸? pos 3.1~3.3 çš? menuMember ç®?å¤´è?Œä¸€è‡´ï¼Œå¦åˆ™ HashPeer åˆ‡é¡¹æ—¶ç”»é?ä¸ŽçœŸå®? pos ä¸åŒæ­¥ã¢ã‚å‹¿åœ? posã€?3ã€ä¸Šç”¨æ?¤è¡¨ã€? */
+/* Run£ºÐëÈÃ pos 3.1~3.3 µÄ menuMember Í·²¿Ò»ÖÂ£¬·ñÔò HashPeer ÇÐÏîÊ±»­ÃæÓëÕæÊµ pos ²»Í¬²½£»ÎðÔÚ pos¡¸3¡¹ÉÏÓÃ×Ó²Ëµ¥ÁÐ±í¡£ */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 
 void ui_pull_ctrl_snapshot(void)
@@ -51,56 +52,50 @@ void ui_pull_ctrl_snapshot(void)
 }
 
 /*********************************************************************************************************************
-* å¤šçº§èœå•æ¡†æž¶
+* ¶à¼¶²Ëµ¥¿ò¼Ü
 *********************************************************************************************************************
-* 1. æµ‹è¯•å¤–è?¾æ¨¡å¼? (GUI_1)
-*    - 1_1. æµ‹è¯•ç”µæœº
-*      - 1_1_1. ç”µæœºè¯¦ç»†ä¿¡æ¯
-*    - 1_2. æµ‹è¯•ç¼–ç å™?
-*      - 1_2_1. ç¼–ç å™¨è?¦ç»†ä¿¡æ¯
-*    - 1_3. æµ‹è¯•æ‘„åƒå¤?
-*      - 1_3_1. æ‘„åƒå¤´è?¦ç»†ä¿¡æ¯
-*    - 1_4. æµ‹è¯•é™¢ãèžºä»ª
-*      - 1_4_1. é™¢ãèžºä»ªè¯¦ç»†ä¿¡æ¯
+* 1. ²âÊÔÍâÉèÄ£Ê½ (GUI_1)
+*    - 1_1. ²âÊÔµç»ú
+*      - 1_1_1. µç»úÏêÏ¸ÐÅÏ¢
+*    - 1_2. ²âÊÔ±àÂëÆ÷
+*      - 1_2_1. ±àÂëÆ÷ÏêÏ¸ÐÅÏ¢
+*    - 1_3. ²âÊÔÉãÏñÍ·
+*      - 1_3_1. ÉãÏñÍ·ÏêÏ¸ÐÅÏ¢
+*    - 1_4. ²âÊÔÍÓÂÝÒÇ
+*      - 1_4_1. ÍÓÂÝÒÇÏêÏ¸ÐÅÏ¢
+*    - 1_5. GPS
+*      - 1_5_1. GPS Êý¾Ý
 *
-* 2. è°ƒè¯•æ¨¡å¼ (GUI_2)
-*    - 2_1. å›¾åƒè®¾ç½®
-*      - 2_1_1. å°é˜¶æ£¢ãæµ?
-*      - 2_1_2. å•è¾¹æ¡¥æ?¢ãæµ?
-*      - 2_1_3. é¢ ç°¸è·?æ®µæ?¢ãæµ?
-*    - 2_2. é€Ÿåº¦çŽ?è®¾ç½®
-*      - 2_2_1. è§’é¢ãŸåº¦çŽ¯P
-*      - 2_2_2. è§’é¢ãŸåº¦çŽ¯I
-*      - 2_2_3. è§’åº¦çŽ¯P
-*      - 2_2_4. è§’é¢ãŸåº¦çŽ¯D
-*      - 2_2_5. é€Ÿåº¦çŽ¯P
-*      - 2_2_6. é€Ÿåº¦çŽ¯D
-*    - 2_3. è½?å‘çŽ¯è®¾ç½®
-*      - 2_3_1. è½?å‘å†…çŽ¯P
-*      - 2_3_2. è½?å‘å†…çŽ¯D
-*      - 2_3_3. è½?å‘å?–çŽ¯P
-*      - 2_3_4. è½?å‘å?–çŽ¯D
-*    - 2_4. é€Ÿåº¦è®¾ç½®
-*    - 2_5. æ›´æ–°Flashå‚æ•°
-*    - 2_6. æ¸…ç©ºFLASHç¼“å­˜åŒ?
+* 2. µ÷ÊÔÄ£Ê½ (GUI_2)
+*    - 2_1. Í¼ÏñÉèÖÃ
+*      - 2_1_1. Ì¨½×¼ì²â
+*      - 2_1_2. µ¥±ßÇÅ¼ì²â
+*      - 2_1_3. µßô¤Â·¶Î¼ì²â
+*    - 2_2. µ¼º½µ÷ÊÔ
+*      - 2_2_1. µ¼º½µ÷ÊÔ½çÃæ
+*    - 2_3. GPS
+*      - 2_3_1. GPS ¿ÕÒ³Ãæ
+*    - 2_4. ËÙ¶ÈÉèÖÃ
+*    - 2_5. ¸üÐÂ Flash ²ÎÊý
+*    - 2_6. Çå¿Õ Flash »º´æÇø
 *
-* 3. è¿è?Œæ¨¡å¼? â€”â¢ã? GUI å¿…é¡»ä¸? pos å±‚çº§ä¸¢ãè‡´ï¼ˆæ˜“é”™ï¼šä¸€çº§ã¢ã?3ã€ä¸ŽäºŒçº§ã€?3.1ã€å‹¿ç”»åŒä¸¢ãå—å­èœå•ï¼‰ï¼š
-*    - GUI_3 ä»? pos ã€?3ã€ï¼šé¡¶å±‚ Test/Debug/Run ä¸‰è?Œä¸­ä¸? GUI_1/2 åŒæºçš„ä¸€çº? Runã€?
-*    - GUI_3_1ï½žGUI_3_3 ä»? pos ã€?3.1ï½?3.3ã€ï¼šäºŒçº§åˆ—è¡¨ Launch/Flash/Moreï¼Œä¸‰é¡µåº”ç”¨åŒä¸¢ãæ–‡æœ¬ã€ä¸åŒç??å¤´è?Œï¼Œé…åˆ HashPeer åˆ‡æ¢ã€?
-*    - GUI_3_1_1 ä»? pos ã€?3.1.1ã€ï¼šLaunch ä¸‹ä¸‰çº§å‘è½¦é¢ãŸåº¦å£³ï¼›å‘è½¦ UI/é€»è¾‘ä¸åº”å¡žåœ¨ GUI_3_1ï¼Œå¦åˆ™ä¼šç ´åã€Œé¢ã‰ä¸­å†è¿›å…¥ã¢ãçš„æ ‘ã¢ã?
+* 3. ÔËÐÐÄ£Ê½£ºGUI ±ØÐëÓë pos ²ã¼¶Ò»ÖÂ£¨Ò×´í£ºÒ»¼¶¡¸3¡¹Óë¶þ¼¶¡¸3.1¡¹Îð»­Í¬Ò»¿é×Ó²Ëµ¥£©
+*    - GUI_3 ½öÓÃÓÚ pos¡¸3¡¹£º¶¥²ã Test/Debug/Run ÈýÐÐÖÐÒ»ÐÐ Run
+*    - GUI_3_1¡«GUI_3_3 ÓÃÓÚ pos¡¸3.1¡«3.3¡¹£º¶þ¼¶ÁÐ±í Launch/Flash/More
+*    - GUI_3_1_1 ÓÃÓÚ pos¡¸3.1.1¡¹£ºLaunch ÏÂÈý¼¶·¢³µËÙ¶ÈÒ³
 *********************************************************************************************************************/
 
 /*********************************************************************************************************************
-* æ˜¾ç¤ºæ¨¡å¼å®šä¹‰
+* ÏÔÊ¾Ä£Ê½¶¨Òå
 *********************************************************************************************************************/
 typedef enum {
-    DISPLAY_MODE_IPS200,   // æ¶²æ™¶æ¨¡å¼
-    DISPLAY_MODE_SERIAL  // ä¸²å£æ¨¡å¼
+    DISPLAY_MODE_IPS200,   // Òº¾§Ä£Ê½
+    DISPLAY_MODE_SERIAL  // ´®¿ÚÄ£Ê½
 } DisplayMode;
 
-DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // é»˜è?¤æ˜¾ç¤ºæ¨¡å¼ä¸ºæ¶²æ™¶æ¨¡å¼
+DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // Ä¬ÈÏÏÔÊ¾Ä£Ê½ÎªÒº¾§Ä£Ê½
 float FPS = 0;
-/*å†…éƒ¨å‡½æ•°å£°æ˜Ž*/
+/* ÄÚ²¿º¯ÊýÉùÃ÷ */
 static void GUI_Display_FPS(void)__attribute__((unused));
 static void GUI_Display_Image_Sidebar()__attribute__((unused));
 static void GUI_Display_Image_Below(void)__attribute__((unused));
@@ -117,7 +112,7 @@ static void GUI_Display_Level3_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common4(void)__attribute__((unused));
 static void GUI_Display_Level3_Common5(void)__attribute__((unused));
 /*********************************************************************************************************************
-* ä¸¢ãçº§èœå•å‡½æ•?
+* Ò»¼¶²Ëµ¥º¯Êý
 *********************************************************************************************************************/
 static void GUI_Display_FPS(void)
 {
@@ -134,7 +129,7 @@ static void GUI_Display_Level1_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1(void) // æµ‹è¯•å¤–è?¾æ¨¡å¼?
+void GUI_1(void) // ²âÊÔÍâÉèÄ£Ê½
 {
     GUI_Display_Level1_Common1();
 
@@ -155,7 +150,7 @@ void ACT_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2(void) // è°ƒè¯•æ¨¡å¼
+void GUI_2(void) // µ÷ÊÔÄ£Ê½
 {
     GUI_Display_Level1_Common1();
 
@@ -176,7 +171,7 @@ void ACT_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3(void) // posã€?3ã€ï¼šä¸¢ãçº? Runï¼ˆä¸Ž GUI_1/2 åŒæºï¼‰ï¼›å­åˆ—è¡¨ä»…å±žäºŽ pos 3.1ï½?3.3
+void GUI_3(void) // pos¡¸3¡¹£ºÒ»¼¶ Run£¨Óë GUI_1/2 Í¬Ô´£©£»×ÓÁÐ±í½öÊôÓÚ pos 3.1¡«3.3
 {
     GUI_Display_Level1_Common1();
 
@@ -198,7 +193,7 @@ void ACT_3()
 }
 
 /*********************************************************************************************************************
-* äºŒçº§èœå•å‡½æ•°
+* ¶þ¼¶²Ëµ¥º¯Êý
 *********************************************************************************************************************/
 static void GUI_Display_Level2_Common1(void)
 {
@@ -208,7 +203,7 @@ static void GUI_Display_Level2_Common1(void)
     GUI_Display_FPS();
 }
 
-void GUI_1_1(void) // æµ‹è¯•ç”µæœº
+void GUI_1_1(void) // ²âÊÔµç»ú
 {
     GUI_Display_Level2_Common1();
 
@@ -216,11 +211,12 @@ void GUI_1_1(void) // æµ‹è¯•ç”µæœº
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
     
 
     ips200_show_string(48,ROW_6,"-->");//8*6
     ips200_show_string(136,ROW_6,"<--");//8*6
-    // å®žçŽ°æµ‹è¯•ç”µæœºçš„é¢ã»è¾‘
+    // ÊµÏÖ²âÊÔµç»úµÄÂß¼­
 }
 void ACT_1_1()
 {
@@ -231,15 +227,16 @@ void ACT_1_1()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_2(void) // æµ‹è¯•ç¼–ç å™?
+void GUI_1_2(void) // ²âÊÔ±àÂëÆ÷
 {
-    // å®žçŽ°æµ‹è¯•ç¼–ç å™¨çš„é€»è¾‘
+    // ÊµÏÖ²âÊÔ±àÂëÆ÷µÄÂß¼­
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
     
 
     ips200_show_string(48,ROW_8,"-->");//8*6
@@ -254,15 +251,16 @@ void ACT_1_2()
     ReadPos[4] = 0x00;      
 }
 
-void GUI_1_3(void) // æµ‹è¯•æ‘„åƒå¤?
+void GUI_1_3(void) // ²âÊÔÉãÏñÍ·
 {
-    // å®žçŽ°æµ‹è¯•æ‘„åƒå¤´çš„é€»è¾‘
+    // ÊµÏÖ²âÊÔÉãÏñÍ·µÄÂß¼­
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
     
 
     ips200_show_string(48,ROW_10,"-->");//8*6
@@ -277,15 +275,16 @@ void ACT_1_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_1_4(void) // æµ‹è¯•é™¢ãèžºä»ª
+void GUI_1_4(void) // ²âÊÔÍÓÂÝÒÇ
 {
-    // å®žçŽ°æµ‹è¯•é™¢ãèžºä»ªçš„é¢ã»è¾‘
+    // ÊµÏÖ²âÊÔÍÓÂÝÒÇµÄÂß¼­
     GUI_Display_Level2_Common1();
 
     ips200_show_string(80,ROW_6,"Motor");//80
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
     
 
     ips200_show_string(48,ROW_12,"-->");//8*6
@@ -300,8 +299,31 @@ void ACT_1_4()
     ReadPos[4] = 0x00;
 }
 
+void GUI_1_5(void)
+{
+    GUI_Display_Level2_Common1();
+
+    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_8,"Encode");
+    ips200_show_string(80,ROW_10,"Image");
+    ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
+
+
+    ips200_show_string(48,ROW_14,"-->");//8*6
+    ips200_show_string(136,ROW_14,"<--");//8*6
+}
+void ACT_1_5()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '5';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
 // /*********************************************************************************************************************
-// * è°ƒè¯•æ¨¡å¼é€‰æ‹©ç•Œé¢
+// * µ÷ÊÔÄ£Ê½Ñ¡Ôñ½çÃæ
 // *********************************************************************************************************************/
 static void GUI_Display_Level2_Common2(void)
 {
@@ -311,7 +333,7 @@ static void GUI_Display_Level2_Common2(void)
     GUI_Display_FPS();
 }
 
-void GUI_2_1(void) // å›¾åƒè®¾ç½®
+void GUI_2_1(void) // Í¼ÏñÉèÖÃ
 {
     GUI_Display_Level2_Common2();
     
@@ -336,7 +358,7 @@ void ACT_2_1()
 }
 
 
-void GUI_2_2(void) // è°ƒè¯•åˆ—è¡¨ï¼šNavDbg è¡Œé¢ã‰ä¸­ï¼ˆä¸Žå…¶å®ƒé¡¹ä¸€è‡´ä¸ºåˆ—è¡¨æ€ï¼›æŒ‰ã¢ãŒå³ã€è¿›å…? GUI_2_2_1ï¼?
+void GUI_2_2(void) // µ÷ÊÔÁÐ±í£ºNavDbg ÐÐÑ¡ÖÐ£¨ÓëÆäËüÏîÒ»ÖÂÎªÁÐ±íÌ¬£»°´¡¸ÓÒ¡¹½øÈë GUI_2_2_1£©
 {
     GUI_Display_Level2_Common2();
 
@@ -359,7 +381,7 @@ void ACT_2_2()
     ReadPos[4] = 0x00;
 }
 
-void GUI_2_2_1(void) // æƒ?å¯¼è°ƒè¯•ç•Œé?ï¼ˆé¡»ä»? 2.2 æŒ‰ã¢ãŒå³ã€è¿›å…¥ï¼‰
+void GUI_2_2_1(void) // µ¼º½µ÷ÊÔ½çÃæ£¨Ðë´Ó 2.2 °´¡¸ÓÒ¡¹½øÈë£©
 {
     GUI_Display_Level2_Common2();
 
@@ -406,7 +428,7 @@ void ACT_2_2_1()
 }
 
 
-void GUI_2_3(void) // è½?å‘çŽ¯è®¾ç½®
+void GUI_2_3(void) // GPS£¨µ÷ÊÔ¶þ¼¶ÁÐ±íÏî£©
 {
     GUI_Display_Level2_Common2();
     
@@ -432,7 +454,388 @@ void ACT_2_3()
 
 void GUI_2_3_1(void)
 {
+    uint8 point_count = 0;
+    uint8 current_show_point = 0;
+    uint8 recording_active = 0;
+    uint32 current_element = GPS_ELEMENT_NORMAL;
+    const char *element_name = "None";
+
     GUI_Display_Level2_Common2();
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    point_count = s_ui_dc.gps_point_count;
+    current_show_point = s_ui_dc.gps_show_point;
+    recording_active = s_ui_dc.gps_recording_active;
+    current_element = s_ui_dc.gps_current_yuansu;
+#else
+    point_count = gps_point_count;
+    current_show_point = show_point;
+    recording_active = gps_recording_active;
+    current_element = gps_current_yuansu;
+#endif
+
+    element_name = GPS_GetElementName(current_element);
+
+    ips200_show_string(24, ROW_3, "GPS Debug");
+    ips200_draw_line(16, ROW_5 - 1, 119, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(128, ROW_5 - 1, 224, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
+
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(0, ROW_5, "Valid:");
+    ips200_show_uint(48, ROW_5, (uint32)s_ui_dc.gps_valid, 1);
+    ips200_show_string(64, ROW_5, "Sat:");
+    ips200_show_uint(104, ROW_5, (uint32)s_ui_dc.gps_satellite_used, 3);
+    ips200_show_string(0, ROW_6, "Lat:");
+    ips200_show_float(40, ROW_6, s_ui_dc.gps_latitude, 3, 6);
+    ips200_show_string(0, ROW_7, "Lon:");
+    ips200_show_float(40, ROW_7, s_ui_dc.gps_longitude, 3, 6);
+#else
+    ips200_show_string(0, ROW_5, "Valid:");
+    ips200_show_uint(48, ROW_5, (uint32)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u)), 1);
+    ips200_show_string(64, ROW_5, "Sat:");
+    ips200_show_uint(104, ROW_5, (uint32)gnss.satellite_used, 3);
+    ips200_show_string(0, ROW_6, "Lat:");
+    ips200_show_float(40, ROW_6, gnss.latitude, 3, 6);
+    ips200_show_string(0, ROW_7, "Lon:");
+    ips200_show_float(40, ROW_7, gnss.longitude, 3, 6);
+#endif
+
+    ips200_show_string(0, ROW_8, "Pt:");
+    ips200_show_uint(32, ROW_8, (uint32)point_count, 2);
+    ips200_show_string(64, ROW_8, "Last:");
+    ips200_show_uint(112, ROW_8, (uint32)current_show_point, 2);
+    ips200_show_string(0, ROW_9, recording_active ? "Rec:Recording" : "Rec:Idle");
+    ips200_show_string(0, ROW_10, "Elem:");
+    ips200_show_string(48, ROW_10, element_name);
+    if (recording_active)
+    {
+        ips200_show_string(0, ROW_11, "K1 --");
+        ips200_show_string(0, ROW_12, "K2 End+Save");
+        ips200_show_string(0, ROW_13, "K3 Mark");
+        ips200_show_string(0, ROW_14, "K4 Elem");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_11, "K1 Begin");
+        ips200_show_string(0, ROW_12, "K2 End+Save");
+        ips200_show_string(0, ROW_13, "K3 Launch");
+        ips200_show_string(0, ROW_14, "K4 Back");
+    }
+
+    ips200_show_string(144, ROW_3, "Path");
+#if defined(CY_CORE_CM7_1)
+    GPS_Path_DrawWithCar(s_ui_dc.gps_latitude_point,
+                         s_ui_dc.gps_longitude_point,
+                         GPS_POINT_MAX,
+                         s_ui_dc.gps_valid,
+                         (uint8)car_gps_dir,
+                         s_ui_dc.gps_latitude,
+                         s_ui_dc.gps_longitude,
+                         136u,
+                         ROW_5,
+                         88u,
+                         112u);
+#else
+    GPS_Path_DrawWithCar(latitude_point,
+                         longitude_point,
+                         GPS_POINT_MAX,
+                         (uint8)((gnss.latitude != 0.0) && (gnss.longitude != 0.0)),
+                         (uint8)car_gps_dir,
+                         gnss.latitude,
+                         gnss.longitude,
+                         136u,
+                         ROW_5,
+                         88u,
+                         112u);
+#endif
+}
+void ACT_2_3_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '3';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
+void GUI_2_4(void) // ËÙ¶ÈÉèÖÃ
+{
+    GUI_Display_Level2_Common2();
+    
+    ips200_show_string(80,ROW_6," Image  ");
+    ips200_show_string(80,ROW_8," NavDbg ");
+    ips200_show_string(80,ROW_10," GPS    ");
+    ips200_show_string(80,ROW_12," Speed  ");
+    ips200_show_string(80,ROW_14,"W_Flash");
+    ips200_show_string(80,ROW_16,"C_Flash ");
+    
+
+    ips200_show_string(48,ROW_12,"-->");
+    ips200_show_string(152,ROW_12,"<--");
+}
+void ACT_2_4()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '4';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_2_5(void) // ¸üÐÂ Flash ²ÎÊý
+{
+    GUI_Display_Level2_Common2();
+    
+    ips200_show_string(80,ROW_6," Image  ");
+    ips200_show_string(80,ROW_8," NavDbg ");
+    ips200_show_string(80,ROW_10," GPS    ");
+    ips200_show_string(80,ROW_12," Speed  ");
+    ips200_show_string(80,ROW_14,"W_Flash");
+    ips200_show_string(80,ROW_16,"C_Flash ");
+    
+
+    ips200_show_string(48,ROW_14,"-->");
+    ips200_show_string(152,ROW_14,"<--");
+}
+void ACT_2_5()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '5';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+#if FLASH_MODE
+    if(Flash.Flash_Error == FLASH_RUNNING && Flash.Flash_state == FLASH_WRITE)
+    {
+        while(Flash_Write());
+        Flash.Flash_Error = FLASH_STOP;
+        Flash.Flash_state = FLASH_WAIT;
+        ips200_show_string(88,ROW_1,"Flash_OK!");
+    }
+#endif
+}
+
+void GUI_2_6(void) // Çå¿Õ FLASH »º´æÇø
+{
+    GUI_Display_Level2_Common2();
+    
+    ips200_show_string(80,ROW_6," Image  ");
+    ips200_show_string(80,ROW_8," NavDbg ");
+    ips200_show_string(80,ROW_10," GPS    ");
+    ips200_show_string(80,ROW_12," Speed  ");
+    ips200_show_string(80,ROW_14,"W_Flash");
+    ips200_show_string(80,ROW_16,"C_Flash ");
+    
+
+    ips200_show_string(48,ROW_16,"-->");
+    ips200_show_string(152,ROW_16,"<--");
+}
+void ACT_2_6()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '6';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+#if FLASH_MODE
+    if(Flash.Flash_Error == FLASH_RUNNING && Flash.Flash_state == FLASH_CLEAR)
+    {
+        while(Flash_Clear());
+        Flash.Flash_Error = FLASH_STOP;
+        Flash.Flash_state = FLASH_WAIT;
+        ips200_show_string(88,ROW_1,"CFlash_OK!");
+    }
+#endif
+}
+// *********************************************************************************************************************
+// * Run ¶þ¼¶/Èý¼¶£ºCommon3 ¶¥À¸ + ÁÐ±í»ò·¢³µÒ³¡£Ò»¼¶ GUI_3 ²»µÃ¸´ÓÃÏÂÁÐÁÐ±í£¬·ñÔòÓë menu Ê÷´íÎ»
+// *********************************************************************************************************************
+static void GUI_Display_Level2_Common3(void)
+{
+    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
+    ips200_show_string(0,ROW_1,"Run");
+
+    GUI_Display_FPS();
+}
+
+/** ¶þ¼¶ Run ÁÐ±í£ºÓë GUI_2_1 °æÊ½¶ÔÆë£»selected_row_index ÐëÓëµ±Ç° pos Ä©Î» 1/2/3 Ò»ÖÂ */
+static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
+{
+    int16 ay;
+
+    GUI_Display_Level2_Common3();
+
+    ips200_show_string(80, ROW_8, " Launch ");
+    ips200_show_string(80, ROW_10, " SaveSpd ");
+    ips200_show_string(80, ROW_12, " More   ");
+
+    switch (selected_row_index)
+    {
+    default:
+        ay = ROW_8;
+        break;
+    case 1u:
+        ay = ROW_10;
+        break;
+    case 2u:
+        ay = ROW_12;
+        break;
+    }
+    ips200_show_string(48, ay, "-->");
+    ips200_show_string(152, ay, "<--");
+    if (selected_row_index == 1u)
+    {
+        ips200_show_string(24, ROW_15, "KEY3: save speed");
+    }
+}
+
+void GUI_3_1(void) // Launch ¶þ¼¶Ïî£ºÁÐ±í¿Ç£¬¶¥À¸Ò»ÐÐ
+{
+    GUI_Run_ShowSubmenuList(0u);
+}
+void ACT_3_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_2(void)
+{
+    GUI_Run_ShowSubmenuList(1u);
+}
+void ACT_3_2()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '2';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_3(void)
+{
+    GUI_Run_ShowSubmenuList(2u);
+}
+void ACT_3_3()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '3';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_1_1(void) // ·¢³µËÙ¶ÈÈý¼¶Ò³£ºKEY1 ÇÐ 0/500/1000£¬KEY2/3 Î¢µ÷ run_launch_speed
+{
+    GUI_Display_Level2_Common3();
+
+    ips200_show_string(56, ROW_3, "Launch Spd");
+    ips200_draw_line(24, ROW_5 - 1, 215, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24, ROW_5, "KEY1: preset next");
+    ips200_show_string(24, ROW_6, "KEY2/3: -/+100");
+    ips200_show_string(24, ROW_7, "KEY4: back");
+
+    ips200_draw_line(24, ROW_9, 215, ROW_9, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(24, ROW_10, "Launch:");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_float(96, ROW_10, (double)s_ui_dc.run_launch_speed, 5, 1);
+#else
+    ips200_show_float(96, ROW_10, (double)run_launch_speed, 5, 1);
+#endif
+
+    ips200_show_string(24, ROW_14, "Preset: 0/500/1000");
+    ips200_show_string(24, ROW_15, "LED1 blink on key Short");
+}
+
+void ACT_3_1_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+}
+/*********************************************************************************************************************
+* Èý¼¶²Ëµ¥º¯Êý
+*********************************************************************************************************************/
+
+/*********************************************************************************************************************
+* Í¼Ïñ½çÃæ
+*********************************************************************************************************************/
+static void GUI_Display_Level3_Common1(void)
+{
+    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
+
+    GUI_Display_FPS();
+}
+
+void GUI_1_1_1(void) // ²âÊÔµç»ú£¨ÏêÇéÒ³£©
+{
+    GUI_Display_Level3_Common1();
+    ips200_show_string(0,ROW_1,"Motor ");
+
+#if defined(CY_CORE_CM7_1)
+    if(s_ui_dc.motor_switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
+    else ips200_show_string(24,ROW_3,"Motor:Off");
+
+    ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_pwm,5);
+    ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_pwm,5);
+#else
+    if(Motor_Switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
+    else ips200_show_string(24,ROW_3,"Motor:Off");
+
+    ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,Left_Motor_Pwm,5);
+    ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,Right_Motor_Pwm,5);
+#endif
+  
+
+
+
+
+}
+void ACT_1_1_1()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';   
+}
+
+void GUI_1_2_1(void)
+{
+    GUI_Display_Level3_Common1();
+    ips200_show_string(0,ROW_1,"Encode");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_speed,5);
+    ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_speed,5);
+    ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,(int)s_ui_dc.car_speed,5);
+#else
+    ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,Left_Motor_Speed,5);
+    ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,Right_Motor_Speed,5);
+    ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,car_speed,5);
+#endif
+    //ips200_show_string(24,ROW_7,"Integ:");      ips200_show_int(88,ROW_7,Integ_Encode,5);
+}
+void ACT_1_2_1()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '2';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+}
+
+void GUI_1_5_1(void)
+{
+    GUI_Display_Level2_Common1();
 
     ips200_show_string(64,ROW_3,"GPS Data");
     ips200_draw_line(24,ROW_5-1,215,ROW_5-1,IPS200_DEFAULT_PENCOLOR);
@@ -501,287 +904,14 @@ void GUI_2_3_1(void)
     ips200_show_float(40,ROW_11,gnss.height,4,2);
 #endif
 }
-void ACT_2_3_1()
+void ACT_1_5_1()
 {
-    ReadPos[0] = '2';
+    ReadPos[0] = '1';
     ReadPos[1] = '.';
-    ReadPos[2] = '3';
+    ReadPos[2] = '5';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;
-}
-
-void GUI_2_4(void) // é€Ÿåº¦è®¾ç½®
-{
-    GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
-
-    ips200_show_string(48,ROW_12,"-->");
-    ips200_show_string(152,ROW_12,"<--");
-}
-void ACT_2_4()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '4';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-
-void GUI_2_5(void) // æ›´æ–°Flashå‚æ•°
-{
-    GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
-
-    ips200_show_string(48,ROW_14,"-->");
-    ips200_show_string(152,ROW_14,"<--");
-}
-void ACT_2_5()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '5';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-#if FLASH_MODE
-    if(Flash.Flash_Error == FLASH_RUNNING && Flash.Flash_state == FLASH_WRITE)
-    {
-        while(Flash_Write());
-        Flash.Flash_Error = FLASH_STOP;
-        Flash.Flash_state = FLASH_WAIT;
-        ips200_show_string(88,ROW_1,"Flash_OK!");
-    }
-#endif
-}
-
-void GUI_2_6(void) // æ¸…ç©ºFLASHç¼“å­˜åŒ?
-{
-    GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
-
-    ips200_show_string(48,ROW_16,"-->");
-    ips200_show_string(152,ROW_16,"<--");
-}
-void ACT_2_6()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '6';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-#if FLASH_MODE
-    if(Flash.Flash_Error == FLASH_RUNNING && Flash.Flash_state == FLASH_CLEAR)
-    {
-        while(Flash_Clear());
-        Flash.Flash_Error = FLASH_STOP;
-        Flash.Flash_state = FLASH_WAIT;
-        ips200_show_string(88,ROW_1,"CFlash_OK!");
-    }
-#endif
-}
-// *********************************************************************************************************************
-// * Run äºŒçº§/ä¸‰çº§ï¼šCommon3 é¡¶æ  + åˆ—è¡¨æˆ–å‘è½¦é¡µã€‚ä¸€çº? GUI_3 ä¸å¾—å¤ç”¨ä¸‹åˆ—åˆ—è¡¨ï¼Œå¦åˆ™ä¸Ž menu æ ‘é”™ä½ã¢ã?
-// *********************************************************************************************************************
-static void GUI_Display_Level2_Common3(void)
-{
-    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-    ips200_show_string(0,ROW_1,"Run");
-
-    GUI_Display_FPS();
-}
-
-/** äºŒçº§ Run åˆ—è¡¨ï¼šä¸Ž GUI_2_1 ç‰ˆå¼å¯¹é½ï¼›selected_row_index å¿…é¡»ä¸Žå½“å‰? pos æœ?ä½? 1/2/3 ä¸¢ãè‡? */
-static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
-{
-    int16 ay;
-
-    GUI_Display_Level2_Common3();
-
-    ips200_show_string(80, ROW_8, " Launch ");
-    ips200_show_string(80, ROW_10, " SaveSpd ");
-    ips200_show_string(80, ROW_12, " More   ");
-
-    switch (selected_row_index)
-    {
-    default:
-        ay = ROW_8;
-        break;
-    case 1u:
-        ay = ROW_10;
-        break;
-    case 2u:
-        ay = ROW_12;
-        break;
-    }
-    ips200_show_string(48, ay, "-->");
-    ips200_show_string(152, ay, "<--");
-    if (selected_row_index == 1u)
-    {
-        ips200_show_string(24, ROW_15, "KEY3: save speed");
-    }
-}
-
-void GUI_3_1(void) // Launch äºŒçº§é¡¹ï¼šåˆ—è¡¨ç®?å¤´ç??ä¸¢ãè¡?
-{
-    GUI_Run_ShowSubmenuList(0u);
-}
-void ACT_3_1()
-{
-    ReadPos[0] = '3';
-    ReadPos[1] = '.';
-    ReadPos[2] = '1';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-
-void GUI_3_2(void)
-{
-    GUI_Run_ShowSubmenuList(1u);
-}
-void ACT_3_2()
-{
-    ReadPos[0] = '3';
-    ReadPos[1] = '.';
-    ReadPos[2] = '2';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-
-void GUI_3_3(void)
-{
-    GUI_Run_ShowSubmenuList(2u);
-}
-void ACT_3_3()
-{
-    ReadPos[0] = '3';
-    ReadPos[1] = '.';
-    ReadPos[2] = '3';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-
-void GUI_3_1_1(void) // å‘è½¦é€Ÿåº¦ä¸‰çº§é¡µï¼šKEY1 åˆ? 0/500/1000ï¼ŒKEY2/3 å¾?è°? run_launch_speed
-{
-    GUI_Display_Level2_Common3();
-
-    ips200_show_string(56, ROW_3, "Launch Spd");
-    ips200_draw_line(24, ROW_5 - 1, 215, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24, ROW_5, "KEY1: preset next");
-    ips200_show_string(24, ROW_6, "KEY2/3: -/+100");
-    ips200_show_string(24, ROW_7, "KEY4: back");
-
-    ips200_draw_line(24, ROW_9, 215, ROW_9, IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24, ROW_10, "Launch:");
-#if defined(CY_CORE_CM7_1)
-    ips200_show_float(96, ROW_10, (double)s_ui_dc.run_launch_speed, 5, 1);
-#else
-    ips200_show_float(96, ROW_10, (double)run_launch_speed, 5, 1);
-#endif
-
-    ips200_show_string(24, ROW_14, "Preset: 0/500/1000");
-    ips200_show_string(24, ROW_15, "LED1 blink on key Short");
-}
-
-void ACT_3_1_1()
-{
-    ReadPos[0] = '3';
-    ReadPos[1] = '.';
-    ReadPos[2] = '1';
-    ReadPos[3] = '.';
-    ReadPos[4] = '1';
-}
-/*********************************************************************************************************************
-* ä¸‰çº§èœå•å‡½æ•°
-*********************************************************************************************************************/
-
-/*********************************************************************************************************************
-* å›¾åƒç•Œé¢
-*********************************************************************************************************************/
-static void GUI_Display_Level3_Common1(void)
-{
-    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-
-    GUI_Display_FPS();
-}
-
-void GUI_1_1_1(void) // æµ‹è¯•ç”µæœº
-{
-    GUI_Display_Level3_Common1();
-    ips200_show_string(0,ROW_1,"Motor ");
-
-#if defined(CY_CORE_CM7_1)
-    if(s_ui_dc.motor_switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
-    else ips200_show_string(24,ROW_3,"Motor:Off");
-
-    ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_pwm,5);
-    ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_pwm,5);
-#else
-    if(Motor_Switch == MOTOR_ON)ips200_show_string(24,ROW_3,"Motor:On");
-    else ips200_show_string(24,ROW_3,"Motor:Off");
-
-    ips200_show_string(24,ROW_4,"L_PWM:");  ips200_show_int(88,ROW_4,Left_Motor_Pwm,5);
-    ips200_show_string(24,ROW_5,"R_PWM:");  ips200_show_int(88,ROW_5,Right_Motor_Pwm,5);
-#endif
-  
-
-
-
-
-}
-void ACT_1_1_1()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '1';
-    ReadPos[3] = '.';
-    ReadPos[4] = '1';   
-}
-
-void GUI_1_2_1(void)
-{
-    GUI_Display_Level3_Common1();
-    ips200_show_string(0,ROW_1,"Encode");
-#if defined(CY_CORE_CM7_1)
-    ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,(int)s_ui_dc.left_motor_speed,5);
-    ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,(int)s_ui_dc.right_motor_speed,5);
-    ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,(int)s_ui_dc.car_speed,5);
-#else
-    ips200_show_string(24,ROW_4,"L_Speed:");    ips200_show_int(88,ROW_4,Left_Motor_Speed,5);
-    ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,Right_Motor_Speed,5);
-    ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,car_speed,5);
-#endif
-    //ips200_show_string(24,ROW_7,"Integ:");      ips200_show_int(88,ROW_7,Integ_Encode,5);
-}
-void ACT_1_2_1()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '2';
-    ReadPos[3] = '.';
-    ReadPos[4] = '1';
 }
 
 static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
@@ -809,14 +939,14 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
     }
 }
 
-void GUI_2_1_1(void) // å°é˜¶æ£¢ãæµ?
+void GUI_2_1_1(void) // Ì¨½×¼ì²â
 {
     GUI_Display_Level3_ImageDetect(1);
 
     ips200_show_string(0,ROW_7,"Detected:");
     ips200_show_string(88,ROW_7,step_data.detected ? "Yes" : "No ");
 
-    ips200_show_string(0,ROW_6,"åŽ‹ç¼©ç°åº¦");
+    ips200_show_string(0,ROW_6,"Ñ¹Ëõ»Ò¶È");
     ips200_show_string(0,ROW_8,"Distance:");
     ips200_show_float(88,ROW_8,step_data.distance_cm,3,1);
     ips200_show_string(136,ROW_8,"cm");
@@ -826,8 +956,8 @@ void GUI_2_1_1(void) // å°é˜¶æ£¢ãæµ?
     ips200_show_string(136,ROW_9,"pix");
 
     /*
-     * ä¸»å›¾ï¼?1/2 åŽ‹ç¼©ç°åº¦ `image_two_value`ï¼Œä¸Žè§†è?‰ä¸»åŸŸã¢ãAE ç»Ÿè?¡åæ ‡ç³»ä¸¢ãè‡´ã¢ã?
-     * `step_detection` è‹¥ä»åŸºäºŽå…¨åœº `mt9v03x_image`ï¼ˆrawï¼‰ï¼Œä¸Žå±ä¸ŠåŽ‹ç¼©è?‚æ„Ÿå?èƒ½ä¸ä¸¢ãè‡´ï¼Œå±žæœ‰æ„åˆ†å·¥ã¢ã?
+     * Ö÷Í¼£º1/2 Ñ¹Ëõ»Ò¶È image_two_value£¬ÓëÊÓ¾õÖ÷Óò¡¢AE Í³¼Æ×ø±êÏµÒ»ÖÂ¡£
+     * step_detection ÈôÈÔ»ùÓÚÈ«³¡ mt9v03x_image£¨raw£©£¬ÓëÆÁÉÏÑ¹Ëõ¹Û¸Ð¿ÉÄÜ²»Ò»ÖÂ£¬ÊôÓÐÒâ·Ö²ã¡£
      */
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -844,16 +974,16 @@ void ACT_2_1_1()
     ReadPos[4] = '1';
 }
 
-void GUI_2_1_2(void) // å•è¾¹æ¡¥æ?¢ãæµ?
+void GUI_2_1_2(void) // µ¥±ßÇÅ¼ì²â
 {
     GUI_Display_Level3_ImageDetect(2);
 
     ips200_show_string(0,ROW_7,"Bridge");
     /*
-     * å•åˆ—ã€ŒåŽ‹ç¼©Â·AE åŽã¢ãï¼šæœ?é¡µä¸å åŒå›¾ï¼Œé¿å…ç«–å‘ä¸¤çª—å ä½ä¸è¶³ã€dis_* å¼ºåŽ‹ç•¸å˜ï¼›ä¸Žå°é˜¶é¡µå?¹ç…§è¯·åˆ‡èœå•ã€?
-     * `image_camera_auto_exposure()` å†…æœ‰ç•Œè¿­ä»£ï¼Œå?èƒ½çŸ­æ—¶é˜»å¡žï¼›AE åŽåœ¨å½“å‰æ›å…‰ä¸‹å†åŽ‹ä¸€å¸§ç”¨äºŽæ˜¾ç¤ºã¢ã?
+     * µ¥ÁÐ¡¸Ñ¹Ëõ AE ºó¡¹£º±¾Ò³²»µþË«Í¼£¬±ÜÃâÊúÏòÁ½´°Õ¼Î»²»×ã¡£ÓëÌ¨½×Ò³ÇÐ²Ëµ¥Ò»Í¬¶ÔÕÕ¡£
+     * image_camera_auto_exposure() ÄÚÓÐ½çµü´ú£¬ÎðÔÚ bot==0 Ã¤Çå armed£»AE ºóÔÚµ±Ç°ÆØ¹âÏÂÔÙÑ¹Ò»Ö¡ÓÃÓÚÏÔÊ¾¡£
      */
-    ips200_show_string(0,ROW_8,"åŽ‹ç¼© AEå?");
+    ips200_show_string(0,ROW_8,"Ñ¹Ëõ AE ºó");
     image_camera_auto_exposure();
     image_photo_compress(mt9v03x_image[0]);
     ips200_show_gray_image(0,ROW_10,image_two_value[0],
@@ -869,7 +999,7 @@ void ACT_2_1_2()
     ReadPos[4] = '2';
 }
 
-void GUI_2_1_3(void) // é¢ ç°¸è·?æ®µæ?¢ãæµ?
+void GUI_2_1_3(void) // µßô¤Â·¶Î¼ì²â
 {
     GUI_Display_Level3_ImageDetect(3);
 
@@ -888,7 +1018,7 @@ void ACT_2_1_3()
     ReadPos[4] = '3';
 }
 
-// void GUI_1_3_1(void) // æµ‹è¯•æ‘„åƒå¤?
+// void GUI_1_3_1(void) // ²âÊÔÉãÏñÍ·
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Image");
@@ -903,7 +1033,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_1_4_1(void) // æµ‹è¯•é™¢ãèžºä»ª
+// void GUI_1_4_1(void) // ²âÊÔÍÓÂÝÒÇ
 // {
 //     GUI_Display_Level3_Common1();
 //     ips200_show_string(0,ROW_1,"Gyro");
@@ -936,17 +1066,17 @@ void ACT_2_1_3()
 
 
 // // /*********************************************************************************************************************
-// // * ç›´ç«‹çŽ?è°ƒè¯•ç•Œé¢
+// // * Ö±Á¢»·µ÷ÊÔ½çÃæ
 // // *********************************************************************************************************************/
 // static void GUI_Display_Level3_Common2(void)
 // {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//æ¨?çº?
+//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//å¦??ç»??
 //     ips200_show_string(0,ROW_1,"Image");
 //     ips200_draw_line(188,20,188,319,IPS200_DEFAULT_PENCOLOR);//ç«–çº¿
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_1_1(void) // åŽŸå?‹å›¾åƒ? + äºŒå¢ã¼åŒ–
+// void GUI_2_1_1(void) // åŽŸï¿½?å¬?æµ˜é??? + äºŒæ¾§æ…µåŒ–
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -965,7 +1095,7 @@ void ACT_2_1_3()
 //     ReadPos[4] = '1';
 // }
 
-// void GUI_2_1_2(void) // äºŒå¢ã¼åŒ– + è¿žç»­è¾¹çº¿
+// void GUI_2_1_2(void) // äºŒæ¾§æ…µåŒ– + è¿žç»­è¾¹çº¿
 // {
 //     GUI_Display_Level3_Common2();
 
@@ -1011,11 +1141,11 @@ void ACT_2_1_3()
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_2_1(void) // è§’é¢ãŸåº¦çŽ¯P
+// void GUI_2_2_1(void) // è§’æ£°éŠ¦åº¦çŽ¯P
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -1040,12 +1170,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_2(void) // è§’é¢ãŸåº¦çŽ¯I
+// void GUI_2_2_2(void) // è§’æ£°éŠ¦åº¦çŽ¯I
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -1070,7 +1200,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1090,12 +1220,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_2_4(void) // è§’é¢ãŸåº¦çŽ¯D
+// void GUI_2_2_4(void) // è§’æ£°éŠ¦åº¦çŽ¯D
 // {
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1120,7 +1250,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(50,208,112,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,224,112,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,208,50,224,IPS200_DEFAULT_PENCOLOR);
@@ -1145,7 +1275,7 @@ void ACT_2_1_3()
 //     GUI_Display_Level3_Common3();
 //     GUI_SetAngleLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(168,208,238,208,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,224,238,224,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,208,168,224,IPS200_DEFAULT_PENCOLOR);
@@ -1167,21 +1297,21 @@ void ACT_2_1_3()
 // }
 
 // // /*********************************************************************************************************************
-// // * è½?å‘çŽ¯è°ƒå¼ç•Œé¢
+// // * æ??å‘çŽ¯è°ƒå¼ç•Œé¢
 // // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common4(void) // è½?å‘çŽ¯è°ƒè¯•ç•Œé¢
+// static void GUI_Display_Level3_Common4(void) // æ??å‘çŽ¯è°ƒè¯•ç•Œé¢
 // {
 //     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
 //     ips200_show_string(0,ROW_1,"Dir_Pid ");
 //     GUI_Display_FPS();
 // }
 
-// void GUI_2_3_1(void) // è½?å‘å†…çŽ¯P
+// void GUI_2_3_1(void) // æ??å‘å†…çŽ¯P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
@@ -1201,12 +1331,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_2(void) // è½?å‘å†…çŽ¯D
+// void GUI_2_3_2(void) // æ??å‘å†…çŽ¯D
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
@@ -1226,12 +1356,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_3(void) // è½?å‘å?–çŽ¯P
+// void GUI_2_3_3(void) // æ??å‘ï¿½?æ ?å¹†P
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
@@ -1251,12 +1381,12 @@ void ACT_2_1_3()
 //     }
 // }
 
-// void GUI_2_3_4(void) // è½?å‘å?–çŽ¯D 
+// void GUI_2_3_4(void) // æ??å‘ï¿½?æ ?å¹†D
 // {
 //     GUI_Display_Level3_Common4();
 //     GUI_SetDirLoop();
 
-//     //ç”»æ??
+//     //ç”»ï¿½??
 //     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
 //     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
@@ -1303,7 +1433,7 @@ void ACT_2_1_3()
 * å…¶ä»–è¾…åŠ©å‡½æ•°
 *********************************************************************************************************************/
 
-// static void GUI_Display_Image_Sidebar(void) // å›¾åƒç•Œé¢ä¾§è¾¹æ æ˜¾ç¤ºå†…å®?
+// static void GUI_Display_Image_Sidebar(void) // å›¾åƒç•Œé¢ä¾§è¾¹æ æ˜¾ç¤ºå†…ç€??
 // {
 //     ips200_show_string(192,ROW_3,"Th");         ips200_show_int(192,ROW_4,Threshold,3);
 //     ips200_show_string(192,ROW_5,"Pitch");      ips200_show_float(192,ROW_6,Gyro.pitch,3,1);
@@ -1315,7 +1445,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_Display_Image_Below(void) // å›¾åƒç•Œé¢ä¸‹æ–¹æ˜¾ç¤ºå†…å??
+// static void GUI_Display_Image_Below(void) // å›¾åƒç•Œé¢ä¸‹æ–¹æ˜¾ç¤ºå†…ï¿½??
 // {
 //     switch(ElementStatusMachine.CurrentStatus)
 //     {
@@ -1509,7 +1639,7 @@ void ACT_2_1_3()
 
 // }
 
-// static void GUI_SetAngleLoop(void) // ç›´ç«‹çŽ?è®¾ç½®ç•Œé¢
+// static void GUI_SetAngleLoop(void) // ç›´ç«‹é??è®¾ç½®ç•Œé¢
 // {
 //     ips200_show_string(0,ROW_3,"AngleDot");
 //     ips200_show_string(0,ROW_4,"Dot_Kp");   ips200_show_float(64,ROW_4,AngleDotPID.Kp,4,1);
@@ -1537,7 +1667,7 @@ void ACT_2_1_3()
 //     ips200_show_string(0,ROW_18,"Pwm");         ips200_show_float(64,ROW_18,DirPwm,4,1);
 // }
 
-// static void GUI_SetDirLoop(void) // è½?å‘çŽ¯è®¾ç½®ç•Œé¢
+// static void GUI_SetDirLoop(void) // æ??å‘çŽ¯è®¾ç½®ç•Œé¢
 // {
 //     ips200_show_string(0,ROW_3,"Dir_In");
 //     ips200_show_string(0,ROW_4,"In_Kp");   ips200_show_float(64,ROW_4,DirAngleDotPID.Kp,4,1);

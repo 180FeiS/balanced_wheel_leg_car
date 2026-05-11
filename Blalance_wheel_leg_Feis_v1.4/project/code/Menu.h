@@ -33,7 +33,7 @@
  *    切到「板载调试」：与宏=0 类似的按键与本地拨码路径；全遥控时 Motor_Runaway_Latch 不能靠拨码清除；保护性关断仍以 control.c 为准。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 1
+#define MENU_INPUT_REMOTE_MENU_FIRST 0
 #endif
 
 /*
