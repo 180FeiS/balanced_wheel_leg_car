@@ -132,7 +132,7 @@ void set_steer_cmd(float cmd);                              // 设置普通转�
 
 void steer_set_target_yaw(float target_yaw_deg);            // 立即设置绝对航向目标；若当前在自旋，会直接打断自旋
 
-void steer_request_target_yaw(float target_yaw_deg);        // 登记最新绝对航向；若自旋在跑则延迟到自旋结束后，由 1ms ISR 执行一次
+void steer_request_target_yaw(float target_yaw_deg);        // 登记最新绝对航向；NAV_HEADING_MODE_GPS 时由 GPS_PointNav_Run 填目标（含 2 m 位移标定后偏置），与惯导回放 N.Angle_Run 分离
 
 void steer_request_relative_yaw(float delta_deg);           // 登记相对转角请求，由控制层统一换算成绝对航向后再交给 1ms ISR 执行
 

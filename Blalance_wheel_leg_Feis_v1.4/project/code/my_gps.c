@@ -8,6 +8,8 @@
 #define GPS_NAV_EARTH_RADIUS_M 6371000.0
 #define GPS_NAV_DEG_TO_RAD(x) ((x) * GPS_NAV_PI / 180.0)
 #define GPS_NAV_RAD_TO_DEG(x) ((x) * 180.0 / GPS_NAV_PI)
+#define GPS_PATH_MIN_RANGE_DEG 0.000001
+#define GPS_PATH_MARGIN_RATIO 0.10
 
 car_dir car_gps_dir = north;
 
@@ -36,10 +38,15 @@ float gps_nav_body_target_yaw_deg = 0.0f;
 float gps_nav_target_imu_yaw_deg = 0.0f;
 float gps_nav_imu_yaw_deg = 0.0f;
 float gps_nav_yaw_err_deg = 0.0f;
+uint8 gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
+float gps_nav_heading_bias_deg = 0.0f;
 
 static float gps_nav_launch_imu_yaw = 0.0f;
 static float gps_nav_last_requested_yaw = 0.0f;
 static uint8 gps_nav_request_valid = 0u;
+static double gps_nav_launch_latitude = 0.0;
+static double gps_nav_launch_longitude = 0.0;
+static uint8 gps_nav_launch_fix_valid = 0u;
 
 static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
 {
@@ -52,6 +59,54 @@ static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
         return max_value;
     }
     return (uint16)value;
+}
+
+static void GPS_FillPathViewport(uint16 x_offset, uint16 y_offset, uint16 width, uint16 height)
+{
+    uint16 y = 0;
+    uint16 x_end = (uint16)(x_offset + width);
+    uint16 y_end = (uint16)(y_offset + height);
+
+    for (y = y_offset; y <= y_end; y++)
+    {
+        ips200_draw_line(x_offset, y, x_end, y, RGB565_WHITE);
+    }
+}
+
+static void GPS_DrawViewportPoint(uint16 x,
+                                  uint16 y,
+                                  uint16 x_offset,
+                                  uint16 y_offset,
+                                  uint16 width,
+                                  uint16 height,
+                                  uint16 color)
+{
+    uint16 x_max = (uint16)(x_offset + width);
+    uint16 y_max = (uint16)(y_offset + height);
+
+    ips200_draw_point(x, y, color);
+    ips200_draw_point(GPS_ClampU16((int32)x + 1, x_offset, x_max), y, color);
+    ips200_draw_point(GPS_ClampU16((int32)x - 1, x_offset, x_max), y, color);
+    ips200_draw_point(x, GPS_ClampU16((int32)y + 1, y_offset, y_max), color);
+    ips200_draw_point(x, GPS_ClampU16((int32)y - 1, y_offset, y_max), color);
+}
+
+static void GPS_ExpandRange(double *min_value, double *max_value)
+{
+    double center = (*min_value + *max_value) * 0.5;
+    double range = *max_value - *min_value;
+    double margin = 0.0;
+
+    if (fabs(range) < GPS_PATH_MIN_RANGE_DEG)
+    {
+        range = GPS_PATH_MIN_RANGE_DEG;
+        *min_value = center - (range * 0.5);
+        *max_value = center + (range * 0.5);
+    }
+
+    margin = range * GPS_PATH_MARGIN_RATIO;
+    *min_value -= margin;
+    *max_value += margin;
 }
 
 static float GPS_Wrap180(float angle_deg)
@@ -80,23 +135,6 @@ static float GPS_Wrap360(float angle_deg)
     return angle_deg;
 }
 
-static float GPS_GetLaunchGeoHeading(void)
-{
-    switch (car_gps_dir)
-    {
-    case north:
-        return 0.0f;
-    case dong:
-        return 90.0f;
-    case south:
-        return 180.0f;
-    case xi:
-        return 270.0f;
-    default:
-        return 0.0f;
-    }
-}
-
 static void GPS_NavClearDebug(void)
 {
     gps_nav_current_latitude = 0.0;
@@ -111,6 +149,11 @@ static void GPS_NavClearDebug(void)
     gps_nav_yaw_err_deg = 0.0f;
     gps_nav_request_valid = 0u;
     gps_nav_last_requested_yaw = 0.0f;
+    gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
+    gps_nav_heading_bias_deg = 0.0f;
+    gps_nav_launch_latitude = 0.0;
+    gps_nav_launch_longitude = 0.0;
+    gps_nav_launch_fix_valid = 0u;
 }
 
 #if !defined(CY_CORE_CM7_1)
@@ -148,22 +191,44 @@ static void GPS_NavStop(uint8 state, uint8 reason)
     steer_task_stop();
 }
 
+/* 局地平面近似：经纬差算距离与方位（北为 0°，东为 90°，与 gps_nav_geo_bearing_deg 一致 [0°,360°)）。 */
+static void GPS_NavSegmentMetrics(double lat_a,
+                                  double lon_a,
+                                  double lat_b,
+                                  double lon_b,
+                                  float *distance_m,
+                                  float *bearing_deg_wrap360)
+{
+    double lat_ar = GPS_NAV_DEG_TO_RAD(lat_a);
+    double lat_br = GPS_NAV_DEG_TO_RAD(lat_b);
+    double d_lat_rad = GPS_NAV_DEG_TO_RAD(lat_b - lat_a);
+    double d_lon_rad = GPS_NAV_DEG_TO_RAD(lon_b - lon_a);
+    double avg_lat_rad = (lat_ar + lat_br) * 0.5;
+    double north_m = d_lat_rad * GPS_NAV_EARTH_RADIUS_M;
+    double east_m = d_lon_rad * GPS_NAV_EARTH_RADIUS_M * cos(avg_lat_rad);
+    double bearing_deg = GPS_NAV_RAD_TO_DEG(atan2(east_m, north_m));
+
+    if (distance_m != NULL)
+    {
+        *distance_m = (float)sqrt(east_m * east_m + north_m * north_m);
+    }
+    if (bearing_deg_wrap360 != NULL)
+    {
+        *bearing_deg_wrap360 = GPS_Wrap360((float)bearing_deg);
+    }
+}
+
 static void GPS_NavCalcDistanceBearing(double current_latitude,
                                        double current_longitude,
                                        double target_latitude,
                                        double target_longitude)
 {
-    double current_lat_rad = GPS_NAV_DEG_TO_RAD(current_latitude);
-    double target_lat_rad = GPS_NAV_DEG_TO_RAD(target_latitude);
-    double d_lat_rad = GPS_NAV_DEG_TO_RAD(target_latitude - current_latitude);
-    double d_lon_rad = GPS_NAV_DEG_TO_RAD(target_longitude - current_longitude);
-    double avg_lat_rad = (current_lat_rad + target_lat_rad) * 0.5;
-    double north_m = d_lat_rad * GPS_NAV_EARTH_RADIUS_M;
-    double east_m = d_lon_rad * GPS_NAV_EARTH_RADIUS_M * cos(avg_lat_rad);
-    double bearing_deg = GPS_NAV_RAD_TO_DEG(atan2(east_m, north_m));
-
-    gps_nav_distance_m = (float)sqrt(east_m * east_m + north_m * north_m);
-    gps_nav_geo_bearing_deg = GPS_Wrap360((float)bearing_deg);
+    GPS_NavSegmentMetrics(current_latitude,
+                          current_longitude,
+                          target_latitude,
+                          target_longitude,
+                          &gps_nav_distance_m,
+                          &gps_nav_geo_bearing_deg);
 }
 #endif
 
@@ -208,6 +273,15 @@ void GPS_ApplyLaunchSpeed(void)
     gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
     GPS_NavClearDebug();
     gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
+    {
+        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+        {
+            gps_nav_launch_latitude = gnss.latitude;
+            gps_nav_launch_longitude = gnss.longitude;
+            gps_nav_launch_fix_valid = 1u;
+        }
+    }
     nav_heading_mode = NAV_HEADING_MODE_GPS;
     motor_user_speed_cmd = run_launch_speed;
 #endif
@@ -219,8 +293,9 @@ void GPS_PointNav_Run(void)
     (void)0;
 #else
     float target_delta = 0.0f;
-    float launch_geo_heading = 0.0f;
     uint8 is_last_point = 0u;
+    float dist_from_launch_m = 0.0f;
+    float course_launch_deg = 0.0f;
 
     if (nav_heading_mode != NAV_HEADING_MODE_GPS)
     {
@@ -241,6 +316,14 @@ void GPS_PointNav_Run(void)
     {
         GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_GPS_INVALID);
         return;
+    }
+
+    /* KEY3 时若无定位，此处用首帧有效经纬度锁存标定起点（与发车点接近）。 */
+    if (gps_nav_launch_fix_valid == 0u)
+    {
+        gps_nav_launch_latitude = gps_nav_current_latitude;
+        gps_nav_launch_longitude = gps_nav_current_longitude;
+        gps_nav_launch_fix_valid = 1u;
     }
 
     if (gps_point_count < GPS_NAV_MIN_POINT_COUNT || !GPS_NavIsTargetValid(tagert_point))
@@ -281,9 +364,46 @@ void GPS_PointNav_Run(void)
         return;
     }
 
-    launch_geo_heading = GPS_GetLaunchGeoHeading();
-    gps_nav_body_target_yaw_deg = GPS_Wrap180(gps_nav_geo_bearing_deg - launch_geo_heading);
-    gps_nav_target_imu_yaw_deg = GPS_Wrap180(gps_nav_launch_imu_yaw + gps_nav_body_target_yaw_deg);
+    GPS_NavSegmentMetrics(gps_nav_launch_latitude,
+                          gps_nav_launch_longitude,
+                          gps_nav_current_latitude,
+                          gps_nav_current_longitude,
+                          &dist_from_launch_m,
+                          &course_launch_deg);
+
+    /*
+     * 地理方位角 bearing ∈ [0°,360°)，IMU euler yaw ∈ [-180°,180°]。
+     * 常值偏置：bias = Wrap180(course_gps − imu)，使任意时刻
+     *   target_imu = Wrap180(bearing_to_waypoint − bias)
+     * 与「沿地理方位行驶」时在数值上一致。
+     */
+    if (gps_nav_align_state == GPS_NAV_ALIGN_WAIT)
+    {
+        if (dist_from_launch_m < GPS_NAV_ALIGN_DISTANCE_M)
+        {
+            gps_nav_target_imu_yaw_deg = gps_nav_launch_imu_yaw;
+            gps_nav_body_target_yaw_deg = 0.0f;
+        }
+        else
+        {
+            gps_nav_heading_bias_deg =
+                GPS_Wrap180(course_launch_deg - gps_nav_imu_yaw_deg);
+            gps_nav_align_state = GPS_NAV_ALIGN_TRACKING;
+            gps_nav_request_valid = 0u;
+            gps_nav_target_imu_yaw_deg =
+                GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_heading_bias_deg);
+            gps_nav_body_target_yaw_deg =
+                GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
+        }
+    }
+    else
+    {
+        gps_nav_target_imu_yaw_deg =
+            GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_heading_bias_deg);
+        gps_nav_body_target_yaw_deg =
+            GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
+    }
+
     gps_nav_yaw_err_deg = (float)ange_deviation1(gps_nav_target_imu_yaw_deg, gps_nav_imu_yaw_deg);
     gps_nav_state = GPS_NAV_STATE_RUNNING;
     gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
@@ -486,6 +606,8 @@ void GPS_Path_DrawWithCar(const double *lat_buf,
         return;
     }
 
+    GPS_FillPathViewport(x_offset, y_offset, width, height);
+
     if (len > GPS_POINT_MAX)
     {
         len = GPS_POINT_MAX;
@@ -510,50 +632,53 @@ void GPS_Path_DrawWithCar(const double *lat_buf,
         return;
     }
 
-    if (car_valid)
+    if (point_len == 0u)
     {
         lat_max = car_latitude;
         lat_min = car_latitude;
         lon_max = car_longitude;
         lon_min = car_longitude;
     }
-
-    for (i = 0; i < point_len; i++)
+    else
     {
-        if (!car_valid && (i == 0u))
+        lat_max = lat_buf[0];
+        lat_min = lat_buf[0];
+        lon_max = lot_buf[0];
+        lon_min = lot_buf[0];
+
+        for (i = 1; i < point_len; i++)
         {
-            lat_max = lat_buf[i];
-            lat_min = lat_buf[i];
-            lon_max = lot_buf[i];
-            lon_min = lot_buf[i];
-        }
-        if (lat_buf[i] > lat_max)
-        {
-            lat_max = lat_buf[i];
-        }
-        if (lat_buf[i] < lat_min)
-        {
-            lat_min = lat_buf[i];
-        }
-        if (lot_buf[i] > lon_max)
-        {
-            lon_max = lot_buf[i];
-        }
-        if (lot_buf[i] < lon_min)
-        {
-            lon_min = lot_buf[i];
+            if (lat_buf[i] > lat_max)
+            {
+                lat_max = lat_buf[i];
+            }
+            if (lat_buf[i] < lat_min)
+            {
+                lat_min = lat_buf[i];
+            }
+            if (lot_buf[i] > lon_max)
+            {
+                lon_max = lot_buf[i];
+            }
+            if (lot_buf[i] < lon_min)
+            {
+                lon_min = lot_buf[i];
+            }
         }
     }
+
+    GPS_ExpandRange(&lat_min, &lat_max);
+    GPS_ExpandRange(&lon_min, &lon_max);
 
     lat_range = lat_max - lat_min;
     lon_range = lon_max - lon_min;
-    if (fabs(lat_range) < 0.000001)
+    if (fabs(lat_range) < GPS_PATH_MIN_RANGE_DEG)
     {
-        lat_range = 0.000001;
+        lat_range = GPS_PATH_MIN_RANGE_DEG;
     }
-    if (fabs(lon_range) < 0.000001)
+    if (fabs(lon_range) < GPS_PATH_MIN_RANGE_DEG)
     {
-        lon_range = 0.000001;
+        lon_range = GPS_PATH_MIN_RANGE_DEG;
     }
 
     for (i = 0; i < point_len; i++)
@@ -597,19 +722,23 @@ void GPS_Path_DrawWithCar(const double *lat_buf,
 
     for (i = 0; i < point_len; i++)
     {
-        ips200_draw_point(lon_mapping[i], lat_mapping[i], RGB565_BLUE);
-        ips200_draw_point((uint16)(lon_mapping[i] + 1u), lat_mapping[i], RGB565_BLUE);
-        ips200_draw_point((uint16)(lon_mapping[i] - (lon_mapping[i] > 0u ? 1u : 0u)), lat_mapping[i], RGB565_BLUE);
-        ips200_draw_point(lon_mapping[i], (uint16)(lat_mapping[i] + 1u), RGB565_BLUE);
-        ips200_draw_point(lon_mapping[i], (uint16)(lat_mapping[i] - (lat_mapping[i] > 0u ? 1u : 0u)), RGB565_BLUE);
+        GPS_DrawViewportPoint(lon_mapping[i],
+                              lat_mapping[i],
+                              x_offset,
+                              y_offset,
+                              width,
+                              height,
+                              RGB565_BLUE);
     }
 
     if (car_valid)
     {
-        ips200_draw_point(car_x, car_y, RGB565_PURPLE);
-        ips200_draw_point((uint16)(car_x + 1u), car_y, RGB565_PURPLE);
-        ips200_draw_point((uint16)(car_x - (car_x > 0u ? 1u : 0u)), car_y, RGB565_PURPLE);
-        ips200_draw_point(car_x, (uint16)(car_y + 1u), RGB565_PURPLE);
-        ips200_draw_point(car_x, (uint16)(car_y - (car_y > 0u ? 1u : 0u)), RGB565_PURPLE);
+        GPS_DrawViewportPoint(car_x,
+                              car_y,
+                              x_offset,
+                              y_offset,
+                              width,
+                              height,
+                              RGB565_PURPLE);
     }
 }

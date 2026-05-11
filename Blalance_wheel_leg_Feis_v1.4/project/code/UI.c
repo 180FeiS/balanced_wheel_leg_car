@@ -464,6 +464,8 @@ void GUI_2_3_1(void)
     float nav_distance_m = 0.0f;
     float nav_body_yaw_deg = 0.0f;
     float nav_yaw_err_deg = 0.0f;
+    uint8 nav_align_state = GPS_NAV_ALIGN_WAIT;
+    float nav_heading_bias_deg = 0.0f;
     const char *element_name = "None";
     const char *nav_state_name = "Idle";
     const char *nav_protect_name = "None";
@@ -482,6 +484,8 @@ void GUI_2_3_1(void)
     nav_distance_m = s_ui_dc.gps_nav_distance_m;
     nav_body_yaw_deg = s_ui_dc.gps_nav_body_target_yaw_deg;
     nav_yaw_err_deg = s_ui_dc.gps_nav_yaw_err_deg;
+    nav_align_state = s_ui_dc.gps_nav_align_state;
+    nav_heading_bias_deg = s_ui_dc.gps_nav_heading_bias_deg;
 #else
     point_count = gps_point_count;
     current_show_point = show_point;
@@ -493,6 +497,8 @@ void GUI_2_3_1(void)
     nav_distance_m = gps_nav_distance_m;
     nav_body_yaw_deg = gps_nav_body_target_yaw_deg;
     nav_yaw_err_deg = gps_nav_yaw_err_deg;
+    nav_align_state = gps_nav_align_state;
+    nav_heading_bias_deg = gps_nav_heading_bias_deg;
 #endif
 
     element_name = GPS_GetElementName(current_element);
@@ -554,8 +560,12 @@ void GUI_2_3_1(void)
     ips200_show_float(40, ROW_17, nav_body_yaw_deg, 3, 1);
     ips200_show_string(0, ROW_18, "Err:");
     ips200_show_float(40, ROW_18, nav_yaw_err_deg, 3, 1);
-    ips200_show_string(0, ROW_19, "P:");
-    ips200_show_string(16, ROW_19, nav_protect_name);
+    ips200_show_string(0, ROW_19, "Al:");
+    ips200_show_uint(24, ROW_19, (uint32)nav_align_state, 1);
+    ips200_show_string(40, ROW_19, "Bias:");
+    ips200_show_float(88, ROW_19, nav_heading_bias_deg, 3, 1);
+    ips200_show_string(0, ROW_20, "P:");
+    ips200_show_string(16, ROW_20, nav_protect_name);
 
     ips200_show_string(144, ROW_3, "Path");
 #if defined(CY_CORE_CM7_1)

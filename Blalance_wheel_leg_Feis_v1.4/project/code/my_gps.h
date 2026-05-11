@@ -13,6 +13,8 @@
 #define GPS_NAV_MAX_DISTANCE_M 200.0f
 #define GPS_NAV_REISSUE_YAW_DEG 3.0f
 #define GPS_NAV_MIN_POINT_COUNT 1u
+/* 发车后沿大致直线行驶达到该距离，才用「起点→当前」GPS 方位与 IMU yaw 标定常值偏置；卫星差时可改为 2.5f/3.0f。 */
+#define GPS_NAV_ALIGN_DISTANCE_M 2.0f
 
 typedef enum
 {
@@ -21,6 +23,7 @@ typedef enum
     dong = 2,  // 朝东发车
     xi = 3,    // 朝西发车
 } car_dir;
+/* car_dir / car_gps_dir 仅用于路径小地图绘制朝向等 UI，不参与 GPS 点导航航向换算。 */
 
 typedef enum
 {
@@ -53,6 +56,12 @@ typedef enum
     GPS_NAV_PROTECT_FINISHED = 4,
 } gps_nav_protect_enum;
 
+typedef enum
+{
+    GPS_NAV_ALIGN_WAIT = 0,      /* 尚未完成 GPS–IMU 偏置标定，保持发车锁存 yaw 直行 */
+    GPS_NAV_ALIGN_TRACKING = 1u, /* 已标定，按「当前→路点」方位角闭环 */
+} gps_nav_align_state_enum;
+
 extern car_dir car_gps_dir;
 
 extern uint8 save_point;   // 下一个保存点序号
@@ -80,13 +89,15 @@ extern float gps_nav_body_target_yaw_deg;
 extern float gps_nav_target_imu_yaw_deg;
 extern float gps_nav_imu_yaw_deg;
 extern float gps_nav_yaw_err_deg;
+extern uint8 gps_nav_align_state;     /* gps_nav_align_state_enum，供屏显/双核调试 */
+extern float gps_nav_heading_bias_deg; /* Wrap180(地理方位角 − IMU yaw)，标定完成后有效 */
 
 void GPS_ClearPoints(void);
 void GPS_BeginRecord(void);
 void GPS_EndRecord(void);
-/* GPS 页面 Idle 下 KEY3 发车入口：切换 GPS 航向模式、装载发车速度并锁存发车瞬间 IMU yaw。 */
+/* KEY3 发车：切 NAV_HEADING_MODE_GPS、装 run_launch_speed、锁存 IMU yaw；有效时记录起点经纬度，进入约 GPS_NAV_ALIGN_DISTANCE_M 直线标定段。 */
 void GPS_ApplyLaunchSpeed(void);
-/* 5ms 软任务入口：只在 NAV_HEADING_MODE_GPS 下计算目标点航向并请求现有转向闭环。 */
+/* 5ms 软任务：GPS 模式下先标定偏置再追点，经 steer_request_target_yaw 登记绝对航向（与惯导回放分离）。 */
 void GPS_PointNav_Run(void);
 uint8 GPS_GetValidPointCount(void);
 const char *GPS_GetElementName(uint32 element);
