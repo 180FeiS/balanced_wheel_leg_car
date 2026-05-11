@@ -583,7 +583,10 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
     return 0u;
 }
 
-/* GPS 调试页按 Idle/Recording 两套语义处理；Idle 下 KEY4 继续走 searchUp() 返回上级。 */
+/* GPS 调试页是 GPS 功能唯一按键入口：
+ * Idle：KEY1 开始打点，KEY2 结束并写 flash，KEY3 发车进入 GPS 导航，KEY4 返回上级；
+ * Recording：KEY1 占位，KEY2 结束并写 flash，KEY3 保存当前点，KEY4 切换待保存元素。
+ */
 static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 {
 #if defined(CY_CORE_CM7_1)
@@ -1063,7 +1066,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.3.1");
 #endif
 }
 

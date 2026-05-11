@@ -94,6 +94,18 @@ void dualcore_ctrl_to_ui_publish(void)
   memcpy(c->gps_latitude_point, latitude_point, sizeof(c->gps_latitude_point));
   memcpy(c->gps_longitude_point, longitude_point, sizeof(c->gps_longitude_point));
   memcpy(c->gps_yuansu, u32yuansu, sizeof(c->gps_yuansu));
+  c->gps_nav_state = gps_nav_state;
+  c->gps_nav_protect_reason = gps_nav_protect_reason;
+  c->gps_nav_target_index = gps_nav_target_index;
+  c->_gps_nav_pad = 0u;
+  c->gps_nav_target_latitude = gps_nav_target_latitude;
+  c->gps_nav_target_longitude = gps_nav_target_longitude;
+  c->gps_nav_distance_m = gps_nav_distance_m;
+  c->gps_nav_geo_bearing_deg = gps_nav_geo_bearing_deg;
+  c->gps_nav_body_target_yaw_deg = gps_nav_body_target_yaw_deg;
+  c->gps_nav_target_imu_yaw_deg = gps_nav_target_imu_yaw_deg;
+  c->gps_nav_imu_yaw_deg = gps_nav_imu_yaw_deg;
+  c->gps_nav_yaw_err_deg = gps_nav_yaw_err_deg;
 
   /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */
   c->dbg_run_index = (float)N.Run_index;

@@ -458,7 +458,15 @@ void GUI_2_3_1(void)
     uint8 current_show_point = 0;
     uint8 recording_active = 0;
     uint32 current_element = GPS_ELEMENT_NORMAL;
+    uint8 nav_state = GPS_NAV_STATE_IDLE;
+    uint8 nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    uint8 nav_target_index = 0;
+    float nav_distance_m = 0.0f;
+    float nav_body_yaw_deg = 0.0f;
+    float nav_yaw_err_deg = 0.0f;
     const char *element_name = "None";
+    const char *nav_state_name = "Idle";
+    const char *nav_protect_name = "None";
 
     GUI_Display_Level2_Common2();
 
@@ -468,14 +476,28 @@ void GUI_2_3_1(void)
     current_show_point = s_ui_dc.gps_show_point;
     recording_active = s_ui_dc.gps_recording_active;
     current_element = s_ui_dc.gps_current_yuansu;
+    nav_state = s_ui_dc.gps_nav_state;
+    nav_protect_reason = s_ui_dc.gps_nav_protect_reason;
+    nav_target_index = s_ui_dc.gps_nav_target_index;
+    nav_distance_m = s_ui_dc.gps_nav_distance_m;
+    nav_body_yaw_deg = s_ui_dc.gps_nav_body_target_yaw_deg;
+    nav_yaw_err_deg = s_ui_dc.gps_nav_yaw_err_deg;
 #else
     point_count = gps_point_count;
     current_show_point = show_point;
     recording_active = gps_recording_active;
     current_element = gps_current_yuansu;
+    nav_state = gps_nav_state;
+    nav_protect_reason = gps_nav_protect_reason;
+    nav_target_index = gps_nav_target_index;
+    nav_distance_m = gps_nav_distance_m;
+    nav_body_yaw_deg = gps_nav_body_target_yaw_deg;
+    nav_yaw_err_deg = gps_nav_yaw_err_deg;
 #endif
 
     element_name = GPS_GetElementName(current_element);
+    nav_state_name = GPS_GetNavStateName(nav_state);
+    nav_protect_name = GPS_GetNavProtectName(nav_protect_reason);
 
     ips200_show_string(24, ROW_3, "GPS Debug");
     ips200_draw_line(16, ROW_5 - 1, 119, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
@@ -522,6 +544,18 @@ void GUI_2_3_1(void)
         ips200_show_string(0, ROW_13, "K3 Launch");
         ips200_show_string(0, ROW_14, "K4 Back");
     }
+    ips200_show_string(0, ROW_15, "Nav:");
+    ips200_show_string(40, ROW_15, nav_state_name);
+    ips200_show_string(0, ROW_16, "T:");
+    ips200_show_uint(16, ROW_16, (uint32)nav_target_index, 2);
+    ips200_show_string(40, ROW_16, "D:");
+    ips200_show_float(56, ROW_16, nav_distance_m, 3, 1);
+    ips200_show_string(0, ROW_17, "Yaw:");
+    ips200_show_float(40, ROW_17, nav_body_yaw_deg, 3, 1);
+    ips200_show_string(0, ROW_18, "Err:");
+    ips200_show_float(40, ROW_18, nav_yaw_err_deg, 3, 1);
+    ips200_show_string(0, ROW_19, "P:");
+    ips200_show_string(16, ROW_19, nav_protect_name);
 
     ips200_show_string(144, ROW_3, "Path");
 #if defined(CY_CORE_CM7_1)

@@ -699,6 +699,18 @@ float Nag_GetControlSpeedTarget(void)
     float nav_speed = N.Target_Speed;
     float abs_user_speed = fabsf((float)motor_user_speed_cmd);
 
+    /* GPS 点导航由 GPS_PointNav_Run() 自己负责保护停车和到点停车。
+     * 这里直接放行 motor_user_speed_cmd，避免 GPS 模式被惯导回放态或 N.Nag_Stop_f 误门控。
+     */
+    if (nav_heading_mode == NAV_HEADING_MODE_GPS)
+    {
+        if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
+        {
+            return 0.0f;
+        }
+        return motor_user_speed_cmd;
+    }
+
     /* 安全门控：正常模式下只有导航真正进入回放执行态(case 3)后，速度目标才允许生效。
      * 这样用户设定的 motor_user_speed_cmd 在上电、待机、录制、以及回放准备阶段
      * （Nag_SystemRun_Index==2, 仍在读 flash）时不会直接驱动速度环（本函数返回 0）。

@@ -4,6 +4,11 @@
 #include <math.h>
 #include <string.h>
 
+#define GPS_NAV_PI 3.14159265358979323846
+#define GPS_NAV_EARTH_RADIUS_M 6371000.0
+#define GPS_NAV_DEG_TO_RAD(x) ((x) * GPS_NAV_PI / 180.0)
+#define GPS_NAV_RAD_TO_DEG(x) ((x) * 180.0 / GPS_NAV_PI)
+
 car_dir car_gps_dir = north;
 
 uint8 now_point = 0;
@@ -18,6 +23,24 @@ double latitude_point[GPS_POINT_MAX] = {0};
 double longitude_point[GPS_POINT_MAX] = {0};
 uint32 u32yuansu[GPS_POINT_MAX] = {0};
 
+uint8 gps_nav_state = GPS_NAV_STATE_IDLE;
+uint8 gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+uint8 gps_nav_target_index = 0;
+double gps_nav_current_latitude = 0.0;
+double gps_nav_current_longitude = 0.0;
+double gps_nav_target_latitude = 0.0;
+double gps_nav_target_longitude = 0.0;
+float gps_nav_distance_m = 0.0f;
+float gps_nav_geo_bearing_deg = 0.0f;
+float gps_nav_body_target_yaw_deg = 0.0f;
+float gps_nav_target_imu_yaw_deg = 0.0f;
+float gps_nav_imu_yaw_deg = 0.0f;
+float gps_nav_yaw_err_deg = 0.0f;
+
+static float gps_nav_launch_imu_yaw = 0.0f;
+static float gps_nav_last_requested_yaw = 0.0f;
+static uint8 gps_nav_request_valid = 0u;
+
 static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
 {
     if (value < (int32)min_value)
@@ -31,6 +54,119 @@ static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
     return (uint16)value;
 }
 
+static float GPS_Wrap180(float angle_deg)
+{
+    while (angle_deg > 180.0f)
+    {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < -180.0f)
+    {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+
+static float GPS_Wrap360(float angle_deg)
+{
+    while (angle_deg >= 360.0f)
+    {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < 0.0f)
+    {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+
+static float GPS_GetLaunchGeoHeading(void)
+{
+    switch (car_gps_dir)
+    {
+    case north:
+        return 0.0f;
+    case dong:
+        return 90.0f;
+    case south:
+        return 180.0f;
+    case xi:
+        return 270.0f;
+    default:
+        return 0.0f;
+    }
+}
+
+static void GPS_NavClearDebug(void)
+{
+    gps_nav_current_latitude = 0.0;
+    gps_nav_current_longitude = 0.0;
+    gps_nav_target_latitude = 0.0;
+    gps_nav_target_longitude = 0.0;
+    gps_nav_distance_m = 0.0f;
+    gps_nav_geo_bearing_deg = 0.0f;
+    gps_nav_body_target_yaw_deg = 0.0f;
+    gps_nav_target_imu_yaw_deg = 0.0f;
+    gps_nav_imu_yaw_deg = 0.0f;
+    gps_nav_yaw_err_deg = 0.0f;
+    gps_nav_request_valid = 0u;
+    gps_nav_last_requested_yaw = 0.0f;
+}
+
+#if !defined(CY_CORE_CM7_1)
+static uint8 GPS_NavIsCurrentCoordValid(double latitude, double longitude)
+{
+    uint8 frame_seen = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+    if (!frame_seen || latitude == 0.0 || longitude == 0.0)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+
+static uint8 GPS_NavIsTargetValid(uint8 index)
+{
+    if (index >= gps_point_count || index >= GPS_POINT_MAX)
+    {
+        return 0u;
+    }
+    if (latitude_point[index] == 0.0 || longitude_point[index] == 0.0)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+
+static void GPS_NavStop(uint8 state, uint8 reason)
+{
+    gps_nav_state = state;
+    gps_nav_protect_reason = reason;
+    gps_nav_request_valid = 0u;
+    motor_user_speed_cmd = 0.0f;
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
+    steer_task_stop();
+}
+
+static void GPS_NavCalcDistanceBearing(double current_latitude,
+                                       double current_longitude,
+                                       double target_latitude,
+                                       double target_longitude)
+{
+    double current_lat_rad = GPS_NAV_DEG_TO_RAD(current_latitude);
+    double target_lat_rad = GPS_NAV_DEG_TO_RAD(target_latitude);
+    double d_lat_rad = GPS_NAV_DEG_TO_RAD(target_latitude - current_latitude);
+    double d_lon_rad = GPS_NAV_DEG_TO_RAD(target_longitude - current_longitude);
+    double avg_lat_rad = (current_lat_rad + target_lat_rad) * 0.5;
+    double north_m = d_lat_rad * GPS_NAV_EARTH_RADIUS_M;
+    double east_m = d_lon_rad * GPS_NAV_EARTH_RADIUS_M * cos(avg_lat_rad);
+    double bearing_deg = GPS_NAV_RAD_TO_DEG(atan2(east_m, north_m));
+
+    gps_nav_distance_m = (float)sqrt(east_m * east_m + north_m * north_m);
+    gps_nav_geo_bearing_deg = GPS_Wrap360((float)bearing_deg);
+}
+#endif
+
 void GPS_ClearPoints(void)
 {
     memset(latitude_point, 0, sizeof(latitude_point));
@@ -43,6 +179,10 @@ void GPS_ClearPoints(void)
     gps_point_count = 0;
     gps_recording_active = 0;
     gps_current_yuansu = GPS_ELEMENT_NORMAL;
+    gps_nav_state = GPS_NAV_STATE_IDLE;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    gps_nav_target_index = 0;
+    GPS_NavClearDebug();
 }
 
 void GPS_BeginRecord(void)
@@ -61,6 +201,13 @@ void GPS_ApplyLaunchSpeed(void)
 #if defined(CY_CORE_CM7_1)
     (void)0;
 #else
+    tagert_point = 0u;
+    now_point = 0u;
+    gps_nav_target_index = 0u;
+    gps_nav_state = GPS_NAV_STATE_RUNNING;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    GPS_NavClearDebug();
+    gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
     nav_heading_mode = NAV_HEADING_MODE_GPS;
     motor_user_speed_cmd = run_launch_speed;
 #endif
@@ -71,9 +218,86 @@ void GPS_PointNav_Run(void)
 #if defined(CY_CORE_CM7_1)
     (void)0;
 #else
+    float target_delta = 0.0f;
+    float launch_geo_heading = 0.0f;
+    uint8 is_last_point = 0u;
+
     if (nav_heading_mode != NAV_HEADING_MODE_GPS)
     {
         return;
+    }
+
+    if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
+    {
+        motor_user_speed_cmd = 0.0f;
+        return;
+    }
+
+    gps_nav_current_latitude = gnss.latitude;
+    gps_nav_current_longitude = gnss.longitude;
+    gps_nav_imu_yaw_deg = (float)euler_angle.yaw;
+
+    if (!GPS_NavIsCurrentCoordValid(gps_nav_current_latitude, gps_nav_current_longitude))
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_GPS_INVALID);
+        return;
+    }
+
+    if (gps_point_count < GPS_NAV_MIN_POINT_COUNT || !GPS_NavIsTargetValid(tagert_point))
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_TARGET_INVALID);
+        return;
+    }
+
+    gps_nav_target_index = tagert_point;
+    now_point = tagert_point;
+    gps_nav_target_latitude = latitude_point[tagert_point];
+    gps_nav_target_longitude = longitude_point[tagert_point];
+
+    GPS_NavCalcDistanceBearing(gps_nav_current_latitude,
+                               gps_nav_current_longitude,
+                               gps_nav_target_latitude,
+                               gps_nav_target_longitude);
+
+    if (gps_nav_distance_m > GPS_NAV_MAX_DISTANCE_M)
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_DISTANCE_TOO_FAR);
+        return;
+    }
+
+    is_last_point = (uint8)(tagert_point >= (uint8)(gps_point_count - 1u));
+    if (gps_nav_distance_m <= GPS_NAV_ARRIVE_RADIUS_M)
+    {
+        if (is_last_point)
+        {
+            GPS_NavStop(GPS_NAV_STATE_FINISHED, GPS_NAV_PROTECT_FINISHED);
+        }
+        else
+        {
+            tagert_point++;
+            gps_nav_target_index = tagert_point;
+            gps_nav_request_valid = 0u;
+        }
+        return;
+    }
+
+    launch_geo_heading = GPS_GetLaunchGeoHeading();
+    gps_nav_body_target_yaw_deg = GPS_Wrap180(gps_nav_geo_bearing_deg - launch_geo_heading);
+    gps_nav_target_imu_yaw_deg = GPS_Wrap180(gps_nav_launch_imu_yaw + gps_nav_body_target_yaw_deg);
+    gps_nav_yaw_err_deg = (float)ange_deviation1(gps_nav_target_imu_yaw_deg, gps_nav_imu_yaw_deg);
+    gps_nav_state = GPS_NAV_STATE_RUNNING;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+
+    /* GPS 5ms 周期只在目标航向发生有效变化时重新登记请求，避免持续重置转向 PID。 */
+    target_delta = (float)fabsf((float)ange_deviation1(gps_nav_target_imu_yaw_deg, gps_nav_last_requested_yaw));
+    if (!gps_nav_request_valid ||
+        target_delta > GPS_NAV_REISSUE_YAW_DEG ||
+        (!steer_enable && !steer_yaw_request_pending &&
+         fabsf(gps_nav_yaw_err_deg) > GPS_NAV_REISSUE_YAW_DEG))
+    {
+        steer_request_target_yaw(gps_nav_target_imu_yaw_deg);
+        gps_nav_last_requested_yaw = gps_nav_target_imu_yaw_deg;
+        gps_nav_request_valid = 1u;
     }
 #endif
 }
@@ -105,6 +329,42 @@ const char *GPS_GetElementName(uint32 element)
         return "INS-In";
     case GPS_ELEMENT_INS_OUT:
         return "INS-Out";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *GPS_GetNavStateName(uint8 state)
+{
+    switch (state)
+    {
+    case GPS_NAV_STATE_IDLE:
+        return "Idle";
+    case GPS_NAV_STATE_RUNNING:
+        return "Run";
+    case GPS_NAV_STATE_FINISHED:
+        return "Done";
+    case GPS_NAV_STATE_PROTECT:
+        return "Protect";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *GPS_GetNavProtectName(uint8 reason)
+{
+    switch (reason)
+    {
+    case GPS_NAV_PROTECT_NONE:
+        return "None";
+    case GPS_NAV_PROTECT_GPS_INVALID:
+        return "GpsBad";
+    case GPS_NAV_PROTECT_TARGET_INVALID:
+        return "TargetBad";
+    case GPS_NAV_PROTECT_DISTANCE_TOO_FAR:
+        return "Far";
+    case GPS_NAV_PROTECT_FINISHED:
+        return "Finished";
     default:
         return "Unknown";
     }

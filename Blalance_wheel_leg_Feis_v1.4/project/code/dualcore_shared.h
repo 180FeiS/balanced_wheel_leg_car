@@ -103,6 +103,18 @@ typedef struct
   double gps_latitude_point[GPS_POINT_MAX];
   double gps_longitude_point[GPS_POINT_MAX];
   uint32 gps_yuansu[GPS_POINT_MAX];
+  uint8 gps_nav_state;
+  uint8 gps_nav_protect_reason;
+  uint8 gps_nav_target_index;
+  uint8 _gps_nav_pad;
+  double gps_nav_target_latitude;
+  double gps_nav_target_longitude;
+  float gps_nav_distance_m;
+  float gps_nav_geo_bearing_deg;
+  float gps_nav_body_target_yaw_deg;
+  float gps_nav_target_imu_yaw_deg;
+  float gps_nav_imu_yaw_deg;
+  float gps_nav_yaw_err_deg;
   /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
   float dbg_run_index;        /* N.Run_index → 浮点 */
   float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */
