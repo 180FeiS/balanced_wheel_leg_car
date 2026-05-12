@@ -40,6 +40,11 @@ float gps_nav_imu_yaw_deg = 0.0f;
 float gps_nav_yaw_err_deg = 0.0f;
 uint8 gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
 float gps_nav_heading_bias_deg = 0.0f;
+float gps_nav_gps_first_deg = 0.0f;
+float gps_nav_dist_from_launch_m = 0.0f;
+double gps_drift_delta_lat = 0.0;
+double gps_drift_delta_lon = 0.0;
+uint8 gps_drift_corr_valid = 0u;
 
 static float gps_nav_launch_imu_yaw = 0.0f;
 static float gps_nav_last_requested_yaw = 0.0f;
@@ -151,9 +156,14 @@ static void GPS_NavClearDebug(void)
     gps_nav_last_requested_yaw = 0.0f;
     gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
     gps_nav_heading_bias_deg = 0.0f;
+    gps_nav_gps_first_deg = 0.0f;
+    gps_nav_dist_from_launch_m = 0.0f;
     gps_nav_launch_latitude = 0.0;
     gps_nav_launch_longitude = 0.0;
     gps_nav_launch_fix_valid = 0u;
+    gps_drift_delta_lat = 0.0;
+    gps_drift_delta_lon = 0.0;
+    gps_drift_corr_valid = 0u;
 }
 
 #if !defined(CY_CORE_CM7_1)
@@ -189,6 +199,31 @@ static void GPS_NavStop(uint8 state, uint8 reason)
     steer_yaw_request_pending = 0u;
     steer_yaw_delayed_by_spin = 0u;
     steer_task_stop();
+}
+
+/* 录点首点 (index0) 与本次发车锁存 GNSS 之差，平移到当前「卫星读数坐标系」。仅写 gps_drift_*，不改动 latitude_point[]。 */
+static void GPS_NavTryUpdateDriftCorrection(void)
+{
+    if (gps_drift_corr_valid != 0u)
+    {
+        return;
+    }
+    if (gps_nav_launch_fix_valid == 0u)
+    {
+        return;
+    }
+    if (gps_point_count < 1u)
+    {
+        return;
+    }
+    if (latitude_point[0] == 0.0 || longitude_point[0] == 0.0)
+    {
+        return;
+    }
+    /* 与 gps_first_clearerr_from_coord 中 d_w/d_j 一致：cur 为发车位置，first 为录点参考首点 */
+    gps_drift_delta_lat = gps_nav_launch_latitude - latitude_point[0];
+    gps_drift_delta_lon = gps_nav_launch_longitude - longitude_point[0];
+    gps_drift_corr_valid = 1u;
 }
 
 /* 局地平面近似：经纬差算距离与方位（北为 0°，东为 90°，与 gps_nav_geo_bearing_deg 一致 [0°,360°)）。 */
@@ -229,6 +264,27 @@ static void GPS_NavCalcDistanceBearing(double current_latitude,
                           target_longitude,
                           &gps_nav_distance_m,
                           &gps_nav_geo_bearing_deg);
+}
+
+/* RMC 字段 8：0–360° 真北 → 与 euler_angle.yaw 一致的 ±180°（同 subject2 对 gnss.direction 的处理）。 */
+static float GPS_GnssDirectionToSigned180(float direction_deg_0_360)
+{
+    float w = GPS_Wrap360(direction_deg_0_360);
+    if (w > 180.0f)
+    {
+        return w - 360.0f;
+    }
+    return w;
+}
+
+/* 达标定距离后采样 COG 前：需 RMC 定位分支有效，否则 direction 可能未更新。 */
+static uint8 GPS_NavIsCogSampleValid(void)
+{
+    if (gnss.state == 0u)
+    {
+        return 0u;
+    }
+    return 1u;
 }
 #endif
 
@@ -282,6 +338,7 @@ void GPS_ApplyLaunchSpeed(void)
             gps_nav_launch_fix_valid = 1u;
         }
     }
+    GPS_NavTryUpdateDriftCorrection();
     nav_heading_mode = NAV_HEADING_MODE_GPS;
     motor_user_speed_cmd = run_launch_speed;
 #endif
@@ -295,7 +352,8 @@ void GPS_PointNav_Run(void)
     float target_delta = 0.0f;
     uint8 is_last_point = 0u;
     float dist_from_launch_m = 0.0f;
-    float course_launch_deg = 0.0f;
+    double target_lat_used = 0.0;
+    double target_lon_used = 0.0;
 
     if (nav_heading_mode != NAV_HEADING_MODE_GPS)
     {
@@ -326,6 +384,8 @@ void GPS_PointNav_Run(void)
         gps_nav_launch_fix_valid = 1u;
     }
 
+    GPS_NavTryUpdateDriftCorrection();
+
     if (gps_point_count < GPS_NAV_MIN_POINT_COUNT || !GPS_NavIsTargetValid(tagert_point))
     {
         GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_TARGET_INVALID);
@@ -334,13 +394,20 @@ void GPS_PointNav_Run(void)
 
     gps_nav_target_index = tagert_point;
     now_point = tagert_point;
-    gps_nav_target_latitude = latitude_point[tagert_point];
-    gps_nav_target_longitude = longitude_point[tagert_point];
+    target_lat_used = latitude_point[tagert_point];
+    target_lon_used = longitude_point[tagert_point];
+    if (gps_drift_corr_valid != 0u)
+    {
+        target_lat_used += gps_drift_delta_lat;
+        target_lon_used += gps_drift_delta_lon;
+    }
+    gps_nav_target_latitude = target_lat_used;
+    gps_nav_target_longitude = target_lon_used;
 
     GPS_NavCalcDistanceBearing(gps_nav_current_latitude,
                                gps_nav_current_longitude,
-                               gps_nav_target_latitude,
-                               gps_nav_target_longitude);
+                               target_lat_used,
+                               target_lon_used);
 
     if (gps_nav_distance_m > GPS_NAV_MAX_DISTANCE_M)
     {
@@ -369,25 +436,32 @@ void GPS_PointNav_Run(void)
                           gps_nav_current_latitude,
                           gps_nav_current_longitude,
                           &dist_from_launch_m,
-                          &course_launch_deg);
+                          NULL);
+    gps_nav_dist_from_launch_m = dist_from_launch_m;
 
     /*
      * 地理方位角 bearing ∈ [0°,360°)，IMU euler yaw ∈ [-180°,180°]。
-     * 常值偏置：bias = Wrap180(course_gps − imu)，使任意时刻
-     *   target_imu = Wrap180(bearing_to_waypoint − bias)
-     * 与「沿地理方位行驶」时在数值上一致。
+     * 发车后 dist < GPS_NAV_GPS_FIRST_DISTANCE_M：目标保持 gps_nav_launch_imu_yaw，减少起步路况对航向环的扰动。
+     * ≥ 该距离：用 RMC COG（gnss.direction）作 GPS_first，bias = Wrap180(gps_first − imu)，再
+     *   target_imu = Wrap180(到路点方位 − bias)。
      */
     if (gps_nav_align_state == GPS_NAV_ALIGN_WAIT)
     {
-        if (dist_from_launch_m < GPS_NAV_ALIGN_DISTANCE_M)
+        if (dist_from_launch_m < GPS_NAV_GPS_FIRST_DISTANCE_M)
         {
             gps_nav_target_imu_yaw_deg = gps_nav_launch_imu_yaw;
             gps_nav_body_target_yaw_deg = 0.0f;
         }
         else
         {
+            if (GPS_NavIsCogSampleValid() == 0u)
+            {
+                GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_COG_INVALID);
+                return;
+            }
+            gps_nav_gps_first_deg = GPS_GnssDirectionToSigned180((float)gnss.direction);
             gps_nav_heading_bias_deg =
-                GPS_Wrap180(course_launch_deg - gps_nav_imu_yaw_deg);
+                GPS_Wrap180(gps_nav_gps_first_deg - gps_nav_imu_yaw_deg);
             gps_nav_align_state = GPS_NAV_ALIGN_TRACKING;
             gps_nav_request_valid = 0u;
             gps_nav_target_imu_yaw_deg =
@@ -485,6 +559,8 @@ const char *GPS_GetNavProtectName(uint8 reason)
         return "Far";
     case GPS_NAV_PROTECT_FINISHED:
         return "Finished";
+    case GPS_NAV_PROTECT_COG_INVALID:
+        return "CogBad";
     default:
         return "Unknown";
     }
@@ -542,6 +618,8 @@ void specialpoint(uint8 point_num, uint32 yuansu_num)
 
 void gps_first_clearerr_from_coord(double cur_j, double cur_w, double first_j, double first_w, uint8 num)
 {
+    /* 与「发车自动漂移修正」二选一：此处直接改写 latitude_point/longitude_point；
+     * 若导航同时使用 gps_drift_corr_valid + 路点+delta，会双重平移。 */
     double d_j = cur_j - first_j;
     double d_w = cur_w - first_w;
     uint8 i = 0;
@@ -561,6 +639,7 @@ void gps_first_clearerr(double first_j, double first_w, uint8 num)
     (void)first_w;
     (void)num;
 #else
+    /* cur 取当前 gnss；与 GPS_NavTryUpdateDriftCorrection 数论一致，但该接口改表。 */
     gps_first_clearerr_from_coord(gnss.longitude, gnss.latitude, first_j, first_w, num);
 #endif
 }

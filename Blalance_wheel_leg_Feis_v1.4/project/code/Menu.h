@@ -39,7 +39,7 @@
 /*
  * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。
  * 物理键/串口字节如何对应到它们，一律只在 Menu.c 的 selectMenu_Key 与 Menu_command 分支中处理。
- * GPS 调试子页 KEY3 Idle 发车参见 MenuTryHandleGpsDebugKeyEvent 注释（起点记录 + GPS_NAV_ALIGN_DISTANCE_M 标定）。
+ * GPS 调试子页 KEY3 Idle 发车参见 MenuTryHandleGpsDebugKeyEvent 注释（起点记录 + GPS_NAV_GPS_FIRST_DISTANCE_M 后 COG 标定）。
  */
 
 /*

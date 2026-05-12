@@ -585,7 +585,7 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
 
 /* GPS 调试页是 GPS 功能唯一按键入口：
  * Idle：KEY1 开始打点，KEY2 结束并写 flash，KEY3 发车进入 GPS 导航（GPS_ApplyLaunchSpeed 记录起点经纬度；
- *       约 GPS_NAV_ALIGN_DISTANCE_M 直线标定 GPS–IMU 偏置后再追点），KEY4 返回上级；
+ *       驶过约 GPS_NAV_GPS_FIRST_DISTANCE_M 后用 RMC gnss.direction 作 GPS_first 标定偏置再追点），KEY4 返回上级；
  * Recording：KEY1 占位，KEY2 结束并写 flash，KEY3 保存当前点，KEY4 切换待保存元素。
  */
 static uint8 MenuTryHandleGpsDebugKeyEvent(void)

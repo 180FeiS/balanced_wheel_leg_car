@@ -116,6 +116,11 @@ typedef struct
   float gps_nav_yaw_err_deg;
   float gps_nav_heading_bias_deg; /* Wrap180(地理 bearing − IMU)，标定 TRACKING 后有效 */
   uint8 gps_nav_align_state;       /* gps_nav_align_state_enum：WAIT=0 / TRACKING=1 */
+  uint8 gps_drift_corr_valid;    /* 1：本次发车已计算经纬度漂移修正量 */
+  float gps_drift_delta_lat;      /* 与 gps_drift_delta_lon：度，见 my_gps 头文件说明 */
+  float gps_drift_delta_lon;
+  float gps_nav_gps_first_deg;    /* RMC COG→±180°，≥ GPS_NAV_GPS_FIRST_DISTANCE_M 后锁定；WAIT 段常为 0 */
+  float gps_nav_dist_from_launch_m; /* 当前距发车锁存点位移（m），屏显 Lm */
   /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
   float dbg_run_index;        /* N.Run_index → 浮点 */
   float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */

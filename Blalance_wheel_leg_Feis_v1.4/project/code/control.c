@@ -419,7 +419,7 @@ void steer_set_target_yaw(float target_yaw_deg)
  * 1. steer_yaw_request_deg 始终保留最新目标，新请求会覆盖旧请求，不排队；
  * 2. 若自旋在跑，pit0_ch0_isr 不会立刻调用 steer_set_target_yaw()，而是把它延迟到自旋结束；
  * 3. 一旦请求真正被 1ms ISR 执行，会统一清掉 pending/delayed 标志，避免旧请求残留或重复触发。
- * NAV_HEADING_MODE_GPS：目标来自 GPS_PointNav_Run 的 gps_nav_target_imu_yaw_deg（发卡偏置后与惯导 N.Angle_Run 不混用）。
+ * NAV_HEADING_MODE_GPS：目标来自 GPS_PointNav_Run 的 gps_nav_target_imu_yaw_deg（含 COG/IMU 标定偏置，与惯导 N.Angle_Run 不混用）。
  */
 void steer_request_target_yaw(float target_yaw_deg)
 {

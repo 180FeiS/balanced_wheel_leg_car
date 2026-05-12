@@ -466,6 +466,11 @@ void GUI_2_3_1(void)
     float nav_yaw_err_deg = 0.0f;
     uint8 nav_align_state = GPS_NAV_ALIGN_WAIT;
     float nav_heading_bias_deg = 0.0f;
+    float nav_gps_first_deg = 0.0f;
+    float nav_dist_from_launch_m = 0.0f;
+    uint8 nav_drift_valid = 0u;
+    float nav_drift_dlat = 0.0f;
+    float nav_drift_dlon = 0.0f;
     const char *element_name = "None";
     const char *nav_state_name = "Idle";
     const char *nav_protect_name = "None";
@@ -486,6 +491,11 @@ void GUI_2_3_1(void)
     nav_yaw_err_deg = s_ui_dc.gps_nav_yaw_err_deg;
     nav_align_state = s_ui_dc.gps_nav_align_state;
     nav_heading_bias_deg = s_ui_dc.gps_nav_heading_bias_deg;
+    nav_gps_first_deg = s_ui_dc.gps_nav_gps_first_deg;
+    nav_dist_from_launch_m = s_ui_dc.gps_nav_dist_from_launch_m;
+    nav_drift_valid = s_ui_dc.gps_drift_corr_valid;
+    nav_drift_dlat = s_ui_dc.gps_drift_delta_lat;
+    nav_drift_dlon = s_ui_dc.gps_drift_delta_lon;
 #else
     point_count = gps_point_count;
     current_show_point = show_point;
@@ -499,6 +509,11 @@ void GUI_2_3_1(void)
     nav_yaw_err_deg = gps_nav_yaw_err_deg;
     nav_align_state = gps_nav_align_state;
     nav_heading_bias_deg = gps_nav_heading_bias_deg;
+    nav_gps_first_deg = gps_nav_gps_first_deg;
+    nav_dist_from_launch_m = gps_nav_dist_from_launch_m;
+    nav_drift_valid = gps_drift_corr_valid;
+    nav_drift_dlat = (float)gps_drift_delta_lat;
+    nav_drift_dlon = (float)gps_drift_delta_lon;
 #endif
 
     element_name = GPS_GetElementName(current_element);
@@ -556,14 +571,25 @@ void GUI_2_3_1(void)
     ips200_show_uint(16, ROW_16, (uint32)nav_target_index, 2);
     ips200_show_string(40, ROW_16, "D:");
     ips200_show_float(56, ROW_16, nav_distance_m, 3, 1);
+    ips200_show_string(116, ROW_16, "Lm:");
+    ips200_show_float(144, ROW_16, nav_dist_from_launch_m, 3, 1);
     ips200_show_string(0, ROW_17, "Yaw:");
     ips200_show_float(40, ROW_17, nav_body_yaw_deg, 3, 1);
+    ips200_show_string(120, ROW_17, "Dv");
+    ips200_show_uint(144, ROW_17, (uint32)nav_drift_valid, 1);
+    ips200_show_string(160, ROW_17, "dLa");
+    /* 240 宽屏：2+3 位浮点最长 7 字×8px，起笔 192 时末字 x=240 触发 ips200_show_char 断言 */
+    ips200_show_float(184, ROW_17, nav_drift_dlat, 2, 3);
     ips200_show_string(0, ROW_18, "Err:");
     ips200_show_float(40, ROW_18, nav_yaw_err_deg, 3, 1);
+    ips200_show_string(120, ROW_18, "dLo:");
+    ips200_show_float(152, ROW_18, nav_drift_dlon, 2, 3);
     ips200_show_string(0, ROW_19, "Al:");
     ips200_show_uint(24, ROW_19, (uint32)nav_align_state, 1);
     ips200_show_string(40, ROW_19, "Bias:");
     ips200_show_float(88, ROW_19, nav_heading_bias_deg, 3, 1);
+    ips200_show_string(144, ROW_19, "GF:");
+    ips200_show_float(168, ROW_19, nav_gps_first_deg, 3, 1);
     ips200_show_string(0, ROW_20, "P:");
     ips200_show_string(16, ROW_20, nav_protect_name);
 

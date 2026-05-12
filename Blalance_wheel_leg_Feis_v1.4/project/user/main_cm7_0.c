@@ -56,7 +56,7 @@ static void run_soft_tasks(void)
      * 2. 惯导仍固定在 pit0_ch0_isr 的 1ms 中断里跑；
      * 3. GPS 和惯导通过 nav_heading_mode 仲裁，避免同时写 steer_request_target_yaw()。
      * 4. 模式由 GPS_ApplyLaunchSpeed() / Nag_Begin_Replay() 切换，本任务只按当前模式执行。
-     * 5. KEY3 记录起点，直线行驶约 GPS_NAV_ALIGN_DISTANCE_M 标定 GPS–IMU 偏置后追路点（不依赖 car_gps_dir）。
+     * 5. KEY3 记录起点；直线驶过约 GPS_NAV_GPS_FIRST_DISTANCE_M（默认 3 m）后用 RMC 的 gnss.direction（COG）作 GPS_first 标定 GPS–IMU 偏置，再追路点（不依赖 car_gps_dir）。
      */
     GPS_PointNav_Run();
   }
