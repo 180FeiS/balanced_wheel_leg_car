@@ -111,6 +111,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->gps_drift_delta_lat = (float)gps_drift_delta_lat;
   c->gps_drift_delta_lon = (float)gps_drift_delta_lon;
   c->gps_nav_gps_first_deg = gps_nav_gps_first_deg;
+  c->gps_nav_euler_ref_at_first_deg = gps_nav_euler_ref_at_first_deg;
   c->gps_nav_dist_from_launch_m = gps_nav_dist_from_launch_m;
 
   /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */

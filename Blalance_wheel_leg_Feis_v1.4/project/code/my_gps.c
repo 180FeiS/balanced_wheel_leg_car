@@ -41,6 +41,7 @@ float gps_nav_yaw_err_deg = 0.0f;
 uint8 gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
 float gps_nav_heading_bias_deg = 0.0f;
 float gps_nav_gps_first_deg = 0.0f;
+float gps_nav_euler_ref_at_first_deg = 0.0f;
 float gps_nav_dist_from_launch_m = 0.0f;
 double gps_drift_delta_lat = 0.0;
 double gps_drift_delta_lon = 0.0;
@@ -157,6 +158,7 @@ static void GPS_NavClearDebug(void)
     gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
     gps_nav_heading_bias_deg = 0.0f;
     gps_nav_gps_first_deg = 0.0f;
+    gps_nav_euler_ref_at_first_deg = 0.0f;
     gps_nav_dist_from_launch_m = 0.0f;
     gps_nav_launch_latitude = 0.0;
     gps_nav_launch_longitude = 0.0;
@@ -226,7 +228,7 @@ static void GPS_NavTryUpdateDriftCorrection(void)
     gps_drift_corr_valid = 1u;
 }
 
-/* 局地平面近似：经纬差算距离与方位（北为 0°，东为 90°，与 gps_nav_geo_bearing_deg 一致 [0°,360°)）。 */
+/* 局地平面近似：经纬差算距离（米）；方位指路改用 get_two_points_azimuth（与 subject2 GPS_angle 同源）。 */
 static void GPS_NavSegmentMetrics(double lat_a,
                                   double lon_a,
                                   double lat_b,
@@ -253,20 +255,7 @@ static void GPS_NavSegmentMetrics(double lat_a,
     }
 }
 
-static void GPS_NavCalcDistanceBearing(double current_latitude,
-                                       double current_longitude,
-                                       double target_latitude,
-                                       double target_longitude)
-{
-    GPS_NavSegmentMetrics(current_latitude,
-                          current_longitude,
-                          target_latitude,
-                          target_longitude,
-                          &gps_nav_distance_m,
-                          &gps_nav_geo_bearing_deg);
-}
-
-/* RMC 字段 8：0–360° 真北 → 与 euler_angle.yaw 一致的 ±180°（同 subject2 对 gnss.direction 的处理）。 */
+/* RMC 字段 8：0–360° 真北 → 与 euler_angle.yaw 一致的 ±180°（同 subject2 对 gnss.direction）。 */
 static float GPS_GnssDirectionToSigned180(float direction_deg_0_360)
 {
     float w = GPS_Wrap360(direction_deg_0_360);
@@ -277,6 +266,13 @@ static float GPS_GnssDirectionToSigned180(float direction_deg_0_360)
     return w;
 }
 
+/* subject2 同源：大圆初始方位（get_two_points_azimuth）再 age_change_180 等价映射到 ±180°。 */
+static float GPS_NavAzimuthSubject2_deg(double lat1, double lon1, double lat2, double lon2)
+{
+    double az = get_two_points_azimuth(lat1, lon1, lat2, lon2);
+    return GPS_GnssDirectionToSigned180((float)az);
+}
+
 /* 达标定距离后采样 COG 前：需 RMC 定位分支有效，否则 direction 可能未更新。 */
 static uint8 GPS_NavIsCogSampleValid(void)
 {
@@ -285,6 +281,21 @@ static uint8 GPS_NavIsCogSampleValid(void)
         return 0u;
     }
     return 1u;
+}
+
+static void GPS_NavCalcDistanceBearing(double current_latitude,
+                                       double current_longitude,
+                                       double target_latitude,
+                                       double target_longitude)
+{
+    GPS_NavSegmentMetrics(current_latitude,
+                          current_longitude,
+                          target_latitude,
+                          target_longitude,
+                          &gps_nav_distance_m,
+                          NULL);
+    gps_nav_geo_bearing_deg =
+        GPS_NavAzimuthSubject2_deg(current_latitude, current_longitude, target_latitude, target_longitude);
 }
 #endif
 
@@ -440,10 +451,10 @@ void GPS_PointNav_Run(void)
     gps_nav_dist_from_launch_m = dist_from_launch_m;
 
     /*
-     * 地理方位角 bearing ∈ [0°,360°)，IMU euler yaw ∈ [-180°,180°]。
-     * 发车后 dist < GPS_NAV_GPS_FIRST_DISTANCE_M：目标保持 gps_nav_launch_imu_yaw，减少起步路况对航向环的扰动。
-     * ≥ 该距离：用 RMC COG（gnss.direction）作 GPS_first，bias = Wrap180(gps_first − imu)，再
-     *   target_imu = Wrap180(到路点方位 − bias)。
+     * Theta_goal：当前→路点方位（±180°），与 subject2 GPS_angle 同源（get_two_points_azimuth）。
+     * 发车后 dist < GPS_NAV_GPS_FIRST_DISTANCE_M：目标保持 gps_nav_launch_imu_yaw。
+     * ≥ 该距离：锁 RMC COG 为 GPS_first，锁 euler_ref；TRACKING 目标
+     *   target_imu = Wrap180(Theta_goal − GPS_first + euler_ref)，等价 Wrap180(Theta_goal − bias)，bias=Wrap180(GPS_first−euler_ref)。
      */
     if (gps_nav_align_state == GPS_NAV_ALIGN_WAIT)
     {
@@ -460,12 +471,14 @@ void GPS_PointNav_Run(void)
                 return;
             }
             gps_nav_gps_first_deg = GPS_GnssDirectionToSigned180((float)gnss.direction);
+            gps_nav_euler_ref_at_first_deg = gps_nav_imu_yaw_deg;
             gps_nav_heading_bias_deg =
-                GPS_Wrap180(gps_nav_gps_first_deg - gps_nav_imu_yaw_deg);
+                GPS_Wrap180(gps_nav_gps_first_deg - gps_nav_euler_ref_at_first_deg);
             gps_nav_align_state = GPS_NAV_ALIGN_TRACKING;
             gps_nav_request_valid = 0u;
             gps_nav_target_imu_yaw_deg =
-                GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_heading_bias_deg);
+                GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_gps_first_deg +
+                            gps_nav_euler_ref_at_first_deg);
             gps_nav_body_target_yaw_deg =
                 GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
         }
@@ -473,7 +486,8 @@ void GPS_PointNav_Run(void)
     else
     {
         gps_nav_target_imu_yaw_deg =
-            GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_heading_bias_deg);
+            GPS_Wrap180(gps_nav_geo_bearing_deg - gps_nav_gps_first_deg +
+                        gps_nav_euler_ref_at_first_deg);
         gps_nav_body_target_yaw_deg =
             GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
     }

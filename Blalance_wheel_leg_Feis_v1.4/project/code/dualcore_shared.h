@@ -120,6 +120,7 @@ typedef struct
   float gps_drift_delta_lat;      /* 与 gps_drift_delta_lon：度，见 my_gps 头文件说明 */
   float gps_drift_delta_lon;
   float gps_nav_gps_first_deg;    /* RMC COG→±180°，≥ GPS_NAV_GPS_FIRST_DISTANCE_M 后锁定；WAIT 段常为 0 */
+  float gps_nav_euler_ref_at_first_deg; /* 锁 GPS_first 当帧 IMU yaw（subject2 锚） */
   float gps_nav_dist_from_launch_m; /* 当前距发车锁存点位移（m），屏显 Lm */
   /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
   float dbg_run_index;        /* N.Run_index → 浮点 */

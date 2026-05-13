@@ -9,9 +9,10 @@
  * 2) 存盘：KEY2 将路点写入 flash（数组为录点时的原始经纬度）。
  * 3) 发车：KEY3 进入导航；若 GPS 有效，计算漂移修正量
  *    delta = 发车时 GNSS − latitude_point[0]/longitude_point[0]，导航目标使用「路点 + delta」（与 gps_first_clearerr 同号约定）。
- * 4) 航向标定：发车后先保持「目标航向 = 发车锁存 IMU yaw」直线行驶，避免起步阶段路况干扰；当相对发车点位移 ≥
- *    GPS_NAV_GPS_FIRST_DISTANCE_M（默认 3 m）时，读取 RMC 的 gnss.direction（COG，真北 0–360°）映射为 GPS_first，
- *    计算 gps_nav_heading_bias_deg = Wrap180(GPS_first − euler_angle.yaw)，再按路点地理方位追迹。与坐标漂移修正相互独立。
+ * 4) 航向标定：发车后先保持「目标航向 = 发车锁存 IMU yaw」直线行驶；当相对发车点位移 ≥
+ *    GPS_NAV_GPS_FIRST_DISTANCE_M 时，读取 RMC gnss.direction（COG）映射为 GPS_first，锁 euler_ref=euler_angle.yaw，
+ *    bias = Wrap180(GPS_first − euler_ref)；指路角与 subject2 GPS_angle 同源（get_two_points_azimuth→±180°），
+ *    TRACKING：target_imu = Wrap180(Theta_goal − GPS_first + euler_ref)。与坐标漂移修正相互独立。
  * 5) 勿与 gps_first_clearerr* 同时对同一次运行做「改表 + 运行时加 delta」，否则双重平移。
  */
 
@@ -97,15 +98,17 @@ extern double gps_nav_current_longitude;
 extern double gps_nav_target_latitude;
 extern double gps_nav_target_longitude;
 extern float gps_nav_distance_m;
+/* ±180°：当前 GNSS→当前目标点的初始方位（subject2 get_two_points_azimuth + age_change_180 等价）；距离仍局地平面近似。 */
 extern float gps_nav_geo_bearing_deg;
 extern float gps_nav_body_target_yaw_deg;
 extern float gps_nav_target_imu_yaw_deg;
 extern float gps_nav_imu_yaw_deg;
 extern float gps_nav_yaw_err_deg;
 extern uint8 gps_nav_align_state;     /* gps_nav_align_state_enum，供屏显/双核调试 */
-extern float gps_nav_heading_bias_deg; /* 3 m 处 Wrap180(gps_first−imu)；追点 target_imu=Wrap180(地理方位−bias) */
-extern float gps_nav_gps_first_deg;    /* ±180°，RMC COG 映射值，与 subject2 的 GPS_first 同义；WAIT 段为 0 */
-extern float gps_nav_dist_from_launch_m; /* 当前距发车锁存点的位移（屏显 Lm），仅调试 */
+extern float gps_nav_heading_bias_deg; /* Wrap180(GPS_first − euler_ref)，TRACKING 后冻结 */
+extern float gps_nav_gps_first_deg;    /* ±180° RMC COG，subject2 GPS_first；WAIT 段常为 0 */
+extern float gps_nav_euler_ref_at_first_deg; /* 锁 GPS_first 当帧 euler_angle.yaw */
+extern float gps_nav_dist_from_launch_m; /* 当前距发车锁存点位移（屏显 Lm），仅调试 */
 /* 录点 index0 相对本次发车 GNSS 的经纬平移（度）；effective 时导航目标为 路点 + delta，不改 flash 数组 */
 extern double gps_drift_delta_lat;
 extern double gps_drift_delta_lon;
