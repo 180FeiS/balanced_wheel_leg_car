@@ -462,7 +462,7 @@ void GUI_2_3_1(void)
     uint8 nav_protect_reason = GPS_NAV_PROTECT_NONE;
     uint8 nav_target_index = 0;
     float nav_distance_m = 0.0f;
-    float nav_body_yaw_deg = 0.0f;
+    float nav_imu_yaw_deg = 0.0f;
     float nav_yaw_err_deg = 0.0f;
     uint8 nav_align_state = GPS_NAV_ALIGN_WAIT;
     float nav_heading_bias_deg = 0.0f;
@@ -487,7 +487,7 @@ void GUI_2_3_1(void)
     nav_protect_reason = s_ui_dc.gps_nav_protect_reason;
     nav_target_index = s_ui_dc.gps_nav_target_index;
     nav_distance_m = s_ui_dc.gps_nav_distance_m;
-    nav_body_yaw_deg = s_ui_dc.gps_nav_body_target_yaw_deg;
+    nav_imu_yaw_deg = s_ui_dc.euler_yaw;
     nav_yaw_err_deg = s_ui_dc.gps_nav_yaw_err_deg;
     nav_align_state = s_ui_dc.gps_nav_align_state;
     nav_heading_bias_deg = s_ui_dc.gps_nav_heading_bias_deg;
@@ -505,7 +505,7 @@ void GUI_2_3_1(void)
     nav_protect_reason = gps_nav_protect_reason;
     nav_target_index = gps_nav_target_index;
     nav_distance_m = gps_nav_distance_m;
-    nav_body_yaw_deg = gps_nav_body_target_yaw_deg;
+    nav_imu_yaw_deg = (float)euler_angle.yaw;
     nav_yaw_err_deg = gps_nav_yaw_err_deg;
     nav_align_state = gps_nav_align_state;
     nav_heading_bias_deg = gps_nav_heading_bias_deg;
@@ -574,7 +574,7 @@ void GUI_2_3_1(void)
     ips200_show_string(116, ROW_16, "Lm:");
     ips200_show_float(144, ROW_16, nav_dist_from_launch_m, 3, 1);
     ips200_show_string(0, ROW_17, "Yaw:");
-    ips200_show_float(40, ROW_17, nav_body_yaw_deg, 3, 1);
+    ips200_show_float(40, ROW_17, nav_imu_yaw_deg, 3, 1);
     ips200_show_string(120, ROW_17, "Dv");
     ips200_show_uint(144, ROW_17, (uint32)nav_drift_valid, 1);
     ips200_show_string(160, ROW_17, "dLa");

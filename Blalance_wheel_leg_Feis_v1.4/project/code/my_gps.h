@@ -26,7 +26,7 @@
 #define GPS_NAV_REISSUE_YAW_DEG 3.0f
 #define GPS_NAV_MIN_POINT_COUNT 1u
 /* 相对发车锁存经纬度累计位移达到该值后，用 RMC 的 gnss.direction（COG）作 GPS_first 与 IMU 对齐。 */
-#define GPS_NAV_GPS_FIRST_DISTANCE_M 3.0f
+#define GPS_NAV_GPS_FIRST_DISTANCE_M 5.0f
 
 typedef enum
 {
