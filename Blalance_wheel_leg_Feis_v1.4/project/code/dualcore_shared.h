@@ -131,6 +131,13 @@ typedef struct
   float dbg_final_out;        /* N.Final_Out */
   float dbg_curve_strength;   /* N.Curve_Strength */
   float dbg_nav_speed_target; /* Nag_GetControlSpeedTarget()，与 speed_target_effective 同源不同用途时见 navigation */
+  /* VOFA 组 8：差速转向闭环（CM7_0 publish，供 CM7_1 JustFloat） */
+  float dbg_steer_target_yaw_deg;
+  float dbg_steer_angle_err;
+  float dbg_steer_cmd;
+  float dbg_steer_enable;
+  float dbg_steer_yaw_request_pending;
+  float dbg_steer_yaw_request_deg;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

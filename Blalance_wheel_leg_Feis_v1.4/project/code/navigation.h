@@ -206,7 +206,9 @@ typedef struct{
 extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
-extern uint8 Nag_Vofa_Group; //VOFA 调试组切换
+extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
+/* 0~5：惯导/通用快照；6：GPS 几何与目标航向；7：GPS 距离/阶段/速度；8：转向执行链（与 vofa_send_nav_from_dualcore_snapshot 一致） */
+#define NAG_VOFA_GROUP_COUNT (9u)
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,

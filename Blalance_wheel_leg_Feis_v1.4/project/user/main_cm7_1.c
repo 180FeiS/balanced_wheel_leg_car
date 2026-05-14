@@ -37,34 +37,20 @@
 #include "step_detection.h"
 #include "vofa.h"
 
-/* 与 step_detection.h 中 STEP_DEBUG_USE_VOFA 的 0/1 一致，供主循环 VOFA 分发 switch 使用 */
-typedef enum
-{
-  CM71_VOFA_TX_NAV_FROM_DUALCORE = 0,
-  CM71_VOFA_TX_STEP_DEBUG_SIX_CH = 1,
-} cm71_vofa_tx_payload_t;
-
 /*-------------------------------------------------------------------------------------------------------------------
  * CM7_1 主循环每圈最多发一帧 VOFA（JustFloat 经 wireless_uart）。
  * - 无线模块仅在本核初始化(all_init_cm7_1_ui→wireless_uart_init)，故上发集中在此处。
- * - 模式由 STEP_DEBUG_USE_VOFA 决定：0=惯导/导航快照(vofa_send_nav_from_dualcore_snapshot)；
- *   1=台阶调试 6 路(step_debug_send_to_vofa)，与导航帧二选一，避免两帧混叠。
- * - 导航快照来自 CM7_0 的 dualcore_ctrl_to_ui_publish；与本轮 step_detect 之间可能差一拍主循环，属正常。
+ * - STEP_DEBUG_USE_VOFA==1：台阶调试 6 路(step_debug_send_to_vofa)；==0：双核快照(vofa_send_nav_from_dualcore_snapshot)。
+ * - 快照分组由 Nag_Vofa_Group 决定（菜单 n / 上位机切组），共 NAG_VOFA_GROUP_COUNT 组：0~5 惯导等，6/7 GPS，8 转向。
+ * - 导航快照来自 CM7_0 dualcore_ctrl_to_ui_publish；与本轮 step_detect 之间可能差一拍主循环，属正常。
  *-------------------------------------------------------------------------------------------------------------------*/
 static void cm71_vofa_main_loop_tx_dispatch(void)
 {
-  switch ((cm71_vofa_tx_payload_t)CM71_VOFA_TX_STEP_DEBUG_SIX_CH)
-  {
-  case CM71_VOFA_TX_STEP_DEBUG_SIX_CH:
-    step_debug_send_to_vofa();
-    break;
-  case CM71_VOFA_TX_NAV_FROM_DUALCORE:
-    vofa_send_nav_from_dualcore_snapshot();
-    break;
-  default:
-    vofa_send_nav_from_dualcore_snapshot();
-    break;
-  }
+#if STEP_DEBUG_USE_VOFA
+  step_debug_send_to_vofa();
+#else
+  vofa_send_nav_from_dualcore_snapshot();
+#endif
 }
 
 // 打开新的工程或者工程移动了位置务必执行以下操作
@@ -98,7 +84,7 @@ int main(void)
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
-        //cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
+        cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
     }
 }
 

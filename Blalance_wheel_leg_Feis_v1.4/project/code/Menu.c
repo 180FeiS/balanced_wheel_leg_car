@@ -66,6 +66,7 @@
 #include "my_gps.h"
 #if defined(CY_CORE_CM7_0)
 #include "control.h"
+#include "navigation.h"
 #include "flash.h"
 #endif
 
@@ -772,7 +773,7 @@ void selectMenu(void)
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT, 0, 0.0f);
 #else
-        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % 6);
+        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1) % NAG_VOFA_GROUP_COUNT);
 #endif
         break;
     case 'o':

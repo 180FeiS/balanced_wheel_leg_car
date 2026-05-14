@@ -124,6 +124,13 @@ void dualcore_ctrl_to_ui_publish(void)
   c->dbg_curve_strength = N.Curve_Strength;
   c->dbg_nav_speed_target = Nag_GetControlSpeedTarget();
 
+  c->dbg_steer_target_yaw_deg = steer_target_yaw_deg;
+  c->dbg_steer_angle_err = steer_angle_err;
+  c->dbg_steer_cmd = steer_cmd;
+  c->dbg_steer_enable = (float)steer_enable;
+  c->dbg_steer_yaw_request_pending = (float)steer_yaw_request_pending;
+  c->dbg_steer_yaw_request_deg = (float)steer_yaw_request_deg;
+
   c->seq++;
   __DSB();
 
@@ -172,7 +179,7 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     Nag_Request_Stop_Record();
     break;
   case DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT:
-    Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % 6u);
+    Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % NAG_VOFA_GROUP_COUNT);
     break;
   case DUALCORE_UI_CMD_SPIN_START:
     /* arg_u32: dir as int8 符号扩展在发送端保证 */
