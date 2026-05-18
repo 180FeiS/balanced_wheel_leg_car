@@ -41,7 +41,9 @@
  */
 #define Nag_Debug_Speed_Bypass_Enable 1u
 
-/* 速度自适应前瞻参数：
+#define Nag_AdaptiveLookahead_Enable 0u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
+
+/* 速度自适应前瞻参数（仅当 Nag_AdaptiveLookahead_Enable==1 时参与 Nag_UpdatePreviewAndSpeedTarget 计算）：
  * 1. Run_index 代表“已经沿轨迹推进到的里程点”；
  * 2. Prospect_index 代表“真正用于转向控制的预瞄点”；
  * 3. 低速时前瞻短，高速时前瞻长；若前瞻过大容易切弯过早，过小则高速左右摆头明显。
@@ -49,9 +51,9 @@
 #define Nag_Lookahead_Base_Points 3u
 #define Nag_Lookahead_Speed_Gain 0.010f     // 前向速度 -> 额外前瞻点增益（速度越快前瞻越远）
 #define Nag_Lookahead_Max_Points 24u        // 前瞻点上限，避免高速时前瞻过大导致切弯过早
-#define Nag_Curve_Lookahead_Extra 10u       // 弯道强度估计时额外向前看的点数（用于比较 yaw 变化）
+#define Nag_Curve_Lookahead_Extra 10u       // 弯道强度估计时额外向前看的点数（启用自适应前瞻时有效）
 
-/* 基于“前方 yaw 变化量”的简单弯道强度估计。
+/* 基于“前方 yaw 变化量”的简单弯道强度估计（仅当 Nag_AdaptiveLookahead_Enable==1 时使用）。
  * 当前先不把 curvature 持久化到 flash，而是直接用 Nav_read[] 前后点的 yaw 差来限速。
  */
 #define Nag_Curve_Threshold_Straight 6.0f   // 进入“普通弯道”判定阈值（deg）

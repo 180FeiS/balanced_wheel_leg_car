@@ -290,6 +290,8 @@ static uint16 Nag_ClampIndex(uint16 index, uint16 max_index)
     return (index > max_index) ? max_index : index;
 }
 
+#if Nag_AdaptiveLookahead_Enable
+
 static uint16 Nag_GetLookaheadPoints(void)
 {
     float abs_speed = fabsf(N.Speed_Forward);
@@ -322,10 +324,11 @@ static float Nag_GetCurveStrengthAt(uint16 base_index)
     return fabsf((float)ange_deviation1(yaw_far, yaw_now));
 }
 
+#endif /* Nag_AdaptiveLookahead_Enable */
+
 static void Nag_UpdatePreviewAndSpeedTarget(void)
 {
     uint16 max_index = 0;
-    uint16 lookahead = 0;
     float base_speed = fabsf((float)motor_user_speed_cmd);
 
     if (N.Save_index < 2)
@@ -337,22 +340,31 @@ static void Nag_UpdatePreviewAndSpeedTarget(void)
     }
 
     max_index = (uint16)(N.Save_index - 1);
-    lookahead = Nag_GetLookaheadPoints();
-    N.Prospect_index = Nag_ClampIndex((uint16)(N.Run_index + lookahead), max_index);
-    N.Curve_Strength = Nag_GetCurveStrengthAt(N.Run_index);
+#if Nag_AdaptiveLookahead_Enable
+    {
+        uint16 lookahead = Nag_GetLookaheadPoints();
 
-    if (N.Curve_Strength >= Nag_Curve_Threshold_Sharp)
-    {
-        N.Target_Speed = base_speed * Nag_Speed_Ratio_Sharp;
+        N.Prospect_index = Nag_ClampIndex((uint16)(N.Run_index + lookahead), max_index);
+        N.Curve_Strength = Nag_GetCurveStrengthAt(N.Run_index);
+
+        if (N.Curve_Strength >= Nag_Curve_Threshold_Sharp)
+        {
+            N.Target_Speed = base_speed * Nag_Speed_Ratio_Sharp;
+        }
+        else if (N.Curve_Strength >= Nag_Curve_Threshold_Straight)
+        {
+            N.Target_Speed = base_speed * Nag_Speed_Ratio_Curve;
+        }
+        else
+        {
+            N.Target_Speed = base_speed;
+        }
     }
-    else if (N.Curve_Strength >= Nag_Curve_Threshold_Straight)
-    {
-        N.Target_Speed = base_speed * Nag_Speed_Ratio_Curve;
-    }
-    else
-    {
-        N.Target_Speed = base_speed;
-    }
+#else
+    N.Prospect_index = Nag_ClampIndex(N.Run_index, max_index);
+    N.Curve_Strength = 0.0f;
+    N.Target_Speed = base_speed;
+#endif
 }
 
 static void Nag_ClearEventRuntimeState(void)
