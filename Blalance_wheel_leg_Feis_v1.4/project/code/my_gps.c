@@ -479,7 +479,7 @@ void GPS_PointNav_Run(void)
             gps_nav_target_imu_yaw_deg =
                 GPS_Wrap180(gps_nav_euler_ref_at_first_deg -
                             gps_nav_geo_bearing_deg +
-                            gps_nav_gps_first_deg);
+                            gps_nav_gps_first_deg);//注意计算公式，会导致小车严重偏航
             gps_nav_body_target_yaw_deg =
                 GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
         }
@@ -489,7 +489,7 @@ void GPS_PointNav_Run(void)
         gps_nav_target_imu_yaw_deg =
             GPS_Wrap180(gps_nav_euler_ref_at_first_deg -
                         gps_nav_geo_bearing_deg +
-                        gps_nav_gps_first_deg);
+                        gps_nav_gps_first_deg);//注意计算公式，会导致小车严重偏航
         gps_nav_body_target_yaw_deg =
             GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
     }
