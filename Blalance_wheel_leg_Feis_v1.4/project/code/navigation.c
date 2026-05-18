@@ -54,6 +54,7 @@ static void Nag_HeadingHold_Disable(void)
 
 static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
 {
+    /* event_type：切入时刻的 N.Event_Active_Type（与 flash 表中 type 一致）。 */
     N.HeadingHold_Event_Allowed = Nag_GetHeadingHoldConfig(event_type) ? 1u : 0u;
     if (!N.HeadingHold_Event_Allowed)
     {
@@ -93,11 +94,12 @@ static void Nag_Spin_RestoreSetSpeed(void)
  * 这样当前版本可以先把统一元素状态机、录点、切入、恢复、调试量全部跑通，
  * 后续你只需要把对应元素的 Start/Run/IsDone/Stop 改成自己的逻辑即可。
  */
-bool Nag_Hook_Turnaround_Start(void) { spin_task_start(0.5f, 1.0f);
-    return true;}
+
+/* 折返：占位不接 spin；与单边桥同属“未接入”模板，回放将停在 ENTERED。 */
+bool Nag_Hook_Turnaround_Start(void) { return false; }
 void Nag_Hook_Turnaround_Run(void) {}
-bool Nag_Hook_Turnaround_IsDone(void) { return (spin_done != 0);}
-void Nag_Hook_Turnaround_Stop(void) {spin_task_stop();}
+bool Nag_Hook_Turnaround_IsDone(void) { return false; }
+void Nag_Hook_Turnaround_Stop(void) {}
 
 /* 自转元素接法：
  * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
@@ -172,6 +174,19 @@ void Nag_Hook_Bump_Run(void) {}
 bool Nag_Hook_Bump_IsDone(void) { return false; }
 void Nag_Hook_Bump_Stop(void) {}
 
+/* 锥桶进/出口：与事件表 enter/exit 对齐的路径标记；不配预减速/锁航（见 navigation.h）。
+ * Start 立刻 true，首个 RUNNING 周期 IsDone 即 true，减少 Event_Active 窗口、尽快恢复惯导前瞻。
+ */
+bool Nag_Hook_EnterCones_Start(void) { return true; }
+void Nag_Hook_EnterCones_Run(void) {}
+bool Nag_Hook_EnterCones_IsDone(void) { return true; }
+void Nag_Hook_EnterCones_Stop(void) {}
+
+bool Nag_Hook_ExitCones_Start(void) { return true; }
+void Nag_Hook_ExitCones_Run(void) {}
+bool Nag_Hook_ExitCones_IsDone(void) { return true; }
+void Nag_Hook_ExitCones_Stop(void) {}
+
 /* 跳跃元素：与串口调试 'i' 相同，置 jump_flag=1，由 control.c 的 jump_control() 在 ISR 内推进并在结束时清零。
  * Jump_Element_Armed 防止 IsDone 在 Start 前因 jump_flag 初值为 0 而误判完成。
  */
@@ -199,15 +214,16 @@ void Nag_Hook_Jump_Stop(void)
 bool Nag_Element_Start(uint8 event_type)
 {
     /* 统一 Start 分发：
-     * 当前元素切入后，状态机会先调这里。
-     * - 若返回 true：表示该元素已经成功启动，状态机进入 RUNNING；
-     * - 若返回 false：表示该元素尚未接入或启动失败，状态机会停留在 ENTERED，
-     *   此时仍可用 KEY4 / 串口 v 手动恢复导航。
+     * event_type：N.Event_Active_Type，与 Nag_Event_Type / 事件表 flash 的 type 一致。
+     * - 返回 true：已进入 RUNNING；
+     * - 返回 false：停留在 ENTERED（可 KEY4 / 串口 v 手动恢复）。
      */
     switch (event_type)
     {
         case NAG_EVENT_TYPE_TURNAROUND: return Nag_Hook_Turnaround_Start();
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_Start();
+        case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_Start();
+        case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_Start();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_Start();
         case NAG_EVENT_TYPE_JUMP: return Nag_Hook_Jump_Start();
@@ -222,6 +238,8 @@ void Nag_Element_Run(uint8 event_type)
     {
         case NAG_EVENT_TYPE_TURNAROUND: Nag_Hook_Turnaround_Run(); break;
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Run(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Run(); break;
         case NAG_EVENT_TYPE_JUMP: Nag_Hook_Jump_Run(); break;
@@ -239,6 +257,8 @@ bool Nag_Element_IsDone(uint8 event_type)
     {
         case NAG_EVENT_TYPE_TURNAROUND: return Nag_Hook_Turnaround_IsDone();
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_IsDone();
+        case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_IsDone();
+        case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_IsDone();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_IsDone();
         case NAG_EVENT_TYPE_JUMP: return Nag_Hook_Jump_IsDone();
@@ -256,6 +276,8 @@ void Nag_Element_Stop(uint8 event_type)
     {
         case NAG_EVENT_TYPE_TURNAROUND: Nag_Hook_Turnaround_Stop(); break;
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Stop(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Stop(); break;
         case NAG_EVENT_TYPE_JUMP: Nag_Hook_Jump_Stop(); break;
@@ -358,6 +380,11 @@ static void Nag_ClearEventRuntimeState(void)
 
 static void Nag_Element_StateMachine(void)
 {
+    /* 回放中 Event_Active=1 时每 1ms 由 Nag_System() 调用。
+     * ENTERED：首开 Event_Start_Latched 后调 Nag_Element_Start；true→RUNNING。
+     * RUNNING：Nag_Element_Run + IsDone；true→DONE。
+     * DONE：Nag_Notify_Event_Done() 将 Run_index 置 exit 并清 Active。
+     */
     uint8 event_index = N.Event_Active_Index;
     uint8 event_type = N.Event_Active_Type;
 
@@ -564,6 +591,9 @@ static float Nag_ApplyPreEventDecel(float nav_speed)
 
 static void Nag_TryEnterEvent(void)
 {
+    /* Run_Nag_GPS() 在里程推进到某条事件的 enter_index 时切入：置 Event_Active、
+     * 清 pending、锥桶标记类不 steer_task_stop() 以免打断沿路惯导转向。
+     */
     uint8 event_index = 0;
 
     if (N.Event_Active)
@@ -589,7 +619,11 @@ static void Nag_TryEnterEvent(void)
     N.Target_Request_Valid = 0;
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
-    steer_task_stop();
+    if (N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_CONES &&
+        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_CONES)
+    {
+        steer_task_stop();
+    }
     Nag_HeadingHold_OnEventEnter(N.Event_Active_Type);
 }
 
@@ -744,10 +778,14 @@ float Nag_GetControlSpeedTarget(void)
 
     if (N.Event_Active)
     {
-        float ratio = (N.Event_Active_Type == NAG_EVENT_TYPE_JUMP)
-                  ? 1.0f               // 跳跃不限速，保留全速冲击
-                  : Nag_Event_Speed_Ratio;
-    nav_speed = MIN(nav_speed, abs_user_speed * ratio);
+        /* JUMP：冲击不限速；锥桶标记：瞬时元素窗口内不按 Nag_Event_Speed_Ratio 压车速 */
+        float ratio =
+            (N.Event_Active_Type == NAG_EVENT_TYPE_JUMP ||
+             N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_CONES ||
+             N.Event_Active_Type == NAG_EVENT_TYPE_EXIT_CONES)
+                ? 1.0f
+                : Nag_Event_Speed_Ratio;
+        nav_speed = MIN(nav_speed, abs_user_speed * ratio);
     }
     else
     {

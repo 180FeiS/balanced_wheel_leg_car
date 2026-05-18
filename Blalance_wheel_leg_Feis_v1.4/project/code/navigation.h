@@ -26,7 +26,7 @@
  *    当前 Nag_System() 固定在 pit0_ch0_isr 的 1ms 中断里跑，因此这里必须是 0.001s。
  *    一旦修改导航调用周期或速度单位，Nag_Speed_To_Mileage_Scale 必须重新标定。
  */
-#define Nag_Set_mileage 5.0f              //每隔 5cm 记录一次 yaw
+#define Nag_Set_mileage 2.0f              //每隔 2cm 记录一次 yaw
 #define Nag_Prev 200                      //保留的历史/预读缓存长度
 #define Nag_Yaw euler_angle.yaw           //航向角度取偏航角
 #define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
@@ -69,8 +69,8 @@
 #define Nag_PreEventDecel_Enable 1u            // 元素前预减速总开关：1=开启，0=关闭
 #define Nag_Spin_PreDecel_Points 20u           // 自旋元素提前 K 点开始减速（K*5cm）
 #define Nag_Spin_PreDecel_MinSpeed 100.0f      // 自旋元素预进入最小速度下限
-#define Nag_Turnaround_PreDecel_Points 0u      // 掉头元素提前 K 点开始减速（0=当前关闭）
-#define Nag_Turnaround_PreDecel_MinSpeed 220.0f// 掉头元素预进入最小速度下限
+#define Nag_Turnaround_PreDecel_Points 0u      // 折返元素提前 K 点开始减速（0=当前关闭）
+#define Nag_Turnaround_PreDecel_MinSpeed 220.0f// 折返元素预进入最小速度下限
 #define Nag_SingleBridge_PreDecel_Points 0u    // 独木桥元素提前 K 点开始减速（0=当前关闭）
 #define Nag_SingleBridge_PreDecel_MinSpeed 220.0f // 独木桥元素预进入最小速度下限
 #define Nag_Bump_PreDecel_Points 0u            // 减速带元素提前 K 点开始减速（0=当前关闭）
@@ -81,12 +81,13 @@
 /* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
  * 1. yaw 轨迹仍放在页 2~45；
  * 2. Save_index 仍放在页 1；
- * 3. 元素表单独放在 Nag_Event_Page，避免和导航元数据页混在一起。
+ * 3. 元素表单独放在 Nag_Event_Page，避免和导航元数据页混在一起；
+ * 4. 事件页头的 Nag_Event_Version 与固件不一致时整块表不装载（枚举 type 语义变更时需升版并重录）。
  */
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 1u
+#define Nag_Event_Version 2u            // v2：在折返后插入锥桶进/出口类型编码，变更后须重新录制事件表
 
 /* Run 发车速度参数页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -113,36 +114,40 @@
  * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
  */
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
-#define Nag_HeadingHold_Spin_Enable 1u          // 自旋元素在减速等待阶段保持进入元素时的航向
-#define Nag_HeadingHold_Turnaround_Enable 0u    // 掉头元素需要主动改航向，默认不保持
-#define Nag_HeadingHold_SingleBridge_Enable 1u  // 单边桥默认整段保持进入元素时的航向
-#define Nag_HeadingHold_Bump_Enable 1u          // 颠簸/减速带默认整段保持进入元素时的航向
-#define Nag_HeadingHold_Jump_Enable 1u          // 跳跃元素默认整段保持进入元素时的航向
+#define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
+#define Nag_HeadingHold_Turnaround_Enable 0u    // 折返元素若需主动改航向则不保持锁定，默认关闭
+#define Nag_HeadingHold_SingleBridge_Enable 0u  // 单边桥默认整段保持进入元素时的航向
+#define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
+#define Nag_HeadingHold_Jump_Enable 0u          // 跳跃元素默认整段保持进入元素时的航向
 //********************************************************//
 
 /* 元素类型枚举：
- * 与录制到 flash 的事件表 type 字段一一对应。
+ * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
+ * 锥桶进/出口：惯导路径上的分段标记，不配专用预减速/锁航宏，便于后续按区段调速等扩展。
  */
 typedef enum
 {
        NAG_EVENT_TYPE_SPIN = 0,          // 原地自旋元素
-       NAG_EVENT_TYPE_TURNAROUND = 1,    // 掉头元素
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 2, // 单边桥元素
-       NAG_EVENT_TYPE_BUMP = 3,          // 减速带/颠簸元素
-       NAG_EVENT_TYPE_JUMP = 4,          // 跳跃元素
-       NAG_EVENT_TYPE_COUNT = 5,         // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_TURNAROUND = 1,    // 折返元素（符号名仍为 TURNAROUND，语义为折返）
+       NAG_EVENT_TYPE_ENTER_CONES = 2,   // 进入锥桶标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_EXIT_CONES = 3,    // 退出锥桶标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 4, // 单边桥元素
+       NAG_EVENT_TYPE_BUMP = 5,          // 减速带/颠簸元素
+       NAG_EVENT_TYPE_JUMP = 6,          // 跳跃元素
+       NAG_EVENT_TYPE_COUNT = 7,         // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
-/* 元素状态机枚举：
- * 由 Nag_Element_StateMachine() 周期驱动。
+/* 元素状态机枚举（全局一条状态机）：
+ * 由各元素共用的 Nag_Element_StateMachine() 在回放、Event_Active 期间每周期调用；
+ * Start 返回 false 时可长期停在 ENTERED，直至人工恢复或重写钩子。
  */
 typedef enum
 {
-       NAG_EVENT_STATE_IDLE = 0,      // 空闲态：当前没有元素接管
-       NAG_EVENT_STATE_ENTERED = 1,   // 刚切入元素，等待 Start 钩子启动
-       NAG_EVENT_STATE_RUNNING = 2,   // 元素运行中，周期执行 Run 并检查完成
-       NAG_EVENT_STATE_DONE = 3,      // 元素完成，准备从 exit_index 接回导航
-       NAG_EVENT_STATE_ABORT = 4,     // 元素中止，执行 Stop 清理现场
+       NAG_EVENT_STATE_IDLE = 0,      // 空闲态：当前没有元素接管（Event_Active=0）
+       NAG_EVENT_STATE_ENTERED = 1,    // 已到达 enter_index，已执行一次 Nag_Element_Start
+       NAG_EVENT_STATE_RUNNING = 2,   // Start 已为 true：周期 Nag_Element_Run，直到 IsDone
+       NAG_EVENT_STATE_DONE = 3,      // IsDone：下一拍 Nag_Notify_Event_Done() 接 exit_index
+       NAG_EVENT_STATE_ABORT = 4,     // 中止：Nag_Element_Stop 清理后由调用方收尾
 } Nag_Event_State;
 
 typedef struct
@@ -226,19 +231,19 @@ void Init_Nag();    //偏航角初始化，flash缓冲区初始化，索引初�
 void Nag_Begin_Record(void); //开始录制前复位运行态
 void Nag_Begin_Replay(void); //开始复现前复位运行态
 void Nag_Request_Stop_Record(void); //录制结束请求
-void Nag_Request_Event_Mark(void); //录制阶段登记元素 enter/exit 点；完整录制结束后会随导航元数据一起写入 flash
-void Nag_Cycle_Record_Event_Type(void); //切换下一条待录元素类型
-void Nag_Notify_Event_Done(void); //元素逻辑完成后通知导航从 exit 点继续
+void Nag_Request_Event_Mark(void); /* 录制：首次记 enter_index，再次记 exit_index 并置 valid；轨迹写 flash 在录完导航后 */
+void Nag_Cycle_Record_Event_Type(void); /* 录制：N.Event_Record_Type 加一模 NAG_EVENT_TYPE_COUNT */
+void Nag_Notify_Event_Done(void); /* 元素完成：Run_index←exit_index，调 Stop 并清 Event_Active，恢复惯导前瞻 */
 void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态并停留在当前元素态
 float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
 float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，自动叠加弯道限速和元素限速
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
 bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
 float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标
-bool Nag_Element_Start(uint8 event_type); //统一元素 Start 分发，默认钩子返回 false 表示“未接入具体动作”
-void Nag_Element_Run(uint8 event_type); //统一元素 Run 分发
-bool Nag_Element_IsDone(uint8 event_type); //统一元素完成判定
-void Nag_Element_Stop(uint8 event_type); //统一元素 Stop 分发
+bool Nag_Element_Start(uint8 event_type); /* event_type：N.Event_Active_Type；true 则进入 RUNNING */
+void Nag_Element_Run(uint8 event_type);
+bool Nag_Element_IsDone(uint8 event_type); /* true：本周期转入 DONE 并随后 Nag_Notify_Event_Done */
+void Nag_Element_Stop(uint8 event_type);   /* 中止/完成清理：先退出锁航再调具体 Stop */
 
 bool Nag_Hook_Turnaround_Start(void);
 void Nag_Hook_Turnaround_Run(void);
@@ -264,6 +269,17 @@ bool Nag_Hook_Jump_Start(void);
 void Nag_Hook_Jump_Run(void);
 bool Nag_Hook_Jump_IsDone(void);
 void Nag_Hook_Jump_Stop(void);
+
+/* 锥桶：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导，供后续按 Run_index/事件表做区段限速 */
+bool Nag_Hook_EnterCones_Start(void);
+void Nag_Hook_EnterCones_Run(void);
+bool Nag_Hook_EnterCones_IsDone(void);
+void Nag_Hook_EnterCones_Stop(void);
+
+bool Nag_Hook_ExitCones_Start(void);
+void Nag_Hook_ExitCones_Run(void);
+bool Nag_Hook_ExitCones_IsDone(void);
+void Nag_Hook_ExitCones_Stop(void);
 
 void Nag_System();  //偏航角函数的封装，包装进中断小
 #endif /* _NAVIGATION_H_ */
