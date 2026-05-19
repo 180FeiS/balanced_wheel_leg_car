@@ -39,7 +39,7 @@
  * 2. 仅用于直道阶跃调 PID，比赛/正式回放前务必改回 0；
  * 3. 打开后 Nag_GetControlSpeedTarget() 会绕过 Nag_SystemRun_Index==3 的门控。
  */
-#define Nag_Debug_Speed_Bypass_Enable 1u
+#define Nag_Debug_Speed_Bypass_Enable 0u
 
 #define Nag_AdaptiveLookahead_Enable 0u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
 
@@ -62,23 +62,39 @@
 #define Nag_Speed_Ratio_Sharp 0.75f         // 急弯目标速度倍率（基于 motor_user_speed_cmd）
 #define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
 
-/* 元素前预减速：
- * 1. 这层逻辑挂在 Nag_GetControlSpeedTarget() 里，只在“尚未真正切入元素前”生效；
- * 2. K 表示提前多少个导航点开始减速。当前 Nag_Set_mileage=5cm，因此 K 点约等于 K*5cm；
- * 3. 标定建议：K = ceil(D_stop / Nag_Set_mileage) + 2~4 点安全裕量；
- * 4. 初次实车建议重点观察 VOFA 里的 speed_target_effective / car_speed / Run_index / Event_Active_Type。
+/* 元素调速总开关与距离换算：
+ * 1. 提前加/减速距离均以 cm 配置，运行时由 Nag_DistanceToPoints() 按 Nag_Set_mileage 换算成导航点数；
+ * 2. 实际比较仍使用 enter_index - Run_index 这类索引差，标定时只需关心物理距离；
+ * 3. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
+ * 4. 调试建议观察 VOFA 组 9：speed_target_effective / car_speed / Run_index / Event_Active_Type（菜单 n 切组）。
  */
-#define Nag_PreEventDecel_Enable 1u            // 元素前预减速总开关：1=开启，0=关闭
-#define Nag_Spin_PreDecel_Points 20u           // 自旋元素提前 K 点开始减速（K*5cm）
-#define Nag_Spin_PreDecel_MinSpeed 100.0f      // 自旋元素预进入最小速度下限
-#define Nag_Turnaround_PreDecel_Points 0u      // 折返元素提前 K 点开始减速（0=当前关闭）
-#define Nag_Turnaround_PreDecel_MinSpeed 220.0f// 折返元素预进入最小速度下限
-#define Nag_SingleBridge_PreDecel_Points 0u    // 独木桥元素提前 K 点开始减速（0=当前关闭）
-#define Nag_SingleBridge_PreDecel_MinSpeed 220.0f // 独木桥元素预进入最小速度下限
-#define Nag_Bump_PreDecel_Points 0u            // 减速带元素提前 K 点开始减速（0=当前关闭）
-#define Nag_Bump_PreDecel_MinSpeed 220.0f      // 减速带元素预进入最小速度下限
-#define Nag_Jump_PreDecel_Points 0u            // 跳跃元素提前 K 点开始减速（0=当前关闭）
-#define Nag_Jump_PreDecel_MinSpeed 220.0f      // 跳跃元素预进入最小速度下限
+#define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
+
+/* SPIN：自旋元素目标速度与提前加/减速距离（cm） */
+#define Nag_Spin_Target_Speed 1.0f           // 自旋元素目标速度（与 motor_user_speed_cmd 同单位）
+#define Nag_Spin_PreDecel_Dist_cm 150.0f        // 进入自旋点前提前减速距离（原 20 点 × 2cm）
+#define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离
+
+/* TURNAROUND：折返元素目标速度与提前加/减速距离（cm） */
+#define Nag_Turnaround_Target_Speed 220.0f     // 折返元素目标速度
+#define Nag_Turnaround_PreDecel_Dist_cm 0.0f    // 0=关闭提前减速
+#define Nag_Turnaround_PreAccel_Dist_cm 30.0f   // 折返完成后恢复速度的提前加速距离
+
+/* ENTER_CONES：锥桶入口目标速度与提前减速距离（cm） */
+#define Nag_EnterCones_Target_Speed 500.0f     // 锥桶区间内维持的目标速度
+#define Nag_EnterCones_PreDecel_Dist_cm 50.0f   // 接近锥桶入口前的提前减速距离
+
+/* EXIT_CONES：锥桶出口恢复速度与提前加速距离（cm） */
+#define Nag_ExitCones_Recovery_Speed 0.0f       // 0=恢复到基础导航速度；>0 则恢复到该固定速度
+#define Nag_ExitCones_PreAccel_Dist_cm 20.0f    // 接近锥桶出口前开始恢复/加速的距离
+
+/* 其它元素（暂未接入完整调速链，仍保留距离制预减速接口） */
+#define Nag_SingleBridge_Target_Speed 220.0f
+#define Nag_SingleBridge_PreDecel_Dist_cm 0.0f
+#define Nag_Bump_Target_Speed 220.0f
+#define Nag_Bump_PreDecel_Dist_cm 0.0f
+#define Nag_Jump_Target_Speed 0.0f             // 0=不限速（跳跃冲击段）
+#define Nag_Jump_PreDecel_Dist_cm 0.0f
 
 /* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -89,7 +105,7 @@
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 2u            // v2：在折返后插入锥桶进/出口类型编码，变更后须重新录制事件表
+#define Nag_Event_Version 2u            // v2：锥桶进/出口类型；单点录制时 enter==exit，旧双点录制 exit>enter 仍兼容
 
 /* Run 发车速度参数页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -125,7 +141,7 @@
 
 /* 元素类型枚举：
  * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
- * 锥桶进/出口：惯导路径上的分段标记，不配专用预减速/锁航宏，便于后续按区段调速等扩展。
+ * 锥桶进/出口：惯导路径上的分段标记；区段调速见 Nag_EnterCones_* / Nag_ExitCones_* 宏。
  */
 typedef enum
 {
@@ -148,14 +164,14 @@ typedef enum
        NAG_EVENT_STATE_IDLE = 0,      // 空闲态：当前没有元素接管（Event_Active=0）
        NAG_EVENT_STATE_ENTERED = 1,    // 已到达 enter_index，已执行一次 Nag_Element_Start
        NAG_EVENT_STATE_RUNNING = 2,   // Start 已为 true：周期 Nag_Element_Run，直到 IsDone
-       NAG_EVENT_STATE_DONE = 3,      // IsDone：下一拍 Nag_Notify_Event_Done() 接 exit_index
+       NAG_EVENT_STATE_DONE = 3,      // IsDone：下一拍 Nag_Notify_Event_Done() 恢复惯导
        NAG_EVENT_STATE_ABORT = 4,     // 中止：Nag_Element_Stop 清理后由调用方收尾
 } Nag_Event_State;
 
 typedef struct
 {
-       uint16 enter_index;   //回放时到达该索引后切出惯导
-       uint16 exit_index;    //元素完成后从该索引继续接回惯导
+       uint16 enter_index;   //回放触发点；单点录制时与 exit_index 相同
+       uint16 exit_index;    //恢复索引；单点录制时与 enter_index 相同，旧双点录制可大于 enter_index
        uint8 type;           //元素类型，当前主要用于调试显示/人工分辨
        uint8 valid;          //1 表示这一条元素段有效
 } NagEvent;
@@ -178,8 +194,8 @@ typedef struct{
        uint16 Save_count;
        uint16 Save_index;//保存flag
        uint16 Prospect_index; //当前真正用于控制的前瞻点索引
-       uint16 Active_Event_Enter; //当前元素段进入点，仅供调试查看
-       uint16 Active_Event_Exit; //当前元素段退出点，仅供调试查看
+       uint16 Active_Event_Enter; //当前元素触发点，仅供调试查看
+       uint16 Active_Event_Exit; //当前元素恢复索引，仅供调试查看（单点与 enter 相同）
        uint8 Save_state;
        uint8 End_f;//终点flag
        //flash相关参数
@@ -188,7 +204,7 @@ typedef struct{
        uint8 Nag_SystemRun_Index;   //导航执行索引
        uint8 Event_Active; //1表示当前已切出惯导，元素逻辑正在接管
        uint8 Event_Count; //当前已经录到多少个元素段
-       uint8 Event_Record_Pending; //录制阶段：1表示已经记下 enter，等待 exit
+       uint8 Event_Record_Pending; //保留字段，单点录制不再使用，始终为 0
        uint8 Event_Record_Type; //录制阶段当前准备写入的元素类型
        uint8 Event_Active_Index; //回放阶段当前正在执行的元素编号
        uint8 Event_State; //元素状态机当前状态
@@ -214,8 +230,8 @@ extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
-/* 0~5：惯导/通用快照；6：GPS 几何与目标航向；7：GPS 距离/阶段/速度；8：转向执行链（与 vofa_send_nav_from_dualcore_snapshot 一致） */
-#define NAG_VOFA_GROUP_COUNT (9u)
+/* 0~5：惯导/通用快照；6：GPS 几何与目标航向；7：GPS 距离/阶段/速度；8：转向执行链；9：元素调速调试 */
+#define NAG_VOFA_GROUP_COUNT (10u)
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,
@@ -233,12 +249,12 @@ void Init_Nag();    //偏航角初始化，flash缓冲区初始化，索引初�
 void Nag_Begin_Record(void); //开始录制前复位运行态
 void Nag_Begin_Replay(void); //开始复现前复位运行态
 void Nag_Request_Stop_Record(void); //录制结束请求
-void Nag_Request_Event_Mark(void); /* 录制：首次记 enter_index，再次记 exit_index 并置 valid；轨迹写 flash 在录完导航后 */
+void Nag_Request_Event_Mark(void); /* 录制：单击在当前 Save_index 保存一条有效元素事件 */
 void Nag_Cycle_Record_Event_Type(void); /* 录制：N.Event_Record_Type 加一模 NAG_EVENT_TYPE_COUNT */
-void Nag_Notify_Event_Done(void); /* 元素完成：Run_index←exit_index，调 Stop 并清 Event_Active，恢复惯导前瞻 */
+void Nag_Notify_Event_Done(void); /* 元素完成：恢复 Run_index 并清 Event_Active，继续惯导前瞻 */
 void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态并停留在当前元素态
 float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
-float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，自动叠加弯道限速和元素限速
+float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，叠加弯道限速、元素区段调速与提前加减速
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
 bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
 float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标

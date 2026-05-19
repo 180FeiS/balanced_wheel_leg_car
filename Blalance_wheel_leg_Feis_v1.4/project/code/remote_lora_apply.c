@@ -5,7 +5,7 @@
  * - 左杆按键 key[0] 上升沿翻转 Motor_Switch；
  * - 右摇杆按键（key[REMOTE_LORA_KEY_INDEX_RIGHT_STICK]）上升沿在满足门控时 spin_task_start，圈数见 REMOTE_LORA_SPIN_TURNS_VALIDATE（默认 2 圈）；
  * - 录制中：左上/侧向键 key[REMOTE_LORA_KEY_INDEX_ROLL_BALANCE] 切换待录元素类型；
- * - 录制中：右上/侧向键 key[REMOTE_LORA_KEY_INDEX_JUMP] 记录元素 enter/exit 点；
+ * - 录制中：右上/侧向键 key[REMOTE_LORA_KEY_INDEX_JUMP] 单击保存当前元素点；
  * - 非录制中：左上/侧向键切换横滚平衡 roll_balance_en，右上/侧向键触发跳跃；
  * - 左拨码：首帧只同步前态不判沿，避免首包/掉线重连假沿进回放；沿 1→0 → Nag_Begin_Replay（可改 REMOTE_LORA_REPLAY_ON_SW0_RISING）；[0]=1 时 [1] 录/停沿（见 remote_lora.h）；
  * - MENU_INPUT_REMOTE_MENU_FIRST==1：遥控拨码 4（switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX]）电平=REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL 时为板载调试，本函数不再映射摇杆/键/左拨码（仅拨码 4 仍被读入用于切换）。
@@ -178,7 +178,7 @@ void remote_lora_apply_validate_motor(void)
         {
             if (nav_recording_active != 0u)
             {
-                /* 录制态临时复用右上/侧向键：记录元素 enter/exit 点。 */
+                /* 录制态临时复用右上/侧向键：单击保存当前元素点。 */
                 Nag_Request_Event_Mark();
             }
             else if ((jump_is_allowed() != 0u) && (jump_flag == 0u))

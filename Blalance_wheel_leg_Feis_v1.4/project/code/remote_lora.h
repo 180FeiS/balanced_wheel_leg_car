@@ -48,7 +48,7 @@ struct dualcore_remote_to_ctrl;
 #define REMOTE_LORA_KEY_INDEX_ROLL_BALANCE  (2u)
 #endif
 /* 右上/右侧向键（逐飞 key3）：
- * - 录制中：记录元素 enter/exit 点；
+ * - 录制中：单击保存当前元素点；
  * - 非录制中：触发跳跃，语义同 DUALCORE_UI_CMD_JUMP（须 jump_is_allowed 且当前未在跳）。
  */
 #ifndef REMOTE_LORA_KEY_INDEX_JUMP

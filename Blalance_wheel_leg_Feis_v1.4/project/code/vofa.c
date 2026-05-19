@@ -232,7 +232,8 @@ void SendDataToVofa()
  * 前置条件     CM7_0 主循环已周期性调用 dualcore_ctrl_to_ui_publish()；本核 all_init_cm7_1_ui 已 wireless_uart_init
  * 分组说明     nag_vofa_group % NAG_VOFA_GROUP_COUNT；菜单 n / DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT 循环切组。
  *              0~5：与 main_cm7_0.c send_nav_debug_to_vofa 各 case 语义对齐；
- *              6：GPS 指路角与 IMU 目标/误差；7：GPS 距离与阶段、速度；8：差速转向执行链。
+ *              6：GPS 指路角与 IMU 目标/误差；7：GPS 距离与阶段、速度；8：差速转向执行链；
+ *              9：元素调速调试（speed_target_effective / car_speed / Run_index / Event_Active_Type）。
  * 调用关系     SendDataStreamToVOFA 内部仍写 vofa_justfloat_frame_tail 作为帧尾
  *-------------------------------------------------------------------------------------------------------------------*/
 void vofa_send_nav_from_dualcore_snapshot(void)
@@ -241,7 +242,7 @@ void vofa_send_nav_from_dualcore_snapshot(void)
   dualcore_ctrl_to_ui_pull(&c);
   uint8 g = (uint8)(c.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
 
-  switch (6)
+  switch (9)
   {
   case 0:
     SendDataStreamToVOFA(4, c.euler_pitch, c.euler_roll, c.euler_yaw, c.gyro_z_bias_mean);
@@ -312,6 +313,14 @@ void vofa_send_nav_from_dualcore_snapshot(void)
                          c.dbg_steer_enable,
                          c.dbg_steer_yaw_request_pending,
                          c.dbg_steer_yaw_request_deg);
+    break;
+  /* 组 9：元素调速实车调试 — 详见 vofa.h VOFA_GROUP_EVENT_SPEED_DEBUG 注释 */
+  case VOFA_GROUP_EVENT_SPEED_DEBUG:
+    SendDataStreamToVOFA(4,
+                         c.speed_target_effective,
+                         c.car_speed,
+                         c.dbg_run_index,
+                         (float)c.event_active_type);
     break;
   default:
     break;

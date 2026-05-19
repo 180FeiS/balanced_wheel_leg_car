@@ -69,6 +69,7 @@ typedef struct
   uint8 nav_recording_active; /* Nag_SystemRun_Index==1 && End_f==0 */
   uint8 event_active;
   uint8 event_state;
+  uint8 event_active_type; /* N.Event_Active_Type：0=SPIN 1=TURNAROUND 2=ENTER_CONES 3=EXIT_CONES … */
   uint8 nag_vofa_group;
   float mileage_debug_total;
   uint32 save_index;

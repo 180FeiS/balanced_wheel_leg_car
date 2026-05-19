@@ -60,6 +60,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0));
   c->event_active = N.Event_Active;
   c->event_state = N.Event_State;
+  c->event_active_type = N.Event_Active_Type;
   c->nag_vofa_group = Nag_Vofa_Group;
   c->mileage_debug_total = N.Mileage_Debug_Total;
   c->save_index = (uint32)N.Save_index;

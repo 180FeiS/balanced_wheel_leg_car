@@ -151,6 +151,7 @@ static void flash_Nag_ReadEventPage(void)
         Nag_Event_Table[event_index].type = (uint8)((packed_meta >> 8) & 0xFFu);
         Nag_Event_Table[event_index].valid = (uint8)(packed_meta & 0xFFu);
 
+        /* exit_index==enter_index 为单点事件；exit_index>enter_index 为旧双点录制，均合法。 */
         if (!Nag_Event_Table[event_index].valid ||
             Nag_Event_Table[event_index].enter_index >= N.Save_index ||
             Nag_Event_Table[event_index].exit_index >= N.Save_index ||

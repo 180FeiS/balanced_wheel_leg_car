@@ -363,7 +363,7 @@ void menu_key_capture_event(void)
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
             /* KEY4 优先级：
-             * 1. 录制中：标记元素 enter/exit；
+             * 1. 录制中：单击保存当前元素点（Nag_Request_Event_Mark）；
              * 2. 非录制且元素接管中：手动通知元素完成，恢复导航；
              * 3. 其它情况：返回上一级菜单。
              */
@@ -811,7 +811,7 @@ void selectMenu(void)
         run_launch_speed = 0.0f;
 #endif
         break;
-    case 't':
+    case 't': /* 惯导录制：单击保存当前元素点 */
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_MARK, 0, 0.0f);
 #else
@@ -1068,7 +1068,7 @@ void MenuInit()
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
-    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.3.1");
+    hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
 #endif
 }
 

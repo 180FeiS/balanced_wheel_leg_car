@@ -174,8 +174,8 @@ void Nag_Hook_Bump_Run(void) {}
 bool Nag_Hook_Bump_IsDone(void) { return false; }
 void Nag_Hook_Bump_Stop(void) {}
 
-/* 锥桶进/出口：与事件表 enter/exit 对齐的路径标记；不配预减速/锁航（见 navigation.h）。
- * Start 立刻 true，首个 RUNNING 周期 IsDone 即 true，减少 Event_Active 窗口、尽快恢复惯导前瞻。
+/* 锥桶进/出口：单点路径标记；区段调速由 Nag_ApplyConeZoneSpeed() 按 Run_index 与事件表配对处理，
+ * 不依赖 Event_Active 窗口。Start 立刻 true，首拍 IsDone 即 true，尽快恢复惯导前瞻。
  */
 bool Nag_Hook_EnterCones_Start(void) { return true; }
 void Nag_Hook_EnterCones_Run(void) {}
@@ -251,7 +251,7 @@ bool Nag_Element_IsDone(uint8 event_type)
 {
     /* 统一完成判定：
      * 建议由你自己的元素逻辑在合适时机置位完成条件，
-     * 状态机一旦检测到 true，就会自动从 exit_index 接回导航。
+     * 状态机一旦检测到 true，就会自动恢复惯导。
      */
     switch (event_type)
     {
@@ -395,7 +395,7 @@ static void Nag_Element_StateMachine(void)
     /* 回放中 Event_Active=1 时每 1ms 由 Nag_System() 调用。
      * ENTERED：首开 Event_Start_Latched 后调 Nag_Element_Start；true→RUNNING。
      * RUNNING：Nag_Element_Run + IsDone；true→DONE。
-     * DONE：Nag_Notify_Event_Done() 将 Run_index 置 exit 并清 Active。
+     * DONE：Nag_Notify_Event_Done() 恢复 Run_index 并清 Active。
      */
     uint8 event_index = N.Event_Active_Index;
     uint8 event_type = N.Event_Active_Type;
@@ -501,103 +501,454 @@ static uint8 Nag_FindNextEventAhead(uint16 run_index, uint16 *dist_points)
     return best_index;
 }
 
-static bool Nag_GetPreDecelConfig(uint8 event_type, uint16 *pre_points, float *min_speed)
+/* 将物理距离（cm）换算为导航点数；distance<=0 返回 0，否则至少 1 点。 */
+static uint16 Nag_DistanceToPoints(float distance_cm)
 {
-    if (pre_points == NULL || min_speed == NULL)
+    float points_f = 0.0f;
+    uint16 points = 0u;
+
+    if (distance_cm <= 0.0f || Nag_Set_mileage <= 0.0f)
+    {
+        return 0u;
+    }
+
+    points_f = distance_cm / Nag_Set_mileage;
+    points = (uint16)ceilf(points_f);
+    if (points == 0u)
+    {
+        points = 1u;
+    }
+    return points;
+}
+
+/* 按线性比例在 start/end 之间插值，ratio=0 取 end，ratio=1 取 start。 */
+static float Nag_LerpSpeedByRatio(float start_speed, float end_speed, float ratio)
+{
+    if (ratio <= 0.0f)
+    {
+        return end_speed;
+    }
+    if (ratio >= 1.0f)
+    {
+        return start_speed;
+    }
+    return end_speed + (start_speed - end_speed) * ratio;
+}
+
+/* 事件调速配置：target_speed=元素目标速度；pre_decel/pre_accel 为 cm，0 表示关闭。 */
+static bool Nag_GetEventSpeedProfileConfig(uint8 event_type,
+                                           float *target_speed,
+                                           float *pre_decel_dist_cm,
+                                           float *pre_accel_dist_cm)
+{
+    if (target_speed == NULL || pre_decel_dist_cm == NULL || pre_accel_dist_cm == NULL)
     {
         return false;
     }
 
+    *target_speed = 0.0f;
+    *pre_decel_dist_cm = 0.0f;
+    *pre_accel_dist_cm = 0.0f;
+
     switch (event_type)
     {
         case NAG_EVENT_TYPE_SPIN:
-            *pre_points = Nag_Spin_PreDecel_Points;
-            *min_speed = Nag_Spin_PreDecel_MinSpeed;
-            break;
+            *target_speed = Nag_Spin_Target_Speed;
+            *pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm;
+            *pre_accel_dist_cm = Nag_Spin_PreAccel_Dist_cm;
+            return true;
         case NAG_EVENT_TYPE_TURNAROUND:
-            *pre_points = Nag_Turnaround_PreDecel_Points;
-            *min_speed = Nag_Turnaround_PreDecel_MinSpeed;
-            break;
+            *target_speed = Nag_Turnaround_Target_Speed;
+            *pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm;
+            *pre_accel_dist_cm = Nag_Turnaround_PreAccel_Dist_cm;
+            return true;
+        case NAG_EVENT_TYPE_ENTER_CONES:
+            *target_speed = Nag_EnterCones_Target_Speed;
+            *pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm;
+            *pre_accel_dist_cm = 0.0f;
+            return true;
+        case NAG_EVENT_TYPE_EXIT_CONES:
+            *target_speed = Nag_ExitCones_Recovery_Speed;
+            *pre_decel_dist_cm = 0.0f;
+            *pre_accel_dist_cm = Nag_ExitCones_PreAccel_Dist_cm;
+            return true;
         case NAG_EVENT_TYPE_SINGLE_BRIDGE:
-            *pre_points = Nag_SingleBridge_PreDecel_Points;
-            *min_speed = Nag_SingleBridge_PreDecel_MinSpeed;
-            break;
+            *target_speed = Nag_SingleBridge_Target_Speed;
+            *pre_decel_dist_cm = Nag_SingleBridge_PreDecel_Dist_cm;
+            return (*pre_decel_dist_cm > 0.0f);
         case NAG_EVENT_TYPE_BUMP:
-            *pre_points = Nag_Bump_PreDecel_Points;
-            *min_speed = Nag_Bump_PreDecel_MinSpeed;
-            break;
+            *target_speed = Nag_Bump_Target_Speed;
+            *pre_decel_dist_cm = Nag_Bump_PreDecel_Dist_cm;
+            return (*pre_decel_dist_cm > 0.0f);
         case NAG_EVENT_TYPE_JUMP:
-            *pre_points = Nag_Jump_PreDecel_Points;
-            *min_speed = Nag_Jump_PreDecel_MinSpeed;
-            break;
+            *target_speed = Nag_Jump_Target_Speed;
+            *pre_decel_dist_cm = Nag_Jump_PreDecel_Dist_cm;
+            return (*pre_decel_dist_cm > 0.0f);
         default:
-            *pre_points = 0u;
-            *min_speed = 0.0f;
-            break;
+            return false;
     }
-
-    return (*pre_points > 0u);
 }
 
-/* 元素前预减速：
- * 1. 仅在尚未真正切入元素前生效；一旦 N.Event_Active=1，就交回现有元素内限速逻辑；
- * 2. 距离元素越近，输出速度越接近该元素配置的 min_speed；
- * 3. 当前采用线性斜坡：dist=K 时不减速，dist=0 时压到 min_speed。
- */
-static float Nag_ApplyPreEventDecel(float nav_speed)
+/* 查找当前 Run_index 所处锥桶区间：最近已过的 ENTER_CONES 与之后第一个 EXIT_CONES 配对。 */
+static bool Nag_GetActiveConeZone(uint16 run_index,
+                                  uint16 *enter_index,
+                                  uint16 *exit_index,
+                                  uint8 *exit_event_index)
 {
-#if !Nag_PreEventDecel_Enable
+    uint8 event_index = 0;
+    uint8 enter_event_index = 0xFFu;
+    uint16 best_enter = 0u;
+
+    if (enter_index == NULL || exit_index == NULL || exit_event_index == NULL)
+    {
+        return false;
+    }
+
+    *enter_index = 0u;
+    *exit_index = 0xFFFFu;
+    *exit_event_index = 0xFFu;
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_ENTER_CONES)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index <= run_index &&
+            Nag_Event_Table[event_index].enter_index >= best_enter)
+        {
+            best_enter = Nag_Event_Table[event_index].enter_index;
+            enter_event_index = event_index;
+        }
+    }
+
+    if (enter_event_index == 0xFFu)
+    {
+        return false;
+    }
+
+    *enter_index = best_enter;
+
+    for (event_index = (uint8)(enter_event_index + 1u); event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_CONES)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index > best_enter)
+        {
+            *exit_index = Nag_Event_Table[event_index].enter_index;
+            *exit_event_index = event_index;
+            return true;
+        }
+    }
+
+    /* 无配对 EXIT：从 ENTER 起至路径末端视为锥桶区间。 */
+    return true;
+}
+
+/* 查找前方指定类型最近事件；dist_points 为 enter_index - run_index。 */
+static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points)
+{
+    uint8 event_index = 0;
+    uint8 best_index = 0xFFu;
+    uint16 best_dist = 0xFFFFu;
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        uint16 enter_index = 0;
+        uint16 curr_dist = 0;
+
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != event_type)
+        {
+            continue;
+        }
+
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        if (enter_index < run_index)
+        {
+            continue;
+        }
+
+        curr_dist = (uint16)(enter_index - run_index);
+        if (curr_dist < best_dist)
+        {
+            best_dist = curr_dist;
+            best_index = event_index;
+        }
+    }
+
+    if (dist_points != NULL)
+    {
+        *dist_points = best_dist;
+    }
+    return best_index;
+}
+
+/* 查找刚经过且仍在 post-accel 窗口内的 SPIN/TURNAROUND 等事件。 */
+static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
+                                                   uint16 *dist_since_pass,
+                                                   float *target_speed,
+                                                   uint16 *pre_accel_points)
+{
+    uint8 event_index = 0;
+    uint8 best_index = 0xFFu;
+    uint16 best_enter = 0u;
+    uint16 best_dist = 0xFFFFu;
+    float profile_target = 0.0f;
+    float pre_decel_dist = 0.0f;
+    float pre_accel_dist = 0.0f;
+    uint16 accel_points = 0u;
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        uint16 enter_index = 0;
+        uint16 since_pass = 0;
+
+        if (!Nag_Event_Table[event_index].valid)
+        {
+            continue;
+        }
+
+        if (!Nag_GetEventSpeedProfileConfig(Nag_Event_Table[event_index].type,
+                                            &profile_target,
+                                            &pre_decel_dist,
+                                            &pre_accel_dist))
+        {
+            continue;
+        }
+
+        accel_points = Nag_DistanceToPoints(pre_accel_dist);
+        if (accel_points == 0u)
+        {
+            continue;
+        }
+
+        /* 锥桶标记由区段逻辑处理，不走元素后恢复。 */
+        if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_CONES)
+        {
+            continue;
+        }
+
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        if (enter_index >= run_index)
+        {
+            continue;
+        }
+
+        since_pass = (uint16)(run_index - enter_index);
+        if (since_pass > accel_points)
+        {
+            continue;
+        }
+
+        if (enter_index >= best_enter)
+        {
+            best_enter = enter_index;
+            best_dist = since_pass;
+            best_index = event_index;
+        }
+    }
+
+    if (best_index == 0xFFu)
+    {
+        return 0xFFu;
+    }
+
+    if (dist_since_pass != NULL)
+    {
+        *dist_since_pass = best_dist;
+    }
+    if (target_speed != NULL)
+    {
+        (void)Nag_GetEventSpeedProfileConfig(Nag_Event_Table[best_index].type,
+                                             target_speed,
+                                             &pre_decel_dist,
+                                             &pre_accel_dist);
+    }
+    if (pre_accel_points != NULL)
+    {
+        *pre_accel_points = Nag_DistanceToPoints(pre_accel_dist);
+    }
+    return best_index;
+}
+
+/* 将 nav_speed 限制在 [0, cap] 范围内。 */
+static float Nag_ClampSpeedCap(float nav_speed, float cap)
+{
+    if (cap <= 0.0f)
+    {
+        return nav_speed;
+    }
+    if (nav_speed > cap)
+    {
+        return cap;
+    }
+    return nav_speed;
+}
+
+/* 锥桶区段调速：入口预减速、区间内维持、出口前预加速恢复。 */
+static float Nag_ApplyConeZoneSpeed(float nav_speed)
+{
+    uint16 enter_index = 0;
+    uint16 exit_index = 0;
+    uint8 exit_event_index = 0xFFu;
+    uint16 dist_to_enter = 0;
+    uint16 dist_to_exit = 0;
+    uint16 pre_decel_points = 0u;
+    uint16 pre_accel_points = 0u;
+    uint8 enter_evt = 0xFFu;
+    float cone_target = Nag_EnterCones_Target_Speed;
+    float recovery_speed = 0.0f;
+    float ratio = 0.0f;
+
+    pre_decel_points = Nag_DistanceToPoints(Nag_EnterCones_PreDecel_Dist_cm);
+    pre_accel_points = Nag_DistanceToPoints(Nag_ExitCones_PreAccel_Dist_cm);
+    recovery_speed = Nag_ExitCones_Recovery_Speed;
+    if (recovery_speed <= 0.0f)
+    {
+        recovery_speed = nav_speed;
+    }
+
+    if (!Nag_GetActiveConeZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
+    {
+        /* 尚未进入锥桶区：检查前方 ENTER_CONES 预减速。 */
+        enter_evt = Nag_FindNextEventOfType(N.Run_index,
+                                            NAG_EVENT_TYPE_ENTER_CONES,
+                                            &dist_to_enter);
+        if (enter_evt == 0xFFu || pre_decel_points == 0u || dist_to_enter > pre_decel_points)
+        {
+            return nav_speed;
+        }
+
+        ratio = (float)dist_to_enter / (float)pre_decel_points;
+        return Nag_LerpSpeedByRatio(nav_speed, cone_target, ratio);
+    }
+
+    if (N.Run_index < enter_index)
+    {
+        return nav_speed;
+    }
+
+    /* 已过出口：在 pre_accel 窗口内从 recovery 线性恢复到 nav_speed。 */
+    if (exit_index != 0xFFFFu && N.Run_index >= exit_index)
+    {
+        uint16 since_exit = (uint16)(N.Run_index - exit_index);
+        if (pre_accel_points > 0u && since_exit <= pre_accel_points)
+        {
+            ratio = (float)since_exit / (float)pre_accel_points;
+            return Nag_LerpSpeedByRatio(nav_speed, recovery_speed, ratio);
+        }
+        return nav_speed;
+    }
+
+    /* 无配对 EXIT：从 ENTER 起至路径末端维持锥桶速度。 */
+    if (exit_index == 0xFFFFu)
+    {
+        return Nag_ClampSpeedCap(nav_speed, cone_target);
+    }
+
+    dist_to_exit = (uint16)(exit_index - N.Run_index);
+
+    /* 出口前 pre_accel 窗口：从锥桶速度线性恢复到 recovery_speed。 */
+    if (pre_accel_points > 0u && dist_to_exit <= pre_accel_points)
+    {
+        ratio = (float)dist_to_exit / (float)pre_accel_points;
+        return Nag_LerpSpeedByRatio(recovery_speed, cone_target, ratio);
+    }
+
+    /* 锥桶区间内：维持锥桶目标速度。 */
+    return Nag_ClampSpeedCap(nav_speed, cone_target);
+}
+
+/* 非锥桶元素：元素前预减速 + 元素后预加速恢复。 */
+static float Nag_ApplyGenericEventSpeed(float nav_speed)
+{
+    uint16 dist_points = 0;
+    uint16 pre_decel_points = 0u;
+    uint16 pre_accel_points = 0u;
+    uint16 dist_since_pass = 0;
+    uint8 next_event = 0xFFu;
+    uint8 passed_event = 0xFFu;
+    float target_speed = 0.0f;
+    float pre_decel_dist = 0.0f;
+    float pre_accel_dist = 0.0f;
+    float adjusted = nav_speed;
+    float ratio = 0.0f;
+
+    /* 元素后预加速：从元素目标速度恢复到 nav_speed。 */
+    passed_event = Nag_FindRecentPassedEventForPostAccel(N.Run_index,
+                                                         &dist_since_pass,
+                                                         &target_speed,
+                                                         &pre_accel_points);
+    if (passed_event != 0xFFu && pre_accel_points > 0u && target_speed >= 0.0f)
+    {
+        ratio = (float)dist_since_pass / (float)pre_accel_points;
+        adjusted = Nag_LerpSpeedByRatio(nav_speed, target_speed, ratio);
+    }
+
+    /* 元素前预减速：线性拉到目标速度。 */
+    next_event = Nag_FindNextEventAhead(N.Run_index, &dist_points);
+    if (next_event == 0xFFu || next_event >= N.Event_Count)
+    {
+        return adjusted;
+    }
+
+    if (Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_CONES ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_CONES)
+    {
+        return adjusted;
+    }
+
+    if (!Nag_GetEventSpeedProfileConfig(Nag_Event_Table[next_event].type,
+                                        &target_speed,
+                                        &pre_decel_dist,
+                                        &pre_accel_dist))
+    {
+        return adjusted;
+    }
+
+    pre_decel_points = Nag_DistanceToPoints(pre_decel_dist);
+    if (pre_decel_points == 0u)
+    {
+        return adjusted;
+    }
+    if (target_speed < 0.0f)
+    {
+        target_speed = 0.0f;
+    }
+
+    if (dist_points > pre_decel_points)
+    {
+        return adjusted;
+    }
+
+    ratio = (float)dist_points / (float)pre_decel_points;
+    return Nag_ClampSpeedCap(adjusted,
+                             Nag_LerpSpeedByRatio(adjusted, target_speed, ratio));
+}
+
+/* 统一事件调速入口：锥桶区段优先，再叠加通用元素前/后调速。 */
+static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
+{
+#if !Nag_EventSpeed_Enable
     return nav_speed;
 #else
-    uint8 event_index = 0xFFu;
-    uint16 dist_points = 0xFFFFu;
-    uint16 pre_points = 0u;
-    float min_speed = 0.0f;
-    float ratio = 1.0f;
-    float decel_speed = nav_speed;
+    float cone_adjusted = 0.0f;
 
-    if (nav_speed <= 0.0f || N.Event_Active || N.Event_Count == 0u)
+    if (nav_speed <= 0.0f || N.Event_Count == 0u)
     {
         return nav_speed;
     }
 
-    event_index = Nag_FindNextEventAhead(N.Run_index, &dist_points);
-    if (event_index == 0xFFu || event_index >= N.Event_Count)
-    {
-        return nav_speed;
-    }
-
-    if (!Nag_GetPreDecelConfig(Nag_Event_Table[event_index].type, &pre_points, &min_speed))
-    {
-        return nav_speed;
-    }
-
-    if (dist_points > pre_points)
-    {
-        return nav_speed;
-    }
-
-    if (min_speed < 0.0f)
-    {
-        min_speed = 0.0f;
-    }
-    if (min_speed > nav_speed)
-    {
-        min_speed = nav_speed;
-    }
-
-    ratio = (float)dist_points / (float)pre_points;
-    decel_speed = min_speed + (nav_speed - min_speed) * ratio;
-
-    if (decel_speed < min_speed)
-    {
-        decel_speed = min_speed;
-    }
-    if (decel_speed > nav_speed)
-    {
-        decel_speed = nav_speed;
-    }
-    return decel_speed;
+    cone_adjusted = Nag_ApplyConeZoneSpeed(nav_speed);
+    return Nag_ApplyGenericEventSpeed(cone_adjusted);
 #endif
 }
 
@@ -736,18 +1087,20 @@ uint16 Nag_GetDebugProspectIndex(void)
 }
 
 /* 速度目标合成（由 pid_ctrl_Run 每 20ms 读取一次）：
- * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令、串口 q/r/s 等），正号前进、负号后退；
- * - N.Target_Speed：导航前瞻 + 弯道强度算出的“建议上限”，再与用户基准取 MIN/比例；
- * - 本函数在非回放执行态（Nag_SystemRun_Index!=3）强制返回 0，避免待机误跑。
+ * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令等）；
+ * - N.Target_Speed：导航前瞻 + 弯道强度算出的建议上限；
+ * - Nag_ApplyEventSpeedAdjustments()：按事件表与 Run_index 叠加区段调速、提前加减速；
+ * - 元素激活期（Event_Active）：SPIN/TURNAROUND 等使用配置目标速度，锥桶标记仍走区段逻辑。
  */
 float Nag_GetControlSpeedTarget(void)
 {
     float nav_speed = N.Target_Speed;
     float abs_user_speed = fabsf((float)motor_user_speed_cmd);
+    float event_target = 0.0f;
+    float pre_decel_dist = 0.0f;
+    float pre_accel_dist = 0.0f;
 
-    /* GPS 点导航由 GPS_PointNav_Run() 自己负责保护停车和到点停车。
-     * 这里直接放行 motor_user_speed_cmd，避免 GPS 模式被惯导回放态或 N.Nag_Stop_f 误门控。
-     */
+    /* GPS 点导航由 GPS_PointNav_Run() 自己负责保护停车和到点停车。 */
     if (nav_heading_mode == NAV_HEADING_MODE_GPS)
     {
         if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
@@ -757,24 +1110,12 @@ float Nag_GetControlSpeedTarget(void)
         return motor_user_speed_cmd;
     }
 
-    /* 安全门控：正常模式下只有导航真正进入回放执行态(case 3)后，速度目标才允许生效。
-     * 这样用户设定的 motor_user_speed_cmd 在上电、待机、录制、以及回放准备阶段
-     * （Nag_SystemRun_Index==2, 仍在读 flash）时不会直接驱动速度环（本函数返回 0）。
-     * 调试时若发现 motor_user_speed_cmd 非零但车还没动，优先看两件事：
-     * 1. N.Nag_SystemRun_Index 是否已经到 3；
-     * 2. Motor_Switch 是否为 ON（由 SWITCH1 决定，失控锁存时强制关）。
-     */
     if (N.Nag_Stop_f)
     {
         return 0.0f;
     }
 
 #if Nag_Debug_Speed_Bypass_Enable
-    /* PID 调试旁路：
-     * 1. 旁路只保留终点停车保护，允许非回放态也直接输出固定速度目标；
-     * 2. 目标直接跟随 motor_user_speed_cmd，便于直道阶跃调试速度环；
-     * 3. 正式跑导航前请把 Nag_Debug_Speed_Bypass_Enable 改回 0。
-     */
     return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
 #endif
 
@@ -790,18 +1131,43 @@ float Nag_GetControlSpeedTarget(void)
 
     if (N.Event_Active)
     {
-        /* JUMP：冲击不限速；锥桶标记：瞬时元素窗口内不按 Nag_Event_Speed_Ratio 压车速 */
-        float ratio =
-            (N.Event_Active_Type == NAG_EVENT_TYPE_JUMP ||
-             N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_CONES ||
-             N.Event_Active_Type == NAG_EVENT_TYPE_EXIT_CONES)
-                ? 1.0f
-                : Nag_Event_Speed_Ratio;
-        nav_speed = MIN(nav_speed, abs_user_speed * ratio);
+        switch (N.Event_Active_Type)
+        {
+            case NAG_EVENT_TYPE_JUMP:
+                /* 跳跃冲击段不限速。 */
+                break;
+            case NAG_EVENT_TYPE_ENTER_CONES:
+            case NAG_EVENT_TYPE_EXIT_CONES:
+                /* 锥桶标记瞬时完成，区段调速由 Nag_ApplyConeZoneSpeed 按 Run_index 处理。 */
+                nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
+                break;
+            case NAG_EVENT_TYPE_SPIN:
+            case NAG_EVENT_TYPE_TURNAROUND:
+                if (Nag_GetEventSpeedProfileConfig(N.Event_Active_Type,
+                                                   &event_target,
+                                                   &pre_decel_dist,
+                                                   &pre_accel_dist) &&
+                    event_target >= 0.0f)
+                {
+                    if (event_target < 0.0f)
+                    {
+                        event_target = 0.0f;
+                    }
+                    nav_speed = Nag_ClampSpeedCap(nav_speed, event_target);
+                }
+                else
+                {
+                    nav_speed = MIN(nav_speed, abs_user_speed * Nag_Event_Speed_Ratio);
+                }
+                break;
+            default:
+                nav_speed = MIN(nav_speed, abs_user_speed * Nag_Event_Speed_Ratio);
+                break;
+        }
     }
     else
     {
-        nav_speed = Nag_ApplyPreEventDecel(nav_speed);
+        nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
     }
 
     if ((float)motor_user_speed_cmd < 0.0f)
@@ -854,7 +1220,7 @@ void Nag_Run()
      * 1. 先根据里程推进 Run_index；
      * 2. 再按速度得到前瞻点 Prospect_index，控制目标使用前瞻点 yaw；
      * 3. 如果跑到元素 enter_index，则冻结导航索引推进，把控制权让给元素逻辑；
-     * 4. 元素完成后通过 Nag_Notify_Event_Done() 从 exit_index 接回。
+     * 4. 元素完成后通过 Nag_Notify_Event_Done() 接回惯导。
      */
     Run_Nag_GPS();  //偏航角读取函数
     if(N.Nag_Stop_f) //终点停止
@@ -1034,25 +1400,12 @@ void Nag_Request_Event_Mark(void)
         return;
     }
 
-    if (!N.Event_Record_Pending)
-    {
-        Nag_Event_Table[N.Event_Count].enter_index = N.Save_index;
-        Nag_Event_Table[N.Event_Count].exit_index = N.Save_index;
-        Nag_Event_Table[N.Event_Count].type = N.Event_Record_Type;
-        Nag_Event_Table[N.Event_Count].valid = 0;
-        N.Event_Record_Pending = 1;
-    }
-    else
-    {
-        Nag_Event_Table[N.Event_Count].exit_index = N.Save_index;
-        if (Nag_Event_Table[N.Event_Count].exit_index < Nag_Event_Table[N.Event_Count].enter_index)
-        {
-            Nag_Event_Table[N.Event_Count].exit_index = Nag_Event_Table[N.Event_Count].enter_index;
-        }
-        Nag_Event_Table[N.Event_Count].valid = 1;
-        N.Event_Count++;
-        N.Event_Record_Pending = 0;
-    }
+    Nag_Event_Table[N.Event_Count].enter_index = N.Save_index;
+    Nag_Event_Table[N.Event_Count].exit_index = N.Save_index;
+    Nag_Event_Table[N.Event_Count].type = N.Event_Record_Type;
+    Nag_Event_Table[N.Event_Count].valid = 1;
+    N.Event_Count++;
+    N.Event_Record_Pending = 0;
 }
 
 void Nag_Cycle_Record_Event_Type(void)
@@ -1063,13 +1416,38 @@ void Nag_Cycle_Record_Event_Type(void)
 void Nag_Notify_Event_Done(void)
 {
     uint8 event_index = N.Event_Active_Index;
+    uint16 enter_index = 0;
+    uint16 exit_index = 0;
+    uint16 resume_index = 0;
+    uint16 max_run_index = 0;
 
     if (!N.Event_Active || event_index >= N.Event_Count)
     {
         return;
     }
 
-    N.Run_index = Nag_Event_Table[event_index].exit_index;
+    enter_index = Nag_Event_Table[event_index].enter_index;
+    exit_index = Nag_Event_Table[event_index].exit_index;
+    if (exit_index > enter_index)
+    {
+        /* 旧双点录制：从 exit 索引接回惯导。 */
+        resume_index = exit_index;
+    }
+    else
+    {
+        /* 单点录制：推进到触发点之后，避免再次命中同一 enter_index。 */
+        resume_index = (uint16)(enter_index + 1u);
+        if (N.Save_index >= 2u)
+        {
+            max_run_index = (uint16)(N.Save_index - 2u);
+            if (resume_index > max_run_index)
+            {
+                resume_index = max_run_index;
+            }
+        }
+    }
+
+    N.Run_index = resume_index;
     N.Mileage_All = 0.0f;
     N.Target_Request_Valid = 0;
     Nag_Element_Stop(N.Event_Active_Type);
@@ -1108,7 +1486,7 @@ void Nag_System(){
         /* 元素接管期间不再直接 return，而是进入统一元素状态机：
          * 1. ENTERED：刚切入元素，等待 Start 钩子真正接管；
          * 2. RUNNING：周期执行 Run 钩子，并检测完成标志；
-         * 3. DONE：自动从 exit_index 恢复导航；
+         * 3. DONE：自动恢复惯导；
          * 4. 若当前元素尚未补具体动作，默认空钩子会停留在 ENTERED，便于继续用 KEY4 / 串口 v 手动恢复。
          */
         Nag_Element_StateMachine();
