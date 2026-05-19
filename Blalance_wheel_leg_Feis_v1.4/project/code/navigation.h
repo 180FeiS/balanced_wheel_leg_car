@@ -122,7 +122,7 @@
  */
 #define Nag_Spin_Demo_Turns 2.0f
 #define Nag_Spin_Demo_Dir 1
-#define Nag_Spin_Stop_Speed_Threshold 80.0f // 当前速度低于该值时视为进入低速区
+#define Nag_Spin_Stop_Speed_Threshold 10.0f // 当前速度低于该值时视为进入低速区
 #define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
 
 /* 元素航向保持配置：
