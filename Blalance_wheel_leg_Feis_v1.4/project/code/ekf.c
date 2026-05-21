@@ -30,6 +30,14 @@ static int16 imu660rc_acc_x_l = 0;
 static int16 imu660rc_acc_y_l = 0;
 static int16 imu660rc_acc_z_l = 0;
 
+/* gyro_z 零偏观测累积（EKF_UpData 使用） */
+static float gyro_z_sum = 0.0f;
+static uint32_t gyro_z_count = 0u;
+
+/* yaw 零点偏移层：yaw_raw_deg 为四元数解算原始值，euler_angle.yaw 为全局偏移后航向 */
+float yaw_raw_deg = 0.0f;
+float yaw_zero_offset_deg = 0.0f;
+
 static float PK[4] = {1000, 100, 100, 1000};
 static float Kk[2] = {0, 0};
 float Q_ekf[4] = {0.3, 0.001, 0.001, 0.2};
@@ -61,6 +69,47 @@ float dt = 0.001f;
 float dt_ekf = 0.01f;
 
 volatile float car_speed = 0;
+
+static void quaternion_to_euler(void);
+
+static float yaw_wrap180_deg(float yaw_deg)
+{
+  while (yaw_deg > 180.0f)
+  {
+    yaw_deg -= 360.0f;
+  }
+  while (yaw_deg < -180.0f)
+  {
+    yaw_deg += 360.0f;
+  }
+  return yaw_deg;
+}
+
+static float yaw_apply_zero_offset(float raw_yaw_deg)
+{
+  return yaw_wrap180_deg(raw_yaw_deg - yaw_zero_offset_deg);
+}
+
+float Yaw_GetDeg(void)
+{
+  return (float)euler_angle.yaw;
+}
+
+float Yaw_GetRawDeg(void)
+{
+  return yaw_raw_deg;
+}
+
+float Yaw_GetZeroOffsetDeg(void)
+{
+  return yaw_zero_offset_deg;
+}
+
+void Yaw_ResetZero(void)
+{
+  yaw_zero_offset_deg = yaw_raw_deg;
+  euler_angle.yaw = yaw_apply_zero_offset(yaw_raw_deg);
+}
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     EKF初始化
@@ -109,7 +158,7 @@ void EKF_Init(void)
 // 使用示例     quaternion_to_euler();
 // 备注信息     无
 -------------------------------------------------------------------------------------------------------------------*/
-static inline void quaternion_to_euler(void)
+static void quaternion_to_euler(void)
 {
   const float G = 9.8;
   float q0 = (exf_x.data[0][0]);
@@ -126,9 +175,10 @@ static inline void quaternion_to_euler(void)
   euler_angle.roll =
       atan2f(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) *
       DEG_TO_RAD; // roll
-  euler_angle.yaw =
+  yaw_raw_deg =
       atan2f(2 * q1 * q2 + 2 * q0 * q3, -2 * q1 * q1 - 2 * q3 * q3 + 1) *
-      DEG_TO_RAD; // yaw
+      DEG_TO_RAD;
+  euler_angle.yaw = yaw_apply_zero_offset(yaw_raw_deg);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -168,8 +218,6 @@ void imu_get_values(void)
 void EKF_UpData(void)
 {
   static uint16 time_now = 0;
-  static float gyro_z_sum = 0.0f;
-  static uint32_t gyro_z_count = 0u;
   float gx, gy, gz;
   imu_get_values();
   gx = imu_data.gyro_x;

@@ -164,7 +164,7 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 
 /*-------------------------------------------------------------------------
  * 拨码与速度基准（须周期性调用，如 selectMenu_Key / selectMenu 内）：
- * 1. SWITCH2：不再通过 motor_poll_switch2_speed_baseline() 改写 motor_user_speed_cmd（函数为空占位）。
+ * 1. SWITCH2：边沿触发 motor_poll_switch2_speed_baseline()，在安全态下执行 yaw 零点重置（当前朝向变为 0），成功翻转 LED1。
  * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
  * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
  * 4. Motor_Runaway_Latch：最高优先级关电机；遥控优先关闭时须 SWITCH1 到 OFF 后才清除锁存。

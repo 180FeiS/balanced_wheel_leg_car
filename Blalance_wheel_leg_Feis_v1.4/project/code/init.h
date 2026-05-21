@@ -27,8 +27,8 @@
 
 
 
-#define SWITCH1                 (P21_5)
-#define SWITCH2                 (P21_6)
+#define SWITCH1                 (P21_5)  /* 电机总开关 */
+#define SWITCH2                 (P21_6)  /* yaw 零点重置：静止安全态下边沿触发 Yaw_ResetZero，成功翻转 LED1 */
 
 #define LEG_DEBUG_MODE          (0)   // 0:正常模式(五连杆解算)  1:腿部调试模式(VOFA串口控制pwm)
 #define GNSS_MODULE_ENABLE      (1)   // 0:关闭GPS初始化      1:开启TAU1201 GPS初始化
