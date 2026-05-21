@@ -33,7 +33,7 @@
 #define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
 #define Nag_Speed_To_Mileage_Scale 0.37f  //速度单位到 cm/s 的换算系数，需标定
 #define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
-#define Nag_Reissue_Error 3.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
+#define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 /* 速度调试旁路：
  * 1. 置 1 后，即使导航未进入回放态，也允许速度环直接使用 motor_user_speed_cmd；
  * 2. 仅用于直道阶跃调 PID，比赛/正式回放前务必改回 0；
@@ -65,8 +65,9 @@
 /* 元素调速总开关与距离换算：
  * 1. 提前加/减速距离均以 cm 配置，运行时由 Nag_DistanceToPoints() 按 Nag_Set_mileage 换算成导航点数；
  * 2. 实际比较仍使用 enter_index - Run_index 这类索引差，标定时只需关心物理距离；
- * 3. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
- * 4. 调试建议观察 VOFA 组 9：speed_target_effective / car_speed / Run_index / Event_Active_Type（菜单 n 切组）。
+ * 3. 元素前预减速、元素后预加速：进入 PreDecel / PreAccel 距离窗口后立即设为目标速度（非线性渐变）；
+ * 4. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
+ * 5. 调试建议观察 VOFA 组 9：speed_target_effective / car_speed / Run_index / Event_Active_Type（菜单 n 切组）。
  */
 #define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
 

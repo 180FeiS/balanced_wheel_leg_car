@@ -521,20 +521,6 @@ static uint16 Nag_DistanceToPoints(float distance_cm)
     return points;
 }
 
-/* 按线性比例在 start/end 之间插值，ratio=0 取 end，ratio=1 取 start。 */
-static float Nag_LerpSpeedByRatio(float start_speed, float end_speed, float ratio)
-{
-    if (ratio <= 0.0f)
-    {
-        return end_speed;
-    }
-    if (ratio >= 1.0f)
-    {
-        return start_speed;
-    }
-    return end_speed + (start_speed - end_speed) * ratio;
-}
-
 /* 事件调速配置：target_speed=元素目标速度；pre_decel/pre_accel 为 cm，0 表示关闭。 */
 static bool Nag_GetEventSpeedProfileConfig(uint8 event_type,
                                            float *target_speed,
@@ -793,7 +779,7 @@ static float Nag_ClampSpeedCap(float nav_speed, float cap)
     return nav_speed;
 }
 
-/* 锥桶区段调速：入口预减速、区间内维持、出口前预加速恢复。 */
+/* 锥桶区段调速：入口预减速、区间内维持、出口预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyConeZoneSpeed(float nav_speed)
 {
     uint16 enter_index = 0;
@@ -806,7 +792,6 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
     uint8 enter_evt = 0xFFu;
     float cone_target = Nag_EnterCones_Target_Speed;
     float recovery_speed = 0.0f;
-    float ratio = 0.0f;
 
     pre_decel_points = Nag_DistanceToPoints(Nag_EnterCones_PreDecel_Dist_cm);
     pre_accel_points = Nag_DistanceToPoints(Nag_ExitCones_PreAccel_Dist_cm);
@@ -818,7 +803,7 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
 
     if (!Nag_GetActiveConeZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
     {
-        /* 尚未进入锥桶区：检查前方 ENTER_CONES 预减速。 */
+        /* 尚未进入锥桶区：进入预减速距离后立即限速到锥桶目标速度。 */
         enter_evt = Nag_FindNextEventOfType(N.Run_index,
                                             NAG_EVENT_TYPE_ENTER_CONES,
                                             &dist_to_enter);
@@ -827,8 +812,7 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
             return nav_speed;
         }
 
-        ratio = (float)dist_to_enter / (float)pre_decel_points;
-        return Nag_LerpSpeedByRatio(nav_speed, cone_target, ratio);
+        return Nag_ClampSpeedCap(nav_speed, cone_target);
     }
 
     if (N.Run_index < enter_index)
@@ -836,15 +820,9 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
         return nav_speed;
     }
 
-    /* 已过出口：在 pre_accel 窗口内从 recovery 线性恢复到 nav_speed。 */
+    /* 已过出口：立即恢复到 nav_speed。 */
     if (exit_index != 0xFFFFu && N.Run_index >= exit_index)
     {
-        uint16 since_exit = (uint16)(N.Run_index - exit_index);
-        if (pre_accel_points > 0u && since_exit <= pre_accel_points)
-        {
-            ratio = (float)since_exit / (float)pre_accel_points;
-            return Nag_LerpSpeedByRatio(nav_speed, recovery_speed, ratio);
-        }
         return nav_speed;
     }
 
@@ -856,44 +834,40 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
 
     dist_to_exit = (uint16)(exit_index - N.Run_index);
 
-    /* 出口前 pre_accel 窗口：从锥桶速度线性恢复到 recovery_speed。 */
+    /* 出口前 pre_accel 窗口：进入距离后立即恢复到 recovery_speed。 */
     if (pre_accel_points > 0u && dist_to_exit <= pre_accel_points)
     {
-        ratio = (float)dist_to_exit / (float)pre_accel_points;
-        return Nag_LerpSpeedByRatio(recovery_speed, cone_target, ratio);
+        return recovery_speed;
     }
 
     /* 锥桶区间内：维持锥桶目标速度。 */
     return Nag_ClampSpeedCap(nav_speed, cone_target);
 }
 
-/* 非锥桶元素：元素前预减速 + 元素后预加速恢复。 */
+/* 非锥桶元素：元素前预减速 + 元素后预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyGenericEventSpeed(float nav_speed)
 {
     uint16 dist_points = 0;
     uint16 pre_decel_points = 0u;
     uint16 pre_accel_points = 0u;
-    uint16 dist_since_pass = 0;
     uint8 next_event = 0xFFu;
     uint8 passed_event = 0xFFu;
     float target_speed = 0.0f;
     float pre_decel_dist = 0.0f;
     float pre_accel_dist = 0.0f;
     float adjusted = nav_speed;
-    float ratio = 0.0f;
 
-    /* 元素后预加速：从元素目标速度恢复到 nav_speed。 */
+    /* 元素后预加速：进入 pre_accel 窗口后立即恢复到 nav_speed。 */
     passed_event = Nag_FindRecentPassedEventForPostAccel(N.Run_index,
-                                                         &dist_since_pass,
+                                                         NULL,
                                                          &target_speed,
                                                          &pre_accel_points);
     if (passed_event != 0xFFu && pre_accel_points > 0u && target_speed >= 0.0f)
     {
-        ratio = (float)dist_since_pass / (float)pre_accel_points;
-        adjusted = Nag_LerpSpeedByRatio(nav_speed, target_speed, ratio);
+        adjusted = nav_speed;
     }
 
-    /* 元素前预减速：线性拉到目标速度。 */
+    /* 元素前预减速：进入 pre_decel 窗口后立即设为目标速度。 */
     next_event = Nag_FindNextEventAhead(N.Run_index, &dist_points);
     if (next_event == 0xFFu || next_event >= N.Event_Count)
     {
@@ -929,9 +903,7 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
         return adjusted;
     }
 
-    ratio = (float)dist_points / (float)pre_decel_points;
-    return Nag_ClampSpeedCap(adjusted,
-                             Nag_LerpSpeedByRatio(adjusted, target_speed, ratio));
+    return Nag_ClampSpeedCap(adjusted, target_speed);
 }
 
 /* 统一事件调速入口：锥桶区段优先，再叠加通用元素前/后调速。 */
