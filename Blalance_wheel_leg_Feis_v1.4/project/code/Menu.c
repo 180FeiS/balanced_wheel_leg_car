@@ -107,15 +107,18 @@ static uint8 MenuIsNavDebugPage(void);
 static uint8 MenuIsGpsDebugPage(void);
 static uint8 MenuIsRunLaunchSpeedPage(void);
 static uint8 MenuIsRunFlashPage(void);
-static void MenuApplyRunLaunchSpeed(float speed);
-static void MenuAdjustRunLaunchSpeed(float delta);
+static void MenuAdjustRunLaunchParam(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
 
-/* 发车速度页三档设定值。KEY1 在 0/500/1000 三档间循环，KEY2/KEY3 只调整当前下标对应的档位。 */
-static float s_run_launch_speed_presets[3] = {0.0f, 500.0f, 1000.0f};
-static uint8 s_run_launch_speed_preset_index = 0u;
+/* Launch 页：KEY1 循环选中字段；KEY2/KEY3 按速度±100、距离±10 调节。 */
+static uint8 s_run_launch_field_index = 0u;
+
+uint8 Menu_GetRunLaunchFieldIndex(void)
+{
+    return s_run_launch_field_index;
+}
 
 /*-------------------------------------------------------------------------
  * 菜单接口函数-用户只需更改此部分
@@ -164,7 +167,7 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 
 /*-------------------------------------------------------------------------
  * 拨码与速度基准（须周期性调用，如 selectMenu_Key / selectMenu 内）：
- * 1. SWITCH2：边沿触发 motor_poll_switch2_speed_baseline()，在安全态下执行 yaw 零点重置（当前朝向变为 0），成功翻转 LED1。
+ * 1. SWITCH2：边沿触发 motor_poll_switch2_speed_baseline()，任意时刻执行 yaw 零点重置（当前朝向变为 0），成功翻转 LED1。
  * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
  * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
  * 4. Motor_Runaway_Latch：最高优先级关电机；遥控优先关闭时须 SWITCH1 到 OFF 后才清除锁存。
@@ -520,46 +523,41 @@ static uint8 MenuIsRunFlashPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.2") == 0);
 }
 
-/* 应用发车速度设定值：只写 run_launch_speed，不直接写 motor_user_speed_cmd。
- * 真正运行速度仍由惯导回放进入执行态前统一装载。
- */
-static void MenuApplyRunLaunchSpeed(float speed)
+static void MenuAdjustRunLaunchParam(float delta)
 {
 #if defined(CY_CORE_CM7_1)
-    (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS, 0, speed);
+    (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_LAUNCH_PARAM_DELTA,
+                               (uint32)s_run_launch_field_index, delta);
 #else
-    run_launch_speed = speed;
+    Nag_LaunchParamAdjust(s_run_launch_field_index, delta);
 #endif
 }
 
-/* 调整当前三档里的选中档位，并立即同步到 run_launch_speed 设定值。 */
-static void MenuAdjustRunLaunchSpeed(float delta)
-{
-    s_run_launch_speed_presets[s_run_launch_speed_preset_index] += delta;
-    MenuApplyRunLaunchSpeed(s_run_launch_speed_presets[s_run_launch_speed_preset_index]);
-}
-
-/* 返回 1 表示 KEY1/2/3 已被发车速度页消费，必须避免再进入 MenuKeyEventPush 导航队列。 */
+/* 返回 1 表示 KEY1/2/3 已被 Launch 页消费；KEY4 仍走通用返回。 */
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
 {
+    float step = 0.0f;
+
     if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
     {
-        s_run_launch_speed_preset_index = (uint8)((s_run_launch_speed_preset_index + 1u) % 3u);
-        MenuApplyRunLaunchSpeed(s_run_launch_speed_presets[s_run_launch_speed_preset_index]);
+        s_run_launch_field_index =
+            (uint8)((s_run_launch_field_index + 1u) % Nag_Run_Launch_Param_Count);
         gpio_toggle_level(LED1);
         key_clear_state(KEY_1);
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
     {
-        MenuAdjustRunLaunchSpeed(-100.0f);
+        step = Nag_LaunchParamIsSpeed(s_run_launch_field_index) ? 100.0f : 10.0f;
+        MenuAdjustRunLaunchParam(step);
         gpio_toggle_level(LED1);
         key_clear_state(KEY_2);
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
     {
-        MenuAdjustRunLaunchSpeed(100.0f);
+        step = Nag_LaunchParamIsSpeed(s_run_launch_field_index) ? -100.0f : -10.0f;
+        MenuAdjustRunLaunchParam(step);
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
         return 1u;

@@ -1,5 +1,4 @@
 #include "zf_common_headfile.h"
-#include "my_gps.h"
 
 ins_struct ins;  //惯性导航结构体
 double TempLat_Now=0,TempLon_Now=0;     // 二维坐标系下的实时位置
@@ -58,7 +57,7 @@ float leg_long = 3.5f;
  * - run_launch_speed：发车速度设定值；串口 V、菜单/Run、双核调速命令只改这个值；
  * - motor_user_speed_cmd：运行中的用户速度基准；只有惯导回放进入执行态时从 run_launch_speed 装载，
  *   LORA 遥控和导航元素临时接管等实时路径仍可直接写入；
- * - motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发 yaw 零点重置（须静止安全态）；成功时翻转 LED1。
+ * - motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发 yaw 零点重置（任意时刻）；成功时翻转 LED1。
  * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 更新发车速度设定值；
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
@@ -467,55 +466,7 @@ void steer_task_stop(void)
     steer_finish(0);
 }
 
-/* SWITCH2 yaw 零点重置：须静止、电机关、导航/GPS 未运行；成功时翻转 LED1 反馈 */
-#define SWITCH2_YAW_RESET_SPEED_MAX     (5.0f)
-#define SWITCH2_YAW_RESET_GYRO_Z_MAX    (0.05f) /* rad/s，约 2.9°/s */
-
-static uint8 switch2_yaw_reset_is_allowed(void)
-{
-    if (Motor_Switch != MOTOR_OFF)
-    {
-        return 0u;
-    }
-    if (fabsf(car_speed) > SWITCH2_YAW_RESET_SPEED_MAX)
-    {
-        return 0u;
-    }
-    if (N.Nag_SystemRun_Index != 0u)
-    {
-        return 0u;
-    }
-    if (N.Event_Active != 0u)
-    {
-        return 0u;
-    }
-    if (N.Nag_Stop_f != 0u)
-    {
-        return 0u;
-    }
-    if (nav_heading_mode == NAV_HEADING_MODE_GPS)
-    {
-        return 0u;
-    }
-    if (gps_nav_state != GPS_NAV_STATE_IDLE)
-    {
-        return 0u;
-    }
-    if (steer_enable != 0u || spin_enable != 0u)
-    {
-        return 0u;
-    }
-    if (jump_flag != 0u)
-    {
-        return 0u;
-    }
-    if (fabsf(imu_data.gyro_z) > SWITCH2_YAW_RESET_GYRO_Z_MAX)
-    {
-        return 0u;
-    }
-    return 1u;
-}
-
+/* SWITCH2 yaw 零点重置：任意时刻边沿触发；成功时翻转 LED1 反馈 */
 static void control_yaw_soft_reset_sync(void)
 {
     steer_yaw_request_pending = 0u;
@@ -550,11 +501,6 @@ void motor_poll_switch2_speed_baseline(void)
         return;
     }
     s_switch2_prev = sw2_now;
-
-    if (switch2_yaw_reset_is_allowed() == 0u)
-    {
-        return;
-    }
 
     Yaw_ResetZero();
     control_yaw_soft_reset_sync();

@@ -105,6 +105,7 @@ float Yaw_GetZeroOffsetDeg(void)
   return yaw_zero_offset_deg;
 }
 
+/* 将当前原始 yaw 记为新零点；可在运行中随时调用（如 SWITCH2 边沿触发） */
 void Yaw_ResetZero(void)
 {
   yaw_zero_offset_deg = yaw_raw_deg;

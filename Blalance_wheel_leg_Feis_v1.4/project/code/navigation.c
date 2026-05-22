@@ -17,6 +17,82 @@ uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
 
+/* Launch 页可调：无元素速度仍用 control.c 的 run_launch_speed */
+float nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
+float nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
+float nag_turnaround_target_speed = Nag_Turnaround_Target_Speed_Default;
+float nag_turnaround_pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm_Default;
+float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
+float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+
+void Nag_LaunchParamApplyDefaults(void)
+{
+    nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
+    nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
+    nag_turnaround_target_speed = Nag_Turnaround_Target_Speed_Default;
+    nag_turnaround_pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm_Default;
+    nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
+    nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+}
+
+float Nag_LaunchParamGet(uint8 field_index)
+{
+    switch (field_index)
+    {
+    case Nag_Launch_Field_Base_Spd:
+        return run_launch_speed;
+    case Nag_Launch_Field_Spin_Spd:
+        return nag_spin_target_speed;
+    case Nag_Launch_Field_Spin_Dec:
+        return nag_spin_pre_decel_dist_cm;
+    case Nag_Launch_Field_Turn_Spd:
+        return nag_turnaround_target_speed;
+    case Nag_Launch_Field_Turn_Dec:
+        return nag_turnaround_pre_decel_dist_cm;
+    case Nag_Launch_Field_Cone_Spd:
+        return nag_enter_cones_target_speed;
+    case Nag_Launch_Field_Cone_Dec:
+        return nag_enter_cones_pre_decel_dist_cm;
+    default:
+        return 0.0f;
+    }
+}
+
+void Nag_LaunchParamSet(uint8 field_index, float value)
+{
+    switch (field_index)
+    {
+    case Nag_Launch_Field_Base_Spd:
+        run_launch_speed = value;
+        break;
+    case Nag_Launch_Field_Spin_Spd:
+        nag_spin_target_speed = value;
+        break;
+    case Nag_Launch_Field_Spin_Dec:
+        nag_spin_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_Turn_Spd:
+        nag_turnaround_target_speed = value;
+        break;
+    case Nag_Launch_Field_Turn_Dec:
+        nag_turnaround_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_Cone_Spd:
+        nag_enter_cones_target_speed = value;
+        break;
+    case Nag_Launch_Field_Cone_Dec:
+        nag_enter_cones_pre_decel_dist_cm = value;
+        break;
+    default:
+        break;
+    }
+}
+
+void Nag_LaunchParamAdjust(uint8 field_index, float delta)
+{
+    Nag_LaunchParamSet(field_index, Nag_LaunchParamGet(field_index) + delta);
+}
+
 static bool Nag_GetHeadingHoldConfig(uint8 event_type)
 {
     switch (event_type)
@@ -539,18 +615,18 @@ static bool Nag_GetEventSpeedProfileConfig(uint8 event_type,
     switch (event_type)
     {
         case NAG_EVENT_TYPE_SPIN:
-            *target_speed = Nag_Spin_Target_Speed;
-            *pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm;
+            *target_speed = nag_spin_target_speed;
+            *pre_decel_dist_cm = nag_spin_pre_decel_dist_cm;
             *pre_accel_dist_cm = Nag_Spin_PreAccel_Dist_cm;
             return true;
         case NAG_EVENT_TYPE_TURNAROUND:
-            *target_speed = Nag_Turnaround_Target_Speed;
-            *pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm;
+            *target_speed = nag_turnaround_target_speed;
+            *pre_decel_dist_cm = nag_turnaround_pre_decel_dist_cm;
             *pre_accel_dist_cm = Nag_Turnaround_PreAccel_Dist_cm;
             return true;
         case NAG_EVENT_TYPE_ENTER_CONES:
-            *target_speed = Nag_EnterCones_Target_Speed;
-            *pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm;
+            *target_speed = nag_enter_cones_target_speed;
+            *pre_decel_dist_cm = nag_enter_cones_pre_decel_dist_cm;
             *pre_accel_dist_cm = 0.0f;
             return true;
         case NAG_EVENT_TYPE_EXIT_CONES:
@@ -790,10 +866,10 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
     uint16 pre_decel_points = 0u;
     uint16 pre_accel_points = 0u;
     uint8 enter_evt = 0xFFu;
-    float cone_target = Nag_EnterCones_Target_Speed;
+    float cone_target = nag_enter_cones_target_speed;
     float recovery_speed = 0.0f;
 
-    pre_decel_points = Nag_DistanceToPoints(Nag_EnterCones_PreDecel_Dist_cm);
+    pre_decel_points = Nag_DistanceToPoints(nag_enter_cones_pre_decel_dist_cm);
     pre_accel_points = Nag_DistanceToPoints(Nag_ExitCones_PreAccel_Dist_cm);
     recovery_speed = Nag_ExitCones_Recovery_Speed;
     if (recovery_speed <= 0.0f)

@@ -41,8 +41,9 @@ typedef enum
   DUALCORE_UI_CMD_KEY_NAV_RECORD = 15,
   DUALCORE_UI_CMD_KEY_NAV_STOP_REC = 16,
   DUALCORE_UI_CMD_KEY_NAV_KEY3 = 17,
-  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS = 18, /* 菜单发车速度页专用：只更新 run_launch_speed，不立即改变运行速度 */
-  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH = 19, /* Run/Flash 菜单专用：保存 run_launch_speed 到独立 flash 参数页 */
+  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS = 18, /* 菜单 Launch 页：arg_u32=字段索引，arg_f32=绝对值 */
+  DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH = 19, /* Run/Save 菜单：保存全部 Launch 参数到 flash 页 47 */
+  DUALCORE_UI_CMD_RUN_LAUNCH_PARAM_DELTA = 26, /* Launch 页：arg_u32=字段索引，arg_f32=增量 */
   DUALCORE_UI_CMD_GPS_SAVE_POINT = 20,
   DUALCORE_UI_CMD_GPS_CYCLE_ELEMENT = 21,
   DUALCORE_UI_CMD_GPS_SAVE_FLASH = 22,
@@ -75,7 +76,13 @@ typedef struct
   uint32 save_index;
   uint32 flash_page_index;
   float motor_user_speed_cmd;
-  float run_launch_speed; /* 发车速度设定值，仅惯导回放进入执行态时装载 */
+  float run_launch_speed; /* 无元素速度，仅惯导回放进入执行态时装载到 motor_user_speed_cmd */
+  float nag_spin_target_speed;
+  float nag_spin_pre_decel_dist_cm;
+  float nag_turnaround_target_speed;
+  float nag_turnaround_pre_decel_dist_cm;
+  float nag_enter_cones_target_speed;
+  float nag_enter_cones_pre_decel_dist_cm;
   float speed_target_effective;
   uint8 spin_enable;
   uint8 spin_done;

@@ -67,6 +67,12 @@ void dualcore_ctrl_to_ui_publish(void)
   c->flash_page_index = (uint32)N.Flash_page_index;
   c->motor_user_speed_cmd = motor_user_speed_cmd;
   c->run_launch_speed = run_launch_speed;
+  c->nag_spin_target_speed = nag_spin_target_speed;
+  c->nag_spin_pre_decel_dist_cm = nag_spin_pre_decel_dist_cm;
+  c->nag_turnaround_target_speed = nag_turnaround_target_speed;
+  c->nag_turnaround_pre_decel_dist_cm = nag_turnaround_pre_decel_dist_cm;
+  c->nag_enter_cones_target_speed = nag_enter_cones_target_speed;
+  c->nag_enter_cones_pre_decel_dist_cm = nag_enter_cones_pre_decel_dist_cm;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
   c->spin_done = spin_done;
@@ -208,12 +214,19 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     motor_user_speed_cmd_set_from_pc(s->arg_f32);
     break;
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SET_ABS:
-    /* 菜单发车速度页专用命令：只更新发车设定值，不代表 PC 协议，也不立即写 motor_user_speed_cmd。 */
-    run_launch_speed = s->arg_f32;
+    if (s->arg_u32 < Nag_Run_Launch_Param_Count)
+    {
+      Nag_LaunchParamSet((uint8)s->arg_u32, s->arg_f32);
+    }
     break;
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH:
-    /* Run/Flash 菜单专用命令：持久化发车设定值，不修改运行中的 motor_user_speed_cmd。 */
     flash_RunLaunchSpeed_Write();
+    break;
+  case DUALCORE_UI_CMD_RUN_LAUNCH_PARAM_DELTA:
+    if (s->arg_u32 < Nag_Run_Launch_Param_Count)
+    {
+      Nag_LaunchParamAdjust((uint8)s->arg_u32, s->arg_f32);
+    }
     break;
   case DUALCORE_UI_CMD_GPS_SAVE_POINT:
     (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);

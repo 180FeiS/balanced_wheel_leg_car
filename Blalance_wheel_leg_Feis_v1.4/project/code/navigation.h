@@ -71,19 +71,23 @@
  */
 #define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
 
-/* SPIN：自旋元素目标速度与提前加/减速距离（cm） */
-#define Nag_Spin_Target_Speed 1.0f           // 自旋元素目标速度（与 motor_user_speed_cmd 同单位）
-#define Nag_Spin_PreDecel_Dist_cm 150.0f        // 进入自旋点前提前减速距离（原 20 点 × 2cm）
-#define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离
+/* SPIN / TURNAROUND / ENTER_CONES：Launch 页可调的运行时参数（默认值见 *_DEFAULT） */
+#define Nag_Spin_Target_Speed_Default 1.0f
+#define Nag_Spin_PreDecel_Dist_cm_Default 150.0f
+extern float nag_spin_target_speed;
+extern float nag_spin_pre_decel_dist_cm;
+#define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离（Launch 页不调节）
 
-/* TURNAROUND：折返元素目标速度与提前加/减速距离（cm） */
-#define Nag_Turnaround_Target_Speed 220.0f     // 折返元素目标速度
-#define Nag_Turnaround_PreDecel_Dist_cm 0.0f    // 0=关闭提前减速
-#define Nag_Turnaround_PreAccel_Dist_cm 30.0f   // 折返完成后恢复速度的提前加速距离
+#define Nag_Turnaround_Target_Speed_Default 220.0f
+#define Nag_Turnaround_PreDecel_Dist_cm_Default 0.0f
+extern float nag_turnaround_target_speed;
+extern float nag_turnaround_pre_decel_dist_cm;
+#define Nag_Turnaround_PreAccel_Dist_cm 0.0f   // 折返完成后恢复速度的提前加速距离（Launch 页不调节）
 
-/* ENTER_CONES：锥桶入口目标速度与提前减速距离（cm） */
-#define Nag_EnterCones_Target_Speed 500.0f     // 锥桶区间内维持的目标速度
-#define Nag_EnterCones_PreDecel_Dist_cm 50.0f   // 接近锥桶入口前的提前减速距离
+#define Nag_EnterCones_Target_Speed_Default 1000.0f
+#define Nag_EnterCones_PreDecel_Dist_cm_Default 50.0f
+extern float nag_enter_cones_target_speed;
+extern float nag_enter_cones_pre_decel_dist_cm;
 
 /* EXIT_CONES：锥桶出口恢复速度与提前加速距离（cm） */
 #define Nag_ExitCones_Recovery_Speed 0.0f       // 0=恢复到基础导航速度；>0 则恢复到该固定速度
@@ -108,14 +112,37 @@
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
 #define Nag_Event_Version 2u            // v2：锥桶进/出口类型；单点录制时 enter==exit，旧双点录制 exit>enter 仍兼容
 
-/* Run 发车速度参数页：
- * 1. yaw 轨迹仍放在页 2~45；
- * 2. 元素表固定使用页 46；
- * 3. 页 47 只保存 run_launch_speed 设定值，不保存运行中的 motor_user_speed_cmd。
+/* Run Launch 参数页（页 47）：
+ * v1：仅 run_launch_speed；v2：无元素速度 + 各元素目标速度 + 提前减速距离。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
-#define Nag_Run_Launch_Speed_Version 1u
+#define Nag_Run_Launch_Speed_Version 1u          /* 旧版：仅 speed */
+#define Nag_Run_Launch_Params_Version 2u         /* 新版：7 个 float */
+#define Nag_Run_Launch_Param_Count 7u
+
+/* Launch 页字段索引（与 flash 顺序一致） */
+#define Nag_Launch_Field_Base_Spd 0u
+#define Nag_Launch_Field_Spin_Spd 1u
+#define Nag_Launch_Field_Spin_Dec 2u
+#define Nag_Launch_Field_Turn_Spd 3u
+#define Nag_Launch_Field_Turn_Dec 4u
+#define Nag_Launch_Field_Cone_Spd 5u
+#define Nag_Launch_Field_Cone_Dec 6u
+
+float Nag_LaunchParamGet(uint8 field_index);
+void Nag_LaunchParamSet(uint8 field_index, float value);
+void Nag_LaunchParamAdjust(uint8 field_index, float delta);
+void Nag_LaunchParamApplyDefaults(void);
+
+/* CM7_1 不链接 navigation.c，Launch 菜单步进判断放头文件内联 */
+static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
+{
+    return (uint8)((field_index == Nag_Launch_Field_Base_Spd) ||
+                   (field_index == Nag_Launch_Field_Spin_Spd) ||
+                   (field_index == Nag_Launch_Field_Turn_Spd) ||
+                   (field_index == Nag_Launch_Field_Cone_Spd));
+}
 
 /* 自转元素示范参数：
  * 这组参数只是给默认的 Nag_Hook_Spin_* 一个“能跑通模板”的最小接法，

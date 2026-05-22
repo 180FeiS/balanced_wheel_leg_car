@@ -19,6 +19,40 @@ static uint32 flash_RunLaunchSpeedChecksum(uint32 speed_raw)
     return Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Speed_Version ^ speed_raw;
 }
 
+static void flash_RunLaunchParamsPack(void)
+{
+    flash_union_buffer[3].float_type = run_launch_speed;
+    flash_union_buffer[4].float_type = nag_spin_target_speed;
+    flash_union_buffer[5].float_type = nag_spin_pre_decel_dist_cm;
+    flash_union_buffer[6].float_type = nag_turnaround_target_speed;
+    flash_union_buffer[7].float_type = nag_turnaround_pre_decel_dist_cm;
+    flash_union_buffer[8].float_type = nag_enter_cones_target_speed;
+    flash_union_buffer[9].float_type = nag_enter_cones_pre_decel_dist_cm;
+}
+
+static uint32 flash_RunLaunchParamsChecksum(void)
+{
+    uint32 checksum = Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Params_Version;
+    uint8 index = 0u;
+
+    for (index = 0u; index < Nag_Run_Launch_Param_Count; index++)
+    {
+        checksum ^= flash_union_buffer[3u + index].uint32_type;
+    }
+    return checksum;
+}
+
+static void flash_RunLaunchParamsUnpack(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_turnaround_target_speed = flash_union_buffer[6].float_type;
+    nag_turnaround_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[8].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[9].float_type;
+}
+
 static void flash_Gps_DoubleToWords(double value, uint32 *word0, uint32 *word1)
 {
     uint32 raw[2] = {0};
@@ -172,16 +206,14 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run 发车速度设定值：
- * 这里只持久化 run_launch_speed，真正运行速度 motor_user_speed_cmd 仍由惯导回放进入执行态前统一装载。
- */
+/* 保存 Run Launch 参数（无元素速度 + 元素目标速度 + 提前减速距离）。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Speed_Version;
-    flash_union_buffer[3].float_type = run_launch_speed;
-    flash_union_buffer[2].uint32_type = flash_RunLaunchSpeedChecksum(flash_union_buffer[3].uint32_type);
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version;
+    flash_RunLaunchParamsPack();
+    flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
     if (flash_check(0, Nag_Run_Launch_Speed_Page))
     {
@@ -211,9 +243,19 @@ void flash_RunLaunchSpeed_Read(void)
     speed_checksum = flash_union_buffer[2].uint32_type;
     speed_raw = flash_union_buffer[3].uint32_type;
 
-    if ((speed_magic == Nag_Run_Launch_Speed_Magic) &&
-        (speed_version == Nag_Run_Launch_Speed_Version) &&
-        (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))
+    if (speed_magic != Nag_Run_Launch_Speed_Magic)
+    {
+        flash_buffer_clear();
+        return;
+    }
+
+    if ((speed_version == Nag_Run_Launch_Params_Version) &&
+        (speed_checksum == flash_RunLaunchParamsChecksum()))
+    {
+        flash_RunLaunchParamsUnpack();
+    }
+    else if ((speed_version == Nag_Run_Launch_Speed_Version) &&
+             (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))
     {
         run_launch_speed = flash_union_buffer[3].float_type;
     }

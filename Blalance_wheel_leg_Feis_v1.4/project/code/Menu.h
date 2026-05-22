@@ -97,4 +97,7 @@ extern void dip_switch_motor_sync_from_hw(void);
 /* 串口多字节扩展帧 V<数值>（由 ReadDataFromPc 在写入 Menu_command 前调用）。返回 1 表示已整帧消费。 */
 extern uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count);
 
+/* Run -> Launch 三级页当前选中的参数字段索引（0..Nag_Run_Launch_Param_Count-1） */
+extern uint8 Menu_GetRunLaunchFieldIndex(void);
+
 #endif /* CODE_LOGIC_MENU_H_ */

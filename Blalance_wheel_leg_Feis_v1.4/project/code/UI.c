@@ -738,7 +738,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     GUI_Display_Level2_Common3();
 
     ips200_show_string(80, ROW_8, " Launch ");
-    ips200_show_string(80, ROW_10, " SaveSpd ");
+    ips200_show_string(80, ROW_10, " Save   ");
     ips200_show_string(80, ROW_12, " More   ");
 
     switch (selected_row_index)
@@ -757,7 +757,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     ips200_show_string(152, ay, "<--");
     if (selected_row_index == 1u)
     {
-        ips200_show_string(24, ROW_15, "KEY3: save speed");
+        ips200_show_string(24, ROW_15, "KEY3: save launch");
     }
 }
 
@@ -800,28 +800,77 @@ void ACT_3_3()
     ReadPos[4] = 0x00;
 }
 
-void GUI_3_1_1(void) // 发车速度三级页：KEY1 切 0/500/1000，KEY2/3 微调 run_launch_speed
+static float GUI_RunLaunchParamValue(uint8 field_index)
 {
-    GUI_Display_Level2_Common3();
-
-    ips200_show_string(56, ROW_3, "Launch Spd");
-    ips200_draw_line(24, ROW_5 - 1, 215, ROW_5 - 1, IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24, ROW_5, "KEY1: preset next");
-    ips200_show_string(24, ROW_6, "KEY2/3: -/+100");
-    ips200_show_string(24, ROW_7, "KEY4: back");
-
-    ips200_draw_line(24, ROW_9, 215, ROW_9, IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24, ROW_10, "Launch:");
 #if defined(CY_CORE_CM7_1)
-    ips200_show_float(96, ROW_10, (double)s_ui_dc.run_launch_speed, 5, 1);
+    switch (field_index)
+    {
+    case Nag_Launch_Field_Base_Spd:
+        return s_ui_dc.run_launch_speed;
+    case Nag_Launch_Field_Spin_Spd:
+        return s_ui_dc.nag_spin_target_speed;
+    case Nag_Launch_Field_Spin_Dec:
+        return s_ui_dc.nag_spin_pre_decel_dist_cm;
+    case Nag_Launch_Field_Turn_Spd:
+        return s_ui_dc.nag_turnaround_target_speed;
+    case Nag_Launch_Field_Turn_Dec:
+        return s_ui_dc.nag_turnaround_pre_decel_dist_cm;
+    case Nag_Launch_Field_Cone_Spd:
+        return s_ui_dc.nag_enter_cones_target_speed;
+    case Nag_Launch_Field_Cone_Dec:
+        return s_ui_dc.nag_enter_cones_pre_decel_dist_cm;
+    default:
+        return 0.0f;
+    }
 #else
-    ips200_show_float(96, ROW_10, (double)run_launch_speed, 5, 1);
+    return Nag_LaunchParamGet(field_index);
 #endif
+}
 
-    ips200_show_string(24, ROW_14, "Preset: 0/500/1000");
-    ips200_show_string(24, ROW_15, "LED1 blink on key Short");
+void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
+{
+    static const char *const labels[Nag_Run_Launch_Param_Count] =
+    {
+        "BaseSpd", "SpinSpd", "SpinDec", "TurnSpd", "TurnDec", "ConeSpd", "ConeDec"
+    };
+    static const int16 rows[Nag_Run_Launch_Param_Count] =
+    {
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10
+    };
+    uint8 field_index = 0u;
+    uint8 selected = Menu_GetRunLaunchFieldIndex();
+
+    GUI_Display_Level2_Common3();
+    ips200_show_string(56, ROW_3, "Launch");
+    ips200_draw_line(16, ROW_11, 223, ROW_11, IPS200_DEFAULT_PENCOLOR);
+
+    for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
+    {
+        float value = GUI_RunLaunchParamValue(field_index);
+
+        /* 每帧全页重绘时须擦除旧箭头，否则 KEY1 切换后上一行 "->" 仍残留 */
+        if (selected == field_index)
+        {
+            ips200_show_string(0, rows[field_index], "->");
+        }
+        else
+        {
+            ips200_show_string(0, rows[field_index], "  ");
+        }
+        ips200_show_string(16, rows[field_index], labels[field_index]);
+        /* ips200_show_float 要求 pointnum 为 1~6，不可为 0 */
+        if (Nag_LaunchParamIsSpeed(field_index))
+        {
+            ips200_show_float(96, rows[field_index], (double)value, 5, 1);
+        }
+        else
+        {
+            ips200_show_int(96, rows[field_index], (int32)value, 4);
+        }
+    }
+
+    ips200_show_string(8, ROW_12, "K1:nxt K2:+ K3:- K4:bk");
+    /* ROW_13~ROW_14 预留后续扩展变量 */
 }
 
 void ACT_3_1_1()
