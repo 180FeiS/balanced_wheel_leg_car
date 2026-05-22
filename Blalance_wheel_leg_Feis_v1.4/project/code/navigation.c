@@ -20,8 +20,10 @@ uint8 Nag_Vofa_Group = 0;
 /* Launch 页可调：无元素速度仍用 control.c 的 run_launch_speed */
 float nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
 float nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
-float nag_turnaround_target_speed = Nag_Turnaround_Target_Speed_Default;
-float nag_turnaround_pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm_Default;
+float nag_enter_turn_target_speed = Nag_EnterTurn_Target_Speed_Default;
+float nag_enter_turn_pre_decel_dist_cm = Nag_EnterTurn_PreDecel_Dist_cm_Default;
+float nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
+float nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
 float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
 float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
 
@@ -29,8 +31,10 @@ void Nag_LaunchParamApplyDefaults(void)
 {
     nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
     nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
-    nag_turnaround_target_speed = Nag_Turnaround_Target_Speed_Default;
-    nag_turnaround_pre_decel_dist_cm = Nag_Turnaround_PreDecel_Dist_cm_Default;
+    nag_enter_turn_target_speed = Nag_EnterTurn_Target_Speed_Default;
+    nag_enter_turn_pre_decel_dist_cm = Nag_EnterTurn_PreDecel_Dist_cm_Default;
+    nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
+    nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
     nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
 }
@@ -45,10 +49,14 @@ float Nag_LaunchParamGet(uint8 field_index)
         return nag_spin_target_speed;
     case Nag_Launch_Field_Spin_Dec:
         return nag_spin_pre_decel_dist_cm;
-    case Nag_Launch_Field_Turn_Spd:
-        return nag_turnaround_target_speed;
-    case Nag_Launch_Field_Turn_Dec:
-        return nag_turnaround_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnIn_Spd:
+        return nag_enter_turn_target_speed;
+    case Nag_Launch_Field_TurnIn_Dec:
+        return nag_enter_turn_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnOut_Spd:
+        return nag_exit_turn_recovery_speed;
+    case Nag_Launch_Field_TurnOut_Acc:
+        return nag_exit_turn_pre_accel_dist_cm;
     case Nag_Launch_Field_Cone_Spd:
         return nag_enter_cones_target_speed;
     case Nag_Launch_Field_Cone_Dec:
@@ -71,11 +79,17 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
     case Nag_Launch_Field_Spin_Dec:
         nag_spin_pre_decel_dist_cm = value;
         break;
-    case Nag_Launch_Field_Turn_Spd:
-        nag_turnaround_target_speed = value;
+    case Nag_Launch_Field_TurnIn_Spd:
+        nag_enter_turn_target_speed = value;
         break;
-    case Nag_Launch_Field_Turn_Dec:
-        nag_turnaround_pre_decel_dist_cm = value;
+    case Nag_Launch_Field_TurnIn_Dec:
+        nag_enter_turn_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_TurnOut_Spd:
+        nag_exit_turn_recovery_speed = value;
+        break;
+    case Nag_Launch_Field_TurnOut_Acc:
+        nag_exit_turn_pre_accel_dist_cm = value;
         break;
     case Nag_Launch_Field_Cone_Spd:
         nag_enter_cones_target_speed = value;
@@ -98,7 +112,7 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
     switch (event_type)
     {
         case NAG_EVENT_TYPE_SPIN: return (Nag_HeadingHold_Spin_Enable != 0u);
-        case NAG_EVENT_TYPE_TURNAROUND: return (Nag_HeadingHold_Turnaround_Enable != 0u);
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return (Nag_HeadingHold_EnterTurn_Enable != 0u);
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
         case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
         case NAG_EVENT_TYPE_JUMP: return (Nag_HeadingHold_Jump_Enable != 0u);
@@ -171,11 +185,16 @@ static void Nag_Spin_RestoreSetSpeed(void)
  * 后续你只需要把对应元素的 Start/Run/IsDone/Stop 改成自己的逻辑即可。
  */
 
-/* 折返：占位不接 spin；与单边桥同属“未接入”模板，回放将停在 ENTERED。 */
-bool Nag_Hook_Turnaround_Start(void) { return false; }
-void Nag_Hook_Turnaround_Run(void) {}
-bool Nag_Hook_Turnaround_IsDone(void) { return false; }
-void Nag_Hook_Turnaround_Stop(void) {}
+/* 折返进/出口：单点路径标记；区段调速由 Nag_ApplyTurnaroundZoneSpeed() 处理。 */
+bool Nag_Hook_EnterTurn_Start(void) { return true; }
+void Nag_Hook_EnterTurn_Run(void) {}
+bool Nag_Hook_EnterTurn_IsDone(void) { return true; }
+void Nag_Hook_EnterTurn_Stop(void) {}
+
+bool Nag_Hook_ExitTurn_Start(void) { return true; }
+void Nag_Hook_ExitTurn_Run(void) {}
+bool Nag_Hook_ExitTurn_IsDone(void) { return true; }
+void Nag_Hook_ExitTurn_Stop(void) {}
 
 /* 自转元素接法：
  * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
@@ -296,7 +315,8 @@ bool Nag_Element_Start(uint8 event_type)
      */
     switch (event_type)
     {
-        case NAG_EVENT_TYPE_TURNAROUND: return Nag_Hook_Turnaround_Start();
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_Start();
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return Nag_Hook_ExitTurn_Start();
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_Start();
         case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_Start();
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
@@ -312,7 +332,8 @@ void Nag_Element_Run(uint8 event_type)
     /* 统一 Run 分发：元素处于 RUNNING 态时，每拍都会调到这里。 */
     switch (event_type)
     {
-        case NAG_EVENT_TYPE_TURNAROUND: Nag_Hook_Turnaround_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: Nag_Hook_EnterTurn_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: Nag_Hook_ExitTurn_Run(); break;
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Run(); break;
         case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Run(); break;
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
@@ -331,7 +352,8 @@ bool Nag_Element_IsDone(uint8 event_type)
      */
     switch (event_type)
     {
-        case NAG_EVENT_TYPE_TURNAROUND: return Nag_Hook_Turnaround_IsDone();
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_IsDone();
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return Nag_Hook_ExitTurn_IsDone();
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_IsDone();
         case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_IsDone();
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
@@ -350,7 +372,8 @@ void Nag_Element_Stop(uint8 event_type)
     Nag_HeadingHold_OnEventExit();
     switch (event_type)
     {
-        case NAG_EVENT_TYPE_TURNAROUND: Nag_Hook_Turnaround_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: Nag_Hook_EnterTurn_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: Nag_Hook_ExitTurn_Stop(); break;
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Stop(); break;
         case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Stop(); break;
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
@@ -619,10 +642,15 @@ static bool Nag_GetEventSpeedProfileConfig(uint8 event_type,
             *pre_decel_dist_cm = nag_spin_pre_decel_dist_cm;
             *pre_accel_dist_cm = Nag_Spin_PreAccel_Dist_cm;
             return true;
-        case NAG_EVENT_TYPE_TURNAROUND:
-            *target_speed = nag_turnaround_target_speed;
-            *pre_decel_dist_cm = nag_turnaround_pre_decel_dist_cm;
-            *pre_accel_dist_cm = Nag_Turnaround_PreAccel_Dist_cm;
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND:
+            *target_speed = nag_enter_turn_target_speed;
+            *pre_decel_dist_cm = nag_enter_turn_pre_decel_dist_cm;
+            *pre_accel_dist_cm = 0.0f;
+            return true;
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND:
+            *target_speed = nag_exit_turn_recovery_speed;
+            *pre_decel_dist_cm = 0.0f;
+            *pre_accel_dist_cm = nag_exit_turn_pre_accel_dist_cm;
             return true;
         case NAG_EVENT_TYPE_ENTER_CONES:
             *target_speed = nag_enter_cones_target_speed;
@@ -713,6 +741,67 @@ static bool Nag_GetActiveConeZone(uint16 run_index,
     return true;
 }
 
+/* 查找当前 Run_index 所处折返区间：最近已过的 ENTER_TURNAROUND 与之后第一个 EXIT_TURNAROUND 配对。 */
+static bool Nag_GetActiveTurnaroundZone(uint16 run_index,
+                                        uint16 *enter_index,
+                                        uint16 *exit_index,
+                                        uint8 *exit_event_index)
+{
+    uint8 event_index = 0;
+    uint8 enter_event_index = 0xFFu;
+    uint16 best_enter = 0u;
+
+    if (enter_index == NULL || exit_index == NULL || exit_event_index == NULL)
+    {
+        return false;
+    }
+
+    *enter_index = 0u;
+    *exit_index = 0xFFFFu;
+    *exit_event_index = 0xFFu;
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_ENTER_TURNAROUND)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index <= run_index &&
+            Nag_Event_Table[event_index].enter_index >= best_enter)
+        {
+            best_enter = Nag_Event_Table[event_index].enter_index;
+            enter_event_index = event_index;
+        }
+    }
+
+    if (enter_event_index == 0xFFu)
+    {
+        return false;
+    }
+
+    *enter_index = best_enter;
+
+    for (event_index = (uint8)(enter_event_index + 1u); event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_TURNAROUND)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index > best_enter)
+        {
+            *exit_index = Nag_Event_Table[event_index].enter_index;
+            *exit_event_index = event_index;
+            return true;
+        }
+    }
+
+    return true;
+}
+
 /* 查找前方指定类型最近事件；dist_points 为 enter_index - run_index。 */
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points)
 {
@@ -752,7 +841,7 @@ static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 
     return best_index;
 }
 
-/* 查找刚经过且仍在 post-accel 窗口内的 SPIN/TURNAROUND 等事件。 */
+/* 查找刚经过且仍在 post-accel 窗口内的 SPIN 等事件（折返/锥桶标记由区段逻辑处理）。 */
 static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
                                                    uint16 *dist_since_pass,
                                                    float *target_speed,
@@ -791,8 +880,10 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
             continue;
         }
 
-        /* 锥桶标记由区段逻辑处理，不走元素后恢复。 */
-        if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
+        /* 折返/锥桶标记由区段逻辑处理，不走元素后恢复。 */
+        if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_CONES)
         {
             continue;
@@ -920,6 +1011,66 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
     return Nag_ClampSpeedCap(nav_speed, cone_target);
 }
 
+/* 折返区段调速：入弯前预减速、区间内维持、出弯前预加速恢复。 */
+static float Nag_ApplyTurnaroundZoneSpeed(float nav_speed)
+{
+    uint16 enter_index = 0;
+    uint16 exit_index = 0;
+    uint8 exit_event_index = 0xFFu;
+    uint16 dist_to_enter = 0;
+    uint16 dist_to_exit = 0;
+    uint16 pre_decel_points = 0u;
+    uint16 pre_accel_points = 0u;
+    uint8 enter_evt = 0xFFu;
+    float turn_target = nag_enter_turn_target_speed;
+    float recovery_speed = 0.0f;
+
+    pre_decel_points = Nag_DistanceToPoints(nag_enter_turn_pre_decel_dist_cm);
+    pre_accel_points = Nag_DistanceToPoints(nag_exit_turn_pre_accel_dist_cm);
+    recovery_speed = nag_exit_turn_recovery_speed;
+    if (recovery_speed <= 0.0f)
+    {
+        recovery_speed = nav_speed;
+    }
+
+    if (!Nag_GetActiveTurnaroundZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
+    {
+        enter_evt = Nag_FindNextEventOfType(N.Run_index,
+                                            NAG_EVENT_TYPE_ENTER_TURNAROUND,
+                                            &dist_to_enter);
+        if (enter_evt == 0xFFu || pre_decel_points == 0u || dist_to_enter > pre_decel_points)
+        {
+            return nav_speed;
+        }
+
+        return Nag_ClampSpeedCap(nav_speed, turn_target);
+    }
+
+    if (N.Run_index < enter_index)
+    {
+        return nav_speed;
+    }
+
+    if (exit_index != 0xFFFFu && N.Run_index >= exit_index)
+    {
+        return nav_speed;
+    }
+
+    if (exit_index == 0xFFFFu)
+    {
+        return Nag_ClampSpeedCap(nav_speed, turn_target);
+    }
+
+    dist_to_exit = (uint16)(exit_index - N.Run_index);
+
+    if (pre_accel_points > 0u && dist_to_exit <= pre_accel_points)
+    {
+        return recovery_speed;
+    }
+
+    return Nag_ClampSpeedCap(nav_speed, turn_target);
+}
+
 /* 非锥桶元素：元素前预减速 + 元素后预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyGenericEventSpeed(float nav_speed)
 {
@@ -950,7 +1101,9 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
         return adjusted;
     }
 
-    if (Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_CONES ||
+    if (Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_CONES ||
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_CONES)
     {
         return adjusted;
@@ -989,6 +1142,7 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
     return nav_speed;
 #else
     float cone_adjusted = 0.0f;
+    float turn_adjusted = 0.0f;
 
     if (nav_speed <= 0.0f || N.Event_Count == 0u)
     {
@@ -996,7 +1150,8 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
     }
 
     cone_adjusted = Nag_ApplyConeZoneSpeed(nav_speed);
-    return Nag_ApplyGenericEventSpeed(cone_adjusted);
+    turn_adjusted = Nag_ApplyTurnaroundZoneSpeed(cone_adjusted);
+    return Nag_ApplyGenericEventSpeed(turn_adjusted);
 #endif
 }
 
@@ -1030,7 +1185,9 @@ static void Nag_TryEnterEvent(void)
     N.Target_Request_Valid = 0;
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
-    if (N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_CONES &&
+    if (N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
+        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
+        N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_CONES &&
         N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_CONES)
     {
         steer_task_stop();
@@ -1138,7 +1295,7 @@ uint16 Nag_GetDebugProspectIndex(void)
  * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令等）；
  * - N.Target_Speed：导航前瞻 + 弯道强度算出的建议上限；
  * - Nag_ApplyEventSpeedAdjustments()：按事件表与 Run_index 叠加区段调速、提前加减速；
- * - 元素激活期（Event_Active）：SPIN/TURNAROUND 等使用配置目标速度，锥桶标记仍走区段逻辑。
+ * - 元素激活期（Event_Active）：SPIN 等使用配置目标速度，折返/锥桶标记仍走区段逻辑。
  */
 float Nag_GetControlSpeedTarget(void)
 {
@@ -1184,13 +1341,14 @@ float Nag_GetControlSpeedTarget(void)
             case NAG_EVENT_TYPE_JUMP:
                 /* 跳跃冲击段不限速。 */
                 break;
+            case NAG_EVENT_TYPE_ENTER_TURNAROUND:
+            case NAG_EVENT_TYPE_EXIT_TURNAROUND:
             case NAG_EVENT_TYPE_ENTER_CONES:
             case NAG_EVENT_TYPE_EXIT_CONES:
-                /* 锥桶标记瞬时完成，区段调速由 Nag_ApplyConeZoneSpeed 按 Run_index 处理。 */
+                /* 路径标记瞬时完成，区段调速由 Nag_ApplyEventSpeedAdjustments 按 Run_index 处理。 */
                 nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
                 break;
             case NAG_EVENT_TYPE_SPIN:
-            case NAG_EVENT_TYPE_TURNAROUND:
                 if (Nag_GetEventSpeedProfileConfig(N.Event_Active_Type,
                                                    &event_target,
                                                    &pre_decel_dist,

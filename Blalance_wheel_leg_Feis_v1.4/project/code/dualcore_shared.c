@@ -69,8 +69,10 @@ void dualcore_ctrl_to_ui_publish(void)
   c->run_launch_speed = run_launch_speed;
   c->nag_spin_target_speed = nag_spin_target_speed;
   c->nag_spin_pre_decel_dist_cm = nag_spin_pre_decel_dist_cm;
-  c->nag_turnaround_target_speed = nag_turnaround_target_speed;
-  c->nag_turnaround_pre_decel_dist_cm = nag_turnaround_pre_decel_dist_cm;
+  c->nag_enter_turn_target_speed = nag_enter_turn_target_speed;
+  c->nag_enter_turn_pre_decel_dist_cm = nag_enter_turn_pre_decel_dist_cm;
+  c->nag_exit_turn_recovery_speed = nag_exit_turn_recovery_speed;
+  c->nag_exit_turn_pre_accel_dist_cm = nag_exit_turn_pre_accel_dist_cm;
   c->nag_enter_cones_target_speed = nag_enter_cones_target_speed;
   c->nag_enter_cones_pre_decel_dist_cm = nag_enter_cones_pre_decel_dist_cm;
   c->speed_target_effective = speed_target_effective;

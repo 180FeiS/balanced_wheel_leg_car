@@ -70,7 +70,7 @@ typedef struct
   uint8 nav_recording_active; /* Nag_SystemRun_Index==1 && End_f==0 */
   uint8 event_active;
   uint8 event_state;
-  uint8 event_active_type; /* N.Event_Active_Type：0=SPIN 1=TURNAROUND 2=ENTER_CONES 3=EXIT_CONES … */
+  uint8 event_active_type; /* 0=SPIN 1=ENTER_TURN 2=EXIT_TURN 3=ENTER_CONES 4=EXIT_CONES … */
   uint8 nag_vofa_group;
   float mileage_debug_total;
   uint32 save_index;
@@ -79,8 +79,10 @@ typedef struct
   float run_launch_speed; /* 无元素速度，仅惯导回放进入执行态时装载到 motor_user_speed_cmd */
   float nag_spin_target_speed;
   float nag_spin_pre_decel_dist_cm;
-  float nag_turnaround_target_speed;
-  float nag_turnaround_pre_decel_dist_cm;
+  float nag_enter_turn_target_speed;
+  float nag_enter_turn_pre_decel_dist_cm;
+  float nag_exit_turn_recovery_speed;
+  float nag_exit_turn_pre_accel_dist_cm;
   float nag_enter_cones_target_speed;
   float nag_enter_cones_pre_decel_dist_cm;
   float speed_target_effective;

@@ -811,10 +811,14 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_spin_target_speed;
     case Nag_Launch_Field_Spin_Dec:
         return s_ui_dc.nag_spin_pre_decel_dist_cm;
-    case Nag_Launch_Field_Turn_Spd:
-        return s_ui_dc.nag_turnaround_target_speed;
-    case Nag_Launch_Field_Turn_Dec:
-        return s_ui_dc.nag_turnaround_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnIn_Spd:
+        return s_ui_dc.nag_enter_turn_target_speed;
+    case Nag_Launch_Field_TurnIn_Dec:
+        return s_ui_dc.nag_enter_turn_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnOut_Spd:
+        return s_ui_dc.nag_exit_turn_recovery_speed;
+    case Nag_Launch_Field_TurnOut_Acc:
+        return s_ui_dc.nag_exit_turn_pre_accel_dist_cm;
     case Nag_Launch_Field_Cone_Spd:
         return s_ui_dc.nag_enter_cones_target_speed;
     case Nag_Launch_Field_Cone_Dec:
@@ -831,18 +835,20 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
 {
     static const char *const labels[Nag_Run_Launch_Param_Count] =
     {
-        "BaseSpd", "SpinSpd", "SpinDec", "TurnSpd", "TurnDec", "ConeSpd", "ConeDec"
+        "BaseSpd", "SpinSpd", "SpinDec",
+        "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
+        "ConeSpd", "ConeDec"
     };
     static const int16 rows[Nag_Run_Launch_Param_Count] =
     {
-        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12
     };
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Launch");
-    ips200_draw_line(16, ROW_11, 223, ROW_11, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(16, ROW_13, 223, ROW_13, IPS200_DEFAULT_PENCOLOR);
 
     for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
     {
@@ -869,8 +875,7 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
         }
     }
 
-    ips200_show_string(8, ROW_12, "K1:nxt K2:+ K3:- K4:bk");
-    /* ROW_13~ROW_14 预留后续扩展变量 */
+    ips200_show_string(8, ROW_14, "K1:nxt K2:+ K3:- K4:bk");
 }
 
 void ACT_3_1_1()

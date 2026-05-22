@@ -21,8 +21,8 @@ void vofa_send_nav_from_dualcore_snapshot(void);
  *   ch1 speed_target_effective  速度环实际目标；含导航门控、弯道限速、元素区段调速与提前加减速
  *   ch2 car_speed               当前实测车速；与 ch1 对比可观察加减速响应与跟踪误差
  *   ch3 Run_index               回放推进到的导航点索引；观察预减速/锥桶区间切换是否与点位对齐
- *   ch4 Event_Active_Type      当前元素类型枚举：0=SPIN 1=TURNAROUND 2=ENTER_CONES 3=EXIT_CONES
- *                               4=SINGLE_BRIDGE 5=BUMP 6=JUMP；元素未激活时可能为默认值
+ *   ch4 Event_Active_Type      当前元素类型枚举：0=SPIN 1=ENTER_TURN 2=EXIT_TURN
+ *                               3=ENTER_CONES 4=EXIT_CONES 5=SINGLE_BRIDGE 6=BUMP 7=JUMP
  * 建议与 navigation.h 中 Nag_*_Target_Speed / Nag_*_PreDecel_Dist_cm 等参数联调。
  */
 #define VOFA_GROUP_EVENT_SPEED_DEBUG (9u)

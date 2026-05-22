@@ -19,27 +19,37 @@ static uint32 flash_RunLaunchSpeedChecksum(uint32 speed_raw)
     return Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Speed_Version ^ speed_raw;
 }
 
+#define Nag_Run_Launch_Param_Count_V2 7u
+
 static void flash_RunLaunchParamsPack(void)
 {
     flash_union_buffer[3].float_type = run_launch_speed;
     flash_union_buffer[4].float_type = nag_spin_target_speed;
     flash_union_buffer[5].float_type = nag_spin_pre_decel_dist_cm;
-    flash_union_buffer[6].float_type = nag_turnaround_target_speed;
-    flash_union_buffer[7].float_type = nag_turnaround_pre_decel_dist_cm;
-    flash_union_buffer[8].float_type = nag_enter_cones_target_speed;
-    flash_union_buffer[9].float_type = nag_enter_cones_pre_decel_dist_cm;
+    flash_union_buffer[6].float_type = nag_enter_turn_target_speed;
+    flash_union_buffer[7].float_type = nag_enter_turn_pre_decel_dist_cm;
+    flash_union_buffer[8].float_type = nag_exit_turn_recovery_speed;
+    flash_union_buffer[9].float_type = nag_exit_turn_pre_accel_dist_cm;
+    flash_union_buffer[10].float_type = nag_enter_cones_target_speed;
+    flash_union_buffer[11].float_type = nag_enter_cones_pre_decel_dist_cm;
 }
 
-static uint32 flash_RunLaunchParamsChecksum(void)
+static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 {
-    uint32 checksum = Nag_Run_Launch_Speed_Magic ^ Nag_Run_Launch_Params_Version;
+    uint32 checksum = Nag_Run_Launch_Speed_Magic ^ version;
     uint8 index = 0u;
 
-    for (index = 0u; index < Nag_Run_Launch_Param_Count; index++)
+    for (index = 0u; index < param_count; index++)
     {
         checksum ^= flash_union_buffer[3u + index].uint32_type;
     }
     return checksum;
+}
+
+static uint32 flash_RunLaunchParamsChecksum(void)
+{
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
+                                           Nag_Run_Launch_Param_Count);
 }
 
 static void flash_RunLaunchParamsUnpack(void)
@@ -47,8 +57,23 @@ static void flash_RunLaunchParamsUnpack(void)
     run_launch_speed = flash_union_buffer[3].float_type;
     nag_spin_target_speed = flash_union_buffer[4].float_type;
     nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
-    nag_turnaround_target_speed = flash_union_buffer[6].float_type;
-    nag_turnaround_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = flash_union_buffer[8].float_type;
+    nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+}
+
+static void flash_RunLaunchParamsUnpackV2(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
+    nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = flash_union_buffer[8].float_type;
     nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[9].float_type;
 }
@@ -211,7 +236,7 @@ void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V3;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -249,10 +274,17 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version) &&
-        (speed_checksum == flash_RunLaunchParamsChecksum()))
+    if ((speed_version == Nag_Run_Launch_Params_Version_V3) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
+                                                           Nag_Run_Launch_Param_Count)))
     {
         flash_RunLaunchParamsUnpack();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version) &&
+             (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version,
+                                                                Nag_Run_Launch_Param_Count_V2)))
+    {
+        flash_RunLaunchParamsUnpackV2();
     }
     else if ((speed_version == Nag_Run_Launch_Speed_Version) &&
              (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))

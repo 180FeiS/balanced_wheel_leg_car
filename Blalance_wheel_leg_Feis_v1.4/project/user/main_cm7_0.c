@@ -175,7 +175,7 @@ static void send_nav_debug_to_vofa(void)
      * ch1 speed_target_effective  速度环实际目标（含元素区段调速、提前加减速）
      * ch2 car_speed               当前实测车速（取负与组 4 显示习惯一致）
      * ch3 Run_index               回放推进到的导航点索引
-     * ch4 Event_Active_Type       元素类型：0=SPIN 1=TURNAROUND 2=ENTER_CONES 3=EXIT_CONES …
+     * ch4 Event_Active_Type       元素类型：0=SPIN 1=ENTER_TURN 2=EXIT_TURN 3=ENTER_CONES 4=EXIT_CONES …
      */
     case 9:
       SendDataStreamToVOFA(4,

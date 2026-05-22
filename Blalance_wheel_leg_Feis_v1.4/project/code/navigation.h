@@ -71,18 +71,24 @@
  */
 #define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
 
-/* SPIN / TURNAROUND / ENTER_CONES：Launch 页可调的运行时参数（默认值见 *_DEFAULT） */
+/* SPIN / 折返进出口 / ENTER_CONES：Launch 页可调的运行时参数（默认值见 *_DEFAULT） */
 #define Nag_Spin_Target_Speed_Default 1.0f
 #define Nag_Spin_PreDecel_Dist_cm_Default 150.0f
 extern float nag_spin_target_speed;
 extern float nag_spin_pre_decel_dist_cm;
 #define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离（Launch 页不调节）
 
-#define Nag_Turnaround_Target_Speed_Default 220.0f
-#define Nag_Turnaround_PreDecel_Dist_cm_Default 0.0f
-extern float nag_turnaround_target_speed;
-extern float nag_turnaround_pre_decel_dist_cm;
-#define Nag_Turnaround_PreAccel_Dist_cm 0.0f   // 折返完成后恢复速度的提前加速距离（Launch 页不调节）
+/* 折返入弯：Launch 可调 */
+#define Nag_EnterTurn_Target_Speed_Default 220.0f
+#define Nag_EnterTurn_PreDecel_Dist_cm_Default 0.0f
+extern float nag_enter_turn_target_speed;
+extern float nag_enter_turn_pre_decel_dist_cm;
+
+/* 折返出弯：Launch 可调（语义同 EXIT_CONES） */
+#define Nag_ExitTurn_Recovery_Speed_Default 0.0f   /* 0=恢复基础导航速度 */
+#define Nag_ExitTurn_PreAccel_Dist_cm_Default 0.0f
+extern float nag_exit_turn_recovery_speed;
+extern float nag_exit_turn_pre_accel_dist_cm;
 
 #define Nag_EnterCones_Target_Speed_Default 1000.0f
 #define Nag_EnterCones_PreDecel_Dist_cm_Default 50.0f
@@ -110,25 +116,28 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 2u            // v2：锥桶进/出口类型；单点录制时 enter==exit，旧双点录制 exit>enter 仍兼容
+#define Nag_Event_Version 3u            // v3：折返拆分为进/出口；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
- * v1：仅 run_launch_speed；v2：无元素速度 + 各元素目标速度 + 提前减速距离。
+ * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
 #define Nag_Run_Launch_Speed_Version 1u          /* 旧版：仅 speed */
-#define Nag_Run_Launch_Params_Version 2u         /* 新版：7 个 float */
-#define Nag_Run_Launch_Param_Count 7u
+#define Nag_Run_Launch_Params_Version 2u         /* v2：7 个 float */
+#define Nag_Run_Launch_Params_Version_V3 3u      /* v3：9 个 float */
+#define Nag_Run_Launch_Param_Count 9u
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
 #define Nag_Launch_Field_Spin_Spd 1u
 #define Nag_Launch_Field_Spin_Dec 2u
-#define Nag_Launch_Field_Turn_Spd 3u
-#define Nag_Launch_Field_Turn_Dec 4u
-#define Nag_Launch_Field_Cone_Spd 5u
-#define Nag_Launch_Field_Cone_Dec 6u
+#define Nag_Launch_Field_TurnIn_Spd 3u
+#define Nag_Launch_Field_TurnIn_Dec 4u
+#define Nag_Launch_Field_TurnOut_Spd 5u
+#define Nag_Launch_Field_TurnOut_Acc 6u
+#define Nag_Launch_Field_Cone_Spd 7u
+#define Nag_Launch_Field_Cone_Dec 8u
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -140,7 +149,8 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
 {
     return (uint8)((field_index == Nag_Launch_Field_Base_Spd) ||
                    (field_index == Nag_Launch_Field_Spin_Spd) ||
-                   (field_index == Nag_Launch_Field_Turn_Spd) ||
+                   (field_index == Nag_Launch_Field_TurnIn_Spd) ||
+                   (field_index == Nag_Launch_Field_TurnOut_Spd) ||
                    (field_index == Nag_Launch_Field_Cone_Spd));
 }
 
@@ -161,7 +171,7 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
  */
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
-#define Nag_HeadingHold_Turnaround_Enable 0u    // 折返元素若需主动改航向则不保持锁定，默认关闭
+#define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
 #define Nag_HeadingHold_SingleBridge_Enable 0u  // 单边桥默认整段保持进入元素时的航向
 #define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
 #define Nag_HeadingHold_Jump_Enable 0u          // 跳跃元素默认整段保持进入元素时的航向
@@ -169,18 +179,19 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
 
 /* 元素类型枚举：
  * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
- * 锥桶进/出口：惯导路径上的分段标记；区段调速见 Nag_EnterCones_* / Nag_ExitCones_* 宏。
+ * 折返/锥桶进/出口：惯导路径上的分段标记；区段调速见对应 Launch 参数或宏。
  */
 typedef enum
 {
-       NAG_EVENT_TYPE_SPIN = 0,          // 原地自旋元素
-       NAG_EVENT_TYPE_TURNAROUND = 1,    // 折返元素（符号名仍为 TURNAROUND，语义为折返）
-       NAG_EVENT_TYPE_ENTER_CONES = 2,   // 进入锥桶标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_EXIT_CONES = 3,    // 退出锥桶标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 4, // 单边桥元素
-       NAG_EVENT_TYPE_BUMP = 5,          // 减速带/颠簸元素
-       NAG_EVENT_TYPE_JUMP = 6,          // 跳跃元素
-       NAG_EVENT_TYPE_COUNT = 7,         // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_SPIN = 0,              // 原地自旋元素
+       NAG_EVENT_TYPE_ENTER_TURNAROUND = 1,  // 折返入弯标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_EXIT_TURNAROUND = 2,   // 折返出弯标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_ENTER_CONES = 3,       // 进入锥桶标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
+       NAG_EVENT_TYPE_SINGLE_BRIDGE = 5,     // 单边桥元素
+       NAG_EVENT_TYPE_BUMP = 6,              // 减速带/颠簸元素
+       NAG_EVENT_TYPE_JUMP = 7,              // 跳跃元素
+       NAG_EVENT_TYPE_COUNT = 8,             // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
 /* 元素状态机枚举（全局一条状态机）：
@@ -291,10 +302,16 @@ void Nag_Element_Run(uint8 event_type);
 bool Nag_Element_IsDone(uint8 event_type); /* true：本周期转入 DONE 并随后 Nag_Notify_Event_Done */
 void Nag_Element_Stop(uint8 event_type);   /* 中止/完成清理：先退出锁航再调具体 Stop */
 
-bool Nag_Hook_Turnaround_Start(void);
-void Nag_Hook_Turnaround_Run(void);
-bool Nag_Hook_Turnaround_IsDone(void);
-void Nag_Hook_Turnaround_Stop(void);
+/* 折返进/出口：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导 */
+bool Nag_Hook_EnterTurn_Start(void);
+void Nag_Hook_EnterTurn_Run(void);
+bool Nag_Hook_EnterTurn_IsDone(void);
+void Nag_Hook_EnterTurn_Stop(void);
+
+bool Nag_Hook_ExitTurn_Start(void);
+void Nag_Hook_ExitTurn_Run(void);
+bool Nag_Hook_ExitTurn_IsDone(void);
+void Nag_Hook_ExitTurn_Stop(void);
 
 bool Nag_Hook_Spin_Start(void);
 void Nag_Hook_Spin_Run(void);
