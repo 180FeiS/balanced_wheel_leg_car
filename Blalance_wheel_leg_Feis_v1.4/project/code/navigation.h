@@ -194,6 +194,23 @@ typedef enum
        NAG_EVENT_TYPE_COUNT = 8,             // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
+/* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
+static inline const char *Nag_GetEventTypeName(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_SPIN: return "Spin";
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return "TurnIn";
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return "TurnOut";
+        case NAG_EVENT_TYPE_ENTER_CONES: return "ConeIn";
+        case NAG_EVENT_TYPE_EXIT_CONES: return "ConeOut";
+        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return "Bridge";
+        case NAG_EVENT_TYPE_BUMP: return "Bump";
+        case NAG_EVENT_TYPE_JUMP: return "Jump";
+        default: return "Unknown";
+    }
+}
+
 /* 元素状态机枚举（全局一条状态机）：
  * 由各元素共用的 Nag_Element_StateMachine() 在回放、Event_Active 期间每周期调用；
  * Start 返回 false 时可长期停在 ENTERED，直至人工恢复或重写钩子。

@@ -383,39 +383,124 @@ void ACT_2_2()
 
 void GUI_2_2_1(void) // 导航调试界面（须从 2.2 按「右」进入）
 {
+    uint8 nav_recording_active = 0;
+    uint8 event_active = 0;
+    uint8 event_record_type = 0;
+    uint8 event_active_type = 0;
+    uint8 end_f = 0;
+    uint8 nag_system_run_index = 0;
+    uint8 event_count = 0;
+    uint8 display_type = 0;
+    const char *type_name = "Unknown";
+    const char *rec_state_name = "Rec:Idle";
+
     GUI_Display_Level2_Common2();
 
-    ips200_show_string(64,ROW_3,"Nav Debug");
-    ips200_draw_line(24,ROW_5-1,215,ROW_5-1,IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24,ROW_5,"KEY1: Record");
-    ips200_show_string(24,ROW_6,"KEY2: Replay");
-    ips200_show_string(24,ROW_7,"KEY3: Stop");
-    ips200_show_string(24,ROW_8,"KEY4: Return");
-
-    ips200_draw_line(24,ROW_9 ,215,ROW_9 ,IPS200_DEFAULT_PENCOLOR);
-
-    ips200_show_string(24,ROW_10,"Mileage:");
 #if defined(CY_CORE_CM7_1)
-    ips200_show_float(104,ROW_10,s_ui_dc.mileage_debug_total,4,2);
-
-    ips200_show_string(24,ROW_11,"SaveIdx:");
-    ips200_show_uint(104,ROW_11,(uint32)s_ui_dc.save_index,5);
-
-    ips200_show_string(24,ROW_12,"FlashPg:");
-    ips200_show_uint(104,ROW_12,(uint32)s_ui_dc.flash_page_index,3);
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    nav_recording_active = s_ui_dc.nav_recording_active;
+    event_active = s_ui_dc.event_active;
+    event_record_type = s_ui_dc.event_record_type;
+    event_active_type = s_ui_dc.event_active_type;
+    end_f = s_ui_dc.end_f;
+    nag_system_run_index = s_ui_dc.nag_system_run_index;
 #else
-    ips200_show_float(104,ROW_10,N.Mileage_Debug_Total,4,2);
-
-    ips200_show_string(24,ROW_11,"SaveIdx:");
-    ips200_show_uint(104,ROW_11,N.Save_index,5);
-
-    ips200_show_string(24,ROW_12,"FlashPg:");
-    ips200_show_uint(104,ROW_12,N.Flash_page_index,3);
+    nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0u));
+    event_active = N.Event_Active;
+    event_record_type = N.Event_Record_Type;
+    event_active_type = N.Event_Active_Type;
+    end_f = (uint8)(N.End_f ? 1u : 0u);
+    nag_system_run_index = N.Nag_SystemRun_Index;
+    event_count = N.Event_Count;
 #endif
 
-    ips200_show_string(24,ROW_14,"Rec  / Replay / Stop");
-    ips200_show_string(24,ROW_15,"LED1 toggles on press");
+    if (nav_recording_active)
+    {
+        rec_state_name = "Rec:Recording";
+    }
+    else if (nag_system_run_index == 1u && end_f)
+    {
+        rec_state_name = "Rec:Saving";
+    }
+    else if (event_active)
+    {
+        rec_state_name = "Run:Event";
+    }
+    else if (nag_system_run_index >= 2u)
+    {
+        rec_state_name = "Run:Replay";
+    }
+
+    display_type = event_active ? event_active_type : event_record_type;
+    type_name = Nag_GetEventTypeName(display_type);
+
+    ips200_show_string(64, ROW_3, "Nav Debug");
+
+    ips200_show_string(0, ROW_5, rec_state_name);
+
+    if (event_active)
+    {
+        ips200_show_string(0, ROW_6, "ActEv:");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_6, "Elem:");
+    }
+    ips200_show_string(48, ROW_6, type_name);
+    ips200_show_string(112, ROW_6, "(");
+    ips200_show_uint(120, ROW_6, (uint32)display_type, 1);
+    ips200_show_string(128, ROW_6, ")");
+
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(0, ROW_7, "RunIdx:");
+    ips200_show_uint(64, ROW_7, (uint32)nag_system_run_index, 1);
+#else
+    ips200_show_string(0, ROW_7, "EvCnt:");
+    ips200_show_uint(56, ROW_7, (uint32)event_count, 2);
+#endif
+
+    if (nav_recording_active)
+    {
+        ips200_show_string(0, ROW_8, "K1 ReBegin");
+        ips200_show_string(0, ROW_9, "K2 StopRec");
+        ips200_show_string(0, ROW_10, "K3 NextType");
+        ips200_show_string(0, ROW_11, "K4 Mark");
+    }
+    else if (event_active)
+    {
+        ips200_show_string(0, ROW_8, "K1 Begin");
+        ips200_show_string(0, ROW_9, "K2 StopRec");
+        ips200_show_string(0, ROW_10, "K3 Replay");
+        ips200_show_string(0, ROW_11, "K4 EvDone");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_8, "K1 Begin");
+        ips200_show_string(0, ROW_9, "K2 StopRec");
+        ips200_show_string(0, ROW_10, "K3 Replay");
+        ips200_show_string(0, ROW_11, "K4 Back");
+    }
+
+    ips200_draw_line(0, ROW_12, 239, ROW_12, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(0, ROW_13, "Mileage:");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_float(104, ROW_13, s_ui_dc.mileage_debug_total, 4, 2);
+
+    ips200_show_string(0, ROW_14, "SaveIdx:");
+    ips200_show_uint(104, ROW_14, (uint32)s_ui_dc.save_index, 5);
+
+    ips200_show_string(0, ROW_15, "FlashPg:");
+    ips200_show_uint(104, ROW_15, (uint32)s_ui_dc.flash_page_index, 3);
+#else
+    ips200_show_float(104, ROW_13, N.Mileage_Debug_Total, 4, 2);
+
+    ips200_show_string(0, ROW_14, "SaveIdx:");
+    ips200_show_uint(104, ROW_14, N.Save_index, 5);
+
+    ips200_show_string(0, ROW_15, "FlashPg:");
+    ips200_show_uint(104, ROW_15, N.Flash_page_index, 3);
+#endif
 }
 void ACT_2_2_1()
 {

@@ -71,6 +71,7 @@ typedef struct
   uint8 event_active;
   uint8 event_state;
   uint8 event_active_type; /* 0=SPIN 1=ENTER_TURN 2=EXIT_TURN 3=ENTER_CONES 4=EXIT_CONES … */
+  uint8 event_record_type; /* N.Event_Record_Type，录制时 KEY3 循环切换 */
   uint8 nag_vofa_group;
   float mileage_debug_total;
   uint32 save_index;
