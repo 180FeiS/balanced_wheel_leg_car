@@ -908,6 +908,8 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_enter_cones_target_speed;
     case Nag_Launch_Field_Cone_Dec:
         return s_ui_dc.nag_enter_cones_pre_decel_dist_cm;
+    case Nag_Launch_Field_Spin_Rate:
+        return s_ui_dc.spin_rate_max_dps;
     default:
         return 0.0f;
     }
@@ -922,18 +924,18 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
     {
         "BaseSpd", "SpinSpd", "SpinDec",
         "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
-        "ConeSpd", "ConeDec"
+        "ConeSpd", "ConeDec", "SpinRt"
     };
     static const int16 rows[Nag_Run_Launch_Param_Count] =
     {
-        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13
     };
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Launch");
-    ips200_draw_line(16, ROW_13, 223, ROW_13, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
 
     for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
     {
@@ -954,13 +956,17 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
         {
             ips200_show_float(96, rows[field_index], (double)value, 5, 1);
         }
+        else if (Nag_LaunchParamIsSpinRate(field_index))
+        {
+            ips200_show_int(96, rows[field_index], (int32)value, 4);
+        }
         else
         {
             ips200_show_int(96, rows[field_index], (int32)value, 4);
         }
     }
 
-    ips200_show_string(8, ROW_14, "K1:nxt K2:+ K3:- K4:bk");
+    ips200_show_string(8, ROW_15, "K1:nxt K2:+ K3:- K4:bk");
 }
 
 void ACT_3_1_1()

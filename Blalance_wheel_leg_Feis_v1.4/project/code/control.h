@@ -116,6 +116,7 @@ extern int8 spin_dir;
 extern float spin_target_deg;
 extern float spin_accum_deg;
 extern float spin_angle_err;
+extern float spin_rate_max_dps;
 extern float spin_rate_target_dps;
 extern float spin_rate_meas_dps;
 
@@ -157,6 +158,8 @@ void right_leg_control(float p, float angle);               // 控制右腿
 void leg_debug_init_pwm(void);                               // 调试模式腿高初始化
 
 void spin_task_start(float turns, int8 dir);                 // 启动自旋任务，dir>0沿yaw正方向
+
+void spin_set_rate_max_dps(float rate_dps);                  // 设置自旋巡航角速度上限 (deg/s)，clamp [30, 400]
 
 void spin_task_stop(void);                                   // 停止自旋任务
 

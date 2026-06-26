@@ -548,7 +548,7 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
     {
-        step = Nag_LaunchParamIsSpeed(s_run_launch_field_index) ? 100.0f : 10.0f;
+        step = Nag_LaunchParamGetStep(s_run_launch_field_index);
         MenuAdjustRunLaunchParam(step);
         gpio_toggle_level(LED1);
         key_clear_state(KEY_2);
@@ -556,7 +556,7 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
     {
-        step = Nag_LaunchParamIsSpeed(s_run_launch_field_index) ? -100.0f : -10.0f;
+        step = -Nag_LaunchParamGetStep(s_run_launch_field_index);
         MenuAdjustRunLaunchParam(step);
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);

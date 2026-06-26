@@ -9,6 +9,7 @@
 
 #include "zf_common_headfile.h"
 #include "navigation.h"
+#include "control.h"
 #include "my_gps.h"
 
 int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
@@ -37,6 +38,7 @@ void Nag_LaunchParamApplyDefaults(void)
     nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
     nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+    spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
 float Nag_LaunchParamGet(uint8 field_index)
@@ -61,6 +63,8 @@ float Nag_LaunchParamGet(uint8 field_index)
         return nag_enter_cones_target_speed;
     case Nag_Launch_Field_Cone_Dec:
         return nag_enter_cones_pre_decel_dist_cm;
+    case Nag_Launch_Field_Spin_Rate:
+        return spin_rate_max_dps;
     default:
         return 0.0f;
     }
@@ -96,6 +100,9 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
         break;
     case Nag_Launch_Field_Cone_Dec:
         nag_enter_cones_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_Spin_Rate:
+        spin_set_rate_max_dps(value);
         break;
     default:
         break;

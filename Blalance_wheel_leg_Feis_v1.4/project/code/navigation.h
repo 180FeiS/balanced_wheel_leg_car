@@ -74,6 +74,7 @@
 /* SPIN / 折返进出口 / ENTER_CONES：Launch 页可调的运行时参数（默认值见 *_DEFAULT） */
 #define Nag_Spin_Target_Speed_Default 1.0f
 #define Nag_Spin_PreDecel_Dist_cm_Default 150.0f
+#define Nag_Spin_Rate_Max_Dps_Default 200.0f
 extern float nag_spin_target_speed;
 extern float nag_spin_pre_decel_dist_cm;
 #define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离（Launch 页不调节）
@@ -119,14 +120,15 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Event_Version 3u            // v3：折返拆分为进/出口；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
- * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）。
+ * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
 #define Nag_Run_Launch_Speed_Version 1u          /* 旧版：仅 speed */
 #define Nag_Run_Launch_Params_Version 2u         /* v2：7 个 float */
 #define Nag_Run_Launch_Params_Version_V3 3u      /* v3：9 个 float */
-#define Nag_Run_Launch_Param_Count 9u
+#define Nag_Run_Launch_Params_Version_V4 4u      /* v4：10 个 float */
+#define Nag_Run_Launch_Param_Count 10u
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -138,6 +140,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Launch_Field_TurnOut_Acc 6u
 #define Nag_Launch_Field_Cone_Spd 7u
 #define Nag_Launch_Field_Cone_Dec 8u
+#define Nag_Launch_Field_Spin_Rate 9u
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -152,6 +155,24 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
                    (field_index == Nag_Launch_Field_TurnIn_Spd) ||
                    (field_index == Nag_Launch_Field_TurnOut_Spd) ||
                    (field_index == Nag_Launch_Field_Cone_Spd));
+}
+
+static inline uint8 Nag_LaunchParamIsSpinRate(uint8 field_index)
+{
+    return (uint8)(field_index == Nag_Launch_Field_Spin_Rate);
+}
+
+static inline float Nag_LaunchParamGetStep(uint8 field_index)
+{
+    if (Nag_LaunchParamIsSpinRate(field_index))
+    {
+        return 10.0f;
+    }
+    if (Nag_LaunchParamIsSpeed(field_index))
+    {
+        return 100.0f;
+    }
+    return 10.0f;
 }
 
 /* 自转元素示范参数：

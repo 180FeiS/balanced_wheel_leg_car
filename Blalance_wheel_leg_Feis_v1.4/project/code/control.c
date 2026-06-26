@@ -243,14 +243,16 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_SETTLE_COUNT_MAX      20u     // 连续满足收敛条件若干次再结束，避免边界抖动误判
 
 /* 自旋任务参数与调试变量 */
-#define SPIN_ANGLE_OUT_MAX_DPS      200.0f  // 单层匀速方案下的固定巡航角速度
+#define SPIN_ANGLE_OUT_MAX_DPS_DEFAULT 200.0f  // 自旋巡航角速度默认值 (deg/s)
+#define SPIN_RATE_MIN_DPS               30.0f
+#define SPIN_RATE_MAX_DPS              1000.0f
 #define SPIN_ANGLE_SETTLE_DEG         10.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
 #define SPIN_RATE_SETTLE_DPS         6.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
 #define SPIN_SETTLE_COUNT_MAX        80u
 #define SPIN_TIMEOUT_BASE_MS       3000u
-#define SPIN_TIMEOUT_PER_TURN_MS   4000u
 #define SPIN_PITCH_ABORT_DEG         20.0f
 
+float spin_rate_max_dps = SPIN_ANGLE_OUT_MAX_DPS_DEFAULT;
 uint8 spin_enable = 0;
 uint8 spin_done = 0;
 int8 spin_dir = 1;
@@ -350,7 +352,17 @@ void spin_task_start(float turns, int8 dir)
     spin_brake_phase = 0;
     spin_settle_count = 0;
     spin_timeout_ms = 0;
-    spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + (uint32)(turns * SPIN_TIMEOUT_PER_TURN_MS);
+    {
+        float rate_dps = spin_rate_max_dps;
+        uint32 per_turn_ms = 0u;
+
+        if (rate_dps < SPIN_RATE_MIN_DPS)
+        {
+            rate_dps = SPIN_RATE_MIN_DPS;
+        }
+        per_turn_ms = (uint32)(360.0f / rate_dps * 1000.0f);
+        spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + (uint32)(turns * (float)per_turn_ms);
+    }
     spin_reset_pid_state(&turn_angle);
     spin_reset_pid_state(&turn_gyro);
     /* 自旋与普通转向互斥：开始自旋时清空普通转向量。 */
@@ -359,6 +371,19 @@ void spin_task_start(float turns, int8 dir)
     steer_cmd = 0.0f;
     spin_cmd = 0.0f;
     turn_mix_cmd = 0.0f;
+}
+
+void spin_set_rate_max_dps(float rate_dps)
+{
+    if (rate_dps < SPIN_RATE_MIN_DPS)
+    {
+        rate_dps = SPIN_RATE_MIN_DPS;
+    }
+    else if (rate_dps > SPIN_RATE_MAX_DPS)
+    {
+        rate_dps = SPIN_RATE_MAX_DPS;
+    }
+    spin_rate_max_dps = rate_dps;
 }
 
 /* 手动停止自旋任务，保留平衡控制但清空本次自旋目标。 */
@@ -630,7 +655,7 @@ void pid_ctrl_Init(void)
      * turn_gyro 用于跟踪目标角速度；
      * turn_angle 用于普通转向外环；dt_pid_turn_angle 已与 pit0_ch0 的 1ms 周期对齐。
      */
-    pid_init(&turn_angle, 20.0f, 2.0f, 0.0f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS, Position_pid);
+    pid_init(&turn_angle, 20.0f, 2.0f, 0.0f, dt_pid_turn_angle, 0, 0, 0, SPIN_ANGLE_OUT_MAX_DPS_DEFAULT, Position_pid);
     pid_init(&turn_gyro, 30.0f, 2.0f, 0.0f, dt_pid_turn_gyro, 0, 0, 0, 2200, Position_pid);
     // pid_init(&turn, 1.87, 19, 0, 0.01, 0, 0, 0, 5000, Position_pid);
      pid_init(&gyro, 1.1, 0, 0, 0.002, 0, 0, 0, 10000, Position_pid);
@@ -855,7 +880,7 @@ void pid_ctrl_Run(void)
             else
             {
                 float spin_err_sign = (spin_angle_err >= 0.0f) ? 1.0f : -1.0f;
-                spin_rate_target_dps = spin_err_sign * SPIN_ANGLE_OUT_MAX_DPS;
+                spin_rate_target_dps = spin_err_sign * spin_rate_max_dps;
             }
 
             pid_set_target(&turn_gyro, spin_rate_target_dps);

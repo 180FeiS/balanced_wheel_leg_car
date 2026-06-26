@@ -32,6 +32,7 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[9].float_type = nag_exit_turn_pre_accel_dist_cm;
     flash_union_buffer[10].float_type = nag_enter_cones_target_speed;
     flash_union_buffer[11].float_type = nag_enter_cones_pre_decel_dist_cm;
+    flash_union_buffer[12].float_type = spin_rate_max_dps;
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -48,7 +49,7 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V4,
                                            Nag_Run_Launch_Param_Count);
 }
 
@@ -63,6 +64,21 @@ static void flash_RunLaunchParamsUnpack(void)
     nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
     nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
     nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    spin_set_rate_max_dps(flash_union_buffer[12].float_type);
+}
+
+static void flash_RunLaunchParamsUnpackV3(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = flash_union_buffer[8].float_type;
+    nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
 static void flash_RunLaunchParamsUnpackV2(void)
@@ -76,6 +92,7 @@ static void flash_RunLaunchParamsUnpackV2(void)
     nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = flash_union_buffer[8].float_type;
     nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[9].float_type;
+    spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
 static void flash_Gps_DoubleToWords(double value, uint32 *word0, uint32 *word1)
@@ -236,7 +253,7 @@ void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V3;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V4;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -274,11 +291,17 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V3) &&
-        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
+    if ((speed_version == Nag_Run_Launch_Params_Version_V4) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V4,
                                                            Nag_Run_Launch_Param_Count)))
     {
         flash_RunLaunchParamsUnpack();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V3) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
+                                                           9u)))
+    {
+        flash_RunLaunchParamsUnpackV3();
     }
     else if ((speed_version == Nag_Run_Launch_Params_Version) &&
              (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version,
