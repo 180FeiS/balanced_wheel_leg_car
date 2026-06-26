@@ -41,6 +41,12 @@
  */
 #define Nag_Debug_Speed_Bypass_Enable 0u
 
+/* 惯导录制态遥控速度（Nag_GetControlSpeedTarget 内联门控，非全局旁路）：
+ * 1. 需 MENU_INPUT_REMOTE_MENU_FIRST==1、Nag_SystemRun_Index==1 且 End_f==0、LORA 在线（remote_lora_steer_snapshot_valid）；
+ * 2. 速度环目标直接跟随遥控 left_y 映射的 motor_user_speed_cmd，掉线立即停车；
+ * 3. 与 Nag_Debug_Speed_Bypass_Enable 独立，正式录制可用、调试旁路仍保持关闭。
+ */
+
 #define Nag_AdaptiveLookahead_Enable 0u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
 
 /* 速度自适应前瞻参数（仅当 Nag_AdaptiveLookahead_Enable==1 时参与 Nag_UpdatePreviewAndSpeedTarget 计算）：
