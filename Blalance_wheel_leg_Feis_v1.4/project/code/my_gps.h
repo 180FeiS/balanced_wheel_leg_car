@@ -2,6 +2,7 @@
 #define CODE_MY_GPS_H_
 
 #include "zf_common_typedef.h"
+#include "navigation.h"
 
 /*
  * GPS 路点导航使用说明（摘要）：
@@ -37,20 +38,6 @@ typedef enum
     xi = 3,    // 朝西发车
 } car_dir;
 /* car_dir / car_gps_dir 仅用于路径小地图绘制朝向等 UI，不参与 GPS 点导航航向换算。 */
-
-typedef enum
-{
-    GPS_ELEMENT_NORMAL = 0,        // 正常点
-    GPS_ELEMENT_TURNAROUND = 1,    // 折返点
-    GPS_ELEMENT_END = 2,           // 终点
-    GPS_ELEMENT_STEP = 3,          // 台阶
-    GPS_ELEMENT_SINGLE_BRIDGE = 4, // 单边桥
-    GPS_ELEMENT_BUMP = 5,          // 颠簸
-    GPS_ELEMENT_GRASS = 6,         // 草坪
-    GPS_ELEMENT_INS_IN = 7,        // 惯导切入
-    GPS_ELEMENT_INS_OUT = 8,       // 惯导切出
-    GPS_ELEMENT_COUNT = 9,
-} gps_element_enum;
 
 typedef enum
 {
@@ -121,6 +108,10 @@ void GPS_EndRecord(void);
 void GPS_ApplyLaunchSpeed(void);
 /* 5ms 软任务：GPS 模式下先标定偏置再追点，经 steer_request_target_yaw 登记绝对航向（与惯导回放分离）。 */
 void GPS_PointNav_Run(void);
+void GPS_NavForceEndPoint(void);
+void GPS_NavTryEnterElement(uint8 point_index, uint8 unified_type);
+void GPS_NavOnElementDone(void);
+float GPS_NavDistanceToPointM(uint8 point_index);
 uint8 GPS_GetValidPointCount(void);
 const char *GPS_GetElementName(uint32 element);
 const char *GPS_GetNavStateName(uint8 state);

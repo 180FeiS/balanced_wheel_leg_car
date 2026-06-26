@@ -200,6 +200,11 @@ uint8 g_remote_local_keys_debug = 0u;
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)
 {
+    if (nav_heading_mode == NAV_HEADING_MODE_GPS &&
+        gps_nav_state == GPS_NAV_STATE_RUNNING)
+    {
+        return 0u;
+    }
     if (N.Nag_SystemRun_Index == 3)
     {
         return 0u;
@@ -1024,7 +1029,7 @@ void pid_ctrl_Run(void)
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     舵机步进更新，根据jump_flag步进或直通
-// 备注信息     leg_control内部调用
+// 备注信息     leg_control内部调用 
 -------------------------------------------------------------------------------------------------------------------*/
 static void leg_servo_step_update(float desired_left_p, float desired_right_p, float desired_angle,
                                   float *out_left_p, float *out_right_p,

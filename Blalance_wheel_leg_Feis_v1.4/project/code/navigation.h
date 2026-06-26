@@ -202,6 +202,80 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
  * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
  * 折返/锥桶进/出口：惯导路径上的分段标记；区段调速见对应 Launch 参数或宏。
  */
+/* GPS 路点统一元素（Normal=0，惯导 Spin~Jump 后移一位；END 仅末点自动标记）：
+ * u32yuansu[] / gps_current_yuansu 存此枚举；执行时 Nav_UnifiedToInsEvent() 映射到 Nag_Event_Type。
+ */
+typedef enum
+{
+    NAV_ELEM_NORMAL = 0,
+    NAV_ELEM_SPIN = 1,
+    NAV_ELEM_TURN_IN = 2,
+    NAV_ELEM_TURN_OUT = 3,
+    NAV_ELEM_CONE_IN = 4,
+    NAV_ELEM_CONE_OUT = 5,
+    NAV_ELEM_BRIDGE = 6,
+    NAV_ELEM_BUMP = 7,
+    NAV_ELEM_JUMP = 8,
+    NAV_ELEM_END = 9,
+    NAV_ELEM_COUNT = 10,
+} Nav_Unified_Element;
+
+#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_JUMP
+
+static inline uint8 Nav_UnifiedToInsEvent(uint8 unified)
+{
+    if (unified <= NAV_ELEM_NORMAL || unified >= NAV_ELEM_END)
+    {
+        return 0xFFu;
+    }
+    return (uint8)(unified - 1u);
+}
+
+static inline uint8 Nav_CycleUnifiedElement(uint8 current)
+{
+    current++;
+    if (current > NAV_ELEM_RECORD_CYCLE_MAX)
+    {
+        current = NAV_ELEM_NORMAL;
+    }
+    return current;
+}
+
+static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_TURN_IN) || (unified == NAV_ELEM_TURN_OUT) ||
+                   (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT));
+}
+
+static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_JUMP));
+}
+
+static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_NORMAL) || (unified == NAV_ELEM_BRIDGE) ||
+                   (unified == NAV_ELEM_BUMP));
+}
+
+static inline const char *Nav_GetUnifiedElementName(uint8 unified)
+{
+    switch (unified)
+    {
+        case NAV_ELEM_NORMAL: return "Normal";
+        case NAV_ELEM_SPIN: return "Spin";
+        case NAV_ELEM_TURN_IN: return "TurnIn";
+        case NAV_ELEM_TURN_OUT: return "TurnOut";
+        case NAV_ELEM_CONE_IN: return "ConeIn";
+        case NAV_ELEM_CONE_OUT: return "ConeOut";
+        case NAV_ELEM_BRIDGE: return "Bridge";
+        case NAV_ELEM_BUMP: return "Bump";
+        case NAV_ELEM_JUMP: return "Jump";
+        case NAV_ELEM_END: return "End";
+        default: return "Unknown";
+    }
+}
+
 typedef enum
 {
        NAG_EVENT_TYPE_SPIN = 0,              // 原地自旋元素
@@ -332,6 +406,13 @@ void Nag_Notify_Event_Done(void); /* 元素完成：恢复 Run_index 并清 Even
 void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态并停留在当前元素态
 float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
 float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，叠加弯道限速、元素区段调速与提前加减速
+bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
+                                    float *target_speed,
+                                    float *pre_decel_dist_cm,
+                                    float *pre_accel_dist_cm);
+float GPS_ApplyEventSpeedAdjustments(float nav_speed);
+void Nag_EventPrepareEnter(uint8 event_type);
+void Nag_EventForceReset(void);
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
 bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
 float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标

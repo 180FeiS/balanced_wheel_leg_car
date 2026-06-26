@@ -19,7 +19,7 @@ uint8 save_point = 0;
 uint8 show_point = 0;
 uint8 gps_point_count = 0;
 uint8 gps_recording_active = 0;
-uint32 gps_current_yuansu = GPS_ELEMENT_NORMAL;
+uint32 gps_current_yuansu = NAV_ELEM_NORMAL;
 
 double latitude_point[GPS_POINT_MAX] = {0};
 double longitude_point[GPS_POINT_MAX] = {0};
@@ -283,6 +283,103 @@ static uint8 GPS_NavIsCogSampleValid(void)
     return 1u;
 }
 
+static void GPS_NavApplyDriftToCoord(uint8 point_index, double *lat_out, double *lon_out)
+{
+    double lat = latitude_point[point_index];
+    double lon = longitude_point[point_index];
+
+    if (lat_out == NULL || lon_out == NULL)
+    {
+        return;
+    }
+    if (gps_drift_corr_valid != 0u)
+    {
+        lat += gps_drift_delta_lat;
+        lon += gps_drift_delta_lon;
+    }
+    *lat_out = lat;
+    *lon_out = lon;
+}
+
+float GPS_NavDistanceToPointM(uint8 point_index)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)point_index;
+    return 0.0f;
+#else
+    double target_lat = 0.0;
+    double target_lon = 0.0;
+    float distance_m = 0.0f;
+
+    if (point_index >= gps_point_count || point_index >= GPS_POINT_MAX)
+    {
+        return 0.0f;
+    }
+    if (!GPS_NavIsTargetValid(point_index))
+    {
+        return 0.0f;
+    }
+    GPS_NavApplyDriftToCoord(point_index, &target_lat, &target_lon);
+    GPS_NavSegmentMetrics(gnss.latitude,
+                          gnss.longitude,
+                          target_lat,
+                          target_lon,
+                          &distance_m,
+                          NULL);
+    return distance_m;
+#endif
+}
+
+void GPS_NavForceEndPoint(void)
+{
+    if (gps_point_count > 0u)
+    {
+        u32yuansu[gps_point_count - 1u] = NAV_ELEM_END;
+    }
+}
+
+void GPS_NavTryEnterElement(uint8 point_index, uint8 unified_type)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)point_index;
+    (void)unified_type;
+#else
+    uint8 ins_type = Nav_UnifiedToInsEvent(unified_type);
+
+    if (ins_type == 0xFFu)
+    {
+        return;
+    }
+
+    N.Event_Active = 1u;
+    N.Event_Active_Index = point_index;
+    N.Active_Event_Enter = point_index;
+    N.Active_Event_Exit = point_index;
+    N.Event_Active_Type = ins_type;
+    N.Event_Start_RunIndex = 0u;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0u;
+    N.Event_Done_Latched = 0u;
+    Nag_EventPrepareEnter(ins_type);
+#endif
+}
+
+void GPS_NavOnElementDone(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+    if (tagert_point >= (uint8)(gps_point_count - 1u))
+    {
+        GPS_NavStop(GPS_NAV_STATE_FINISHED, GPS_NAV_PROTECT_FINISHED);
+        return;
+    }
+    tagert_point++;
+    gps_nav_target_index = tagert_point;
+    gps_nav_request_valid = 0u;
+#endif
+}
+
 static void GPS_NavCalcDistanceBearing(double current_latitude,
                                        double current_longitude,
                                        double target_latitude,
@@ -310,7 +407,7 @@ void GPS_ClearPoints(void)
     show_point = 0;
     gps_point_count = 0;
     gps_recording_active = 0;
-    gps_current_yuansu = GPS_ELEMENT_NORMAL;
+    gps_current_yuansu = NAV_ELEM_NORMAL;
     gps_nav_state = GPS_NAV_STATE_IDLE;
     gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
     gps_nav_target_index = 0;
@@ -326,6 +423,7 @@ void GPS_BeginRecord(void)
 void GPS_EndRecord(void)
 {
     gps_recording_active = 0u;
+    GPS_NavForceEndPoint();
 }
 
 void GPS_ApplyLaunchSpeed(void)
@@ -339,6 +437,10 @@ void GPS_ApplyLaunchSpeed(void)
     gps_nav_state = GPS_NAV_STATE_RUNNING;
     gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
     GPS_NavClearDebug();
+    if (N.Event_Active)
+    {
+        Nag_EventForceReset();
+    }
     gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
     {
         uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
@@ -374,6 +476,12 @@ void GPS_PointNav_Run(void)
     if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
     {
         motor_user_speed_cmd = 0.0f;
+        return;
+    }
+
+    if (N.Event_Active)
+    {
+        gps_nav_state = GPS_NAV_STATE_RUNNING;
         return;
     }
 
@@ -429,16 +537,31 @@ void GPS_PointNav_Run(void)
     is_last_point = (uint8)(tagert_point >= (uint8)(gps_point_count - 1u));
     if (gps_nav_distance_m <= GPS_NAV_ARRIVE_RADIUS_M)
     {
-        if (is_last_point)
+        uint8 unified_elem = (uint8)u32yuansu[tagert_point];
+
+        if (unified_elem == NAV_ELEM_END || is_last_point)
         {
             GPS_NavStop(GPS_NAV_STATE_FINISHED, GPS_NAV_PROTECT_FINISHED);
+            return;
         }
-        else
+
+        if (Nav_UnifiedIsPassThrough(unified_elem))
         {
             tagert_point++;
             gps_nav_target_index = tagert_point;
             gps_nav_request_valid = 0u;
+            return;
         }
+
+        if (Nav_UnifiedIsMarker(unified_elem) || Nav_UnifiedIsTakeover(unified_elem))
+        {
+            GPS_NavTryEnterElement(tagert_point, unified_elem);
+            return;
+        }
+
+        tagert_point++;
+        gps_nav_target_index = tagert_point;
+        gps_nav_request_valid = 0u;
         return;
     }
 
@@ -519,29 +642,7 @@ uint8 GPS_GetValidPointCount(void)
 
 const char *GPS_GetElementName(uint32 element)
 {
-    switch (element)
-    {
-    case GPS_ELEMENT_NORMAL:
-        return "Normal";
-    case GPS_ELEMENT_TURNAROUND:
-        return "Turn";
-    case GPS_ELEMENT_END:
-        return "End";
-    case GPS_ELEMENT_STEP:
-        return "Step";
-    case GPS_ELEMENT_SINGLE_BRIDGE:
-        return "Bridge";
-    case GPS_ELEMENT_BUMP:
-        return "Bump";
-    case GPS_ELEMENT_GRASS:
-        return "Grass";
-    case GPS_ELEMENT_INS_IN:
-        return "INS-In";
-    case GPS_ELEMENT_INS_OUT:
-        return "INS-Out";
-    default:
-        return "Unknown";
-    }
+    return Nav_GetUnifiedElementName((uint8)element);
 }
 
 const char *GPS_GetNavStateName(uint8 state)
@@ -584,11 +685,7 @@ const char *GPS_GetNavProtectName(uint8 reason)
 
 uint32 GPS_CycleCurrentElement(void)
 {
-    gps_current_yuansu++;
-    if (gps_current_yuansu >= GPS_ELEMENT_COUNT)
-    {
-        gps_current_yuansu = GPS_ELEMENT_NORMAL;
-    }
+    gps_current_yuansu = Nav_CycleUnifiedElement((uint8)gps_current_yuansu);
     return gps_current_yuansu;
 }
 

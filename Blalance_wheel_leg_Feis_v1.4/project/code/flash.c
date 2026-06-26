@@ -6,7 +6,7 @@ static uint8 nag_flash_index_read = 0;
 
 #define GPS_POINTS_PAGE 48u
 #define GPS_POINTS_MAGIC 0x47505350u
-#define GPS_POINTS_VERSION 1u
+#define GPS_POINTS_VERSION 2u
 #define GPS_POINTS_HEADER_WORDS 5u
 #define GPS_POINTS_LAT_WORDS (GPS_POINT_MAX * 2u)
 #define GPS_POINTS_LON_WORDS (GPS_POINT_MAX * 2u)
@@ -322,6 +322,9 @@ void flash_GpsPoints_Write(void)
     uint8 point_count = GPS_GetValidPointCount();
     uint8 index = 0;
 
+    GPS_NavForceEndPoint();
+    point_count = GPS_GetValidPointCount();
+
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = GPS_POINTS_MAGIC;
     flash_union_buffer[1].uint32_type = GPS_POINTS_VERSION;
@@ -380,7 +383,7 @@ void flash_GpsPoints_Read(void)
     if ((magic != GPS_POINTS_MAGIC) ||
         (version != GPS_POINTS_VERSION) ||
         (point_count > GPS_POINT_MAX) ||
-        (current_element >= GPS_ELEMENT_COUNT))
+        (current_element >= NAV_ELEM_COUNT))
     {
         GPS_ClearPoints();
         flash_buffer_clear();
@@ -400,7 +403,7 @@ void flash_GpsPoints_Read(void)
                                              flash_union_buffer[lon_base + 1u].uint32_type);
         uint32 element = flash_union_buffer[GPS_POINTS_ELEMENT_BASE + index].uint32_type;
 
-        if (element >= GPS_ELEMENT_COUNT)
+        if (element >= NAV_ELEM_COUNT)
         {
             GPS_ClearPoints();
             flash_buffer_clear();

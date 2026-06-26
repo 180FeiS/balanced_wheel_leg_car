@@ -542,7 +542,8 @@ void GUI_2_3_1(void)
     uint8 point_count = 0;
     uint8 current_show_point = 0;
     uint8 recording_active = 0;
-    uint32 current_element = GPS_ELEMENT_NORMAL;
+    uint32 current_element = NAV_ELEM_NORMAL;
+    uint32 tracking_element = NAV_ELEM_NORMAL;
     uint8 nav_state = GPS_NAV_STATE_IDLE;
     uint8 nav_protect_reason = GPS_NAV_PROTECT_NONE;
     uint8 nav_target_index = 0;
@@ -581,6 +582,10 @@ void GUI_2_3_1(void)
     nav_drift_valid = s_ui_dc.gps_drift_corr_valid;
     nav_drift_dlat = s_ui_dc.gps_drift_delta_lat;
     nav_drift_dlon = s_ui_dc.gps_drift_delta_lon;
+    if (nav_target_index < GPS_POINT_MAX)
+    {
+        tracking_element = s_ui_dc.gps_yuansu[nav_target_index];
+    }
 #else
     point_count = gps_point_count;
     current_show_point = show_point;
@@ -599,6 +604,10 @@ void GUI_2_3_1(void)
     nav_drift_valid = gps_drift_corr_valid;
     nav_drift_dlat = (float)gps_drift_delta_lat;
     nav_drift_dlon = (float)gps_drift_delta_lon;
+    if (nav_target_index < GPS_POINT_MAX)
+    {
+        tracking_element = u32yuansu[nav_target_index];
+    }
 #endif
 
     element_name = GPS_GetElementName(current_element);
@@ -636,6 +645,11 @@ void GUI_2_3_1(void)
     ips200_show_string(0, ROW_9, recording_active ? "Rec:Recording" : "Rec:Idle");
     ips200_show_string(0, ROW_10, "Elem:");
     ips200_show_string(48, ROW_10, element_name);
+    if (!recording_active && nav_state == GPS_NAV_STATE_RUNNING)
+    {
+        ips200_show_string(96, ROW_10, "Tr:");
+        ips200_show_string(112, ROW_10, GPS_GetElementName(tracking_element));
+    }
     if (recording_active)
     {
         ips200_show_string(0, ROW_11, "K1 --");

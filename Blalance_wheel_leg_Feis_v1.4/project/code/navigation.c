@@ -165,6 +165,21 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
     Nag_HeadingHold_Enable((float)euler_angle.yaw);
 }
 
+void Nag_EventPrepareEnter(uint8 event_type)
+{
+    N.Target_Request_Valid = 0u;
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
+    if (event_type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
+        event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
+        event_type != NAG_EVENT_TYPE_ENTER_CONES &&
+        event_type != NAG_EVENT_TYPE_EXIT_CONES)
+    {
+        steer_task_stop();
+    }
+    Nag_HeadingHold_OnEventEnter(event_type);
+}
+
 static void Nag_HeadingHold_OnEventExit(void)
 {
     N.HeadingHold_Event_Allowed = 0u;
@@ -496,6 +511,15 @@ static void Nag_ClearEventRuntimeState(void)
     N.Jump_Element_Armed = 0u;
 }
 
+void Nag_EventForceReset(void)
+{
+    if (N.Event_Active)
+    {
+        Nag_Element_Stop(N.Event_Active_Type);
+    }
+    Nag_ClearEventRuntimeState();
+}
+
 static void Nag_Element_StateMachine(void)
 {
     /* 回放中 Event_Active=1 时每 1ms 由 Nag_System() 调用。
@@ -506,7 +530,19 @@ static void Nag_Element_StateMachine(void)
     uint8 event_index = N.Event_Active_Index;
     uint8 event_type = N.Event_Active_Type;
 
-    if (!N.Event_Active || event_index >= N.Event_Count)
+    if (!N.Event_Active)
+    {
+        return;
+    }
+
+    if (nav_heading_mode == NAV_HEADING_MODE_GPS)
+    {
+        if (event_index >= gps_point_count)
+        {
+            return;
+        }
+    }
+    else if (event_index >= N.Event_Count)
     {
         return;
     }
@@ -628,10 +664,10 @@ static uint16 Nag_DistanceToPoints(float distance_cm)
 }
 
 /* 事件调速配置：target_speed=元素目标速度；pre_decel/pre_accel 为 cm，0 表示关闭。 */
-static bool Nag_GetEventSpeedProfileConfig(uint8 event_type,
-                                           float *target_speed,
-                                           float *pre_decel_dist_cm,
-                                           float *pre_accel_dist_cm)
+bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
+                                    float *target_speed,
+                                    float *pre_decel_dist_cm,
+                                    float *pre_accel_dist_cm)
 {
     if (target_speed == NULL || pre_decel_dist_cm == NULL || pre_accel_dist_cm == NULL)
     {
@@ -873,7 +909,7 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
             continue;
         }
 
-        if (!Nag_GetEventSpeedProfileConfig(Nag_Event_Table[event_index].type,
+        if (!Nav_GetEventSpeedProfileConfig(Nag_Event_Table[event_index].type,
                                             &profile_target,
                                             &pre_decel_dist,
                                             &pre_accel_dist))
@@ -927,7 +963,7 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
     }
     if (target_speed != NULL)
     {
-        (void)Nag_GetEventSpeedProfileConfig(Nag_Event_Table[best_index].type,
+        (void)Nav_GetEventSpeedProfileConfig(Nag_Event_Table[best_index].type,
                                              target_speed,
                                              &pre_decel_dist,
                                              &pre_accel_dist);
@@ -1116,7 +1152,7 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
         return adjusted;
     }
 
-    if (!Nag_GetEventSpeedProfileConfig(Nag_Event_Table[next_event].type,
+    if (!Nav_GetEventSpeedProfileConfig(Nag_Event_Table[next_event].type,
                                         &target_speed,
                                         &pre_decel_dist,
                                         &pre_accel_dist))
@@ -1189,17 +1225,7 @@ static void Nag_TryEnterEvent(void)
     N.Event_State = NAG_EVENT_STATE_ENTERED;
     N.Event_Start_Latched = 0;
     N.Event_Done_Latched = 0;
-    N.Target_Request_Valid = 0;
-    steer_yaw_request_pending = 0;
-    steer_yaw_delayed_by_spin = 0;
-    if (N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
-        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
-        N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_CONES &&
-        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_CONES)
-    {
-        steer_task_stop();
-    }
-    Nag_HeadingHold_OnEventEnter(N.Event_Active_Type);
+    Nag_EventPrepareEnter(N.Event_Active_Type);
 }
 
 static float Nag_GetMileageStep(void)
@@ -1293,6 +1319,184 @@ bool Nag_HeadingHold_ShouldRequest(void)
     return (yaw_err > Nag_HeadingHold_Reissue_Error);
 }
 
+static uint8 GPS_FindPairedZoneExit(uint8 enter_idx, uint8 exit_unified)
+{
+    uint8 i = 0u;
+
+    for (i = (uint8)(enter_idx + 1u); i < gps_point_count; i++)
+    {
+        if (u32yuansu[i] == exit_unified)
+        {
+            return i;
+        }
+    }
+    return 0xFFu;
+}
+
+static float GPS_ApplyTurnaroundZoneSpeed(float nav_speed)
+{
+    uint8 i = 0u;
+    float pre_decel_m = nag_enter_turn_pre_decel_dist_cm * 0.01f;
+    float pre_accel_m = nag_exit_turn_pre_accel_dist_cm * 0.01f;
+    float turn_target = nag_enter_turn_target_speed;
+    float recovery_speed = nag_exit_turn_recovery_speed;
+
+    if (recovery_speed <= 0.0f)
+    {
+        recovery_speed = nav_speed;
+    }
+
+    for (i = 0u; i < gps_point_count; i++)
+    {
+        uint8 exit_idx = 0xFFu;
+        float dist_enter_m = 0.0f;
+        float dist_exit_m = 0.0f;
+
+        if (u32yuansu[i] != NAV_ELEM_TURN_IN)
+        {
+            continue;
+        }
+
+        exit_idx = GPS_FindPairedZoneExit(i, NAV_ELEM_TURN_OUT);
+        if (tagert_point >= i && (exit_idx == 0xFFu || tagert_point <= exit_idx))
+        {
+            if (exit_idx != 0xFFu && tagert_point == exit_idx)
+            {
+                dist_exit_m = GPS_NavDistanceToPointM(exit_idx);
+                if (pre_accel_m > 0.0f && dist_exit_m <= pre_accel_m)
+                {
+                    return recovery_speed;
+                }
+            }
+            return Nag_ClampSpeedCap(nav_speed, turn_target);
+        }
+
+        dist_enter_m = GPS_NavDistanceToPointM(i);
+        if (pre_decel_m > 0.0f && dist_enter_m <= pre_decel_m)
+        {
+            return Nag_ClampSpeedCap(nav_speed, turn_target);
+        }
+    }
+
+    return nav_speed;
+}
+
+static float GPS_ApplyConeZoneSpeed(float nav_speed)
+{
+    uint8 i = 0u;
+    float pre_decel_m = nag_enter_cones_pre_decel_dist_cm * 0.01f;
+    float pre_accel_m = Nag_ExitCones_PreAccel_Dist_cm * 0.01f;
+    float cone_target = nag_enter_cones_target_speed;
+    float recovery_speed = Nag_ExitCones_Recovery_Speed;
+
+    if (recovery_speed <= 0.0f)
+    {
+        recovery_speed = nav_speed;
+    }
+
+    for (i = 0u; i < gps_point_count; i++)
+    {
+        uint8 exit_idx = 0xFFu;
+        float dist_enter_m = 0.0f;
+        float dist_exit_m = 0.0f;
+
+        if (u32yuansu[i] != NAV_ELEM_CONE_IN)
+        {
+            continue;
+        }
+
+        exit_idx = GPS_FindPairedZoneExit(i, NAV_ELEM_CONE_OUT);
+        if (tagert_point >= i && (exit_idx == 0xFFu || tagert_point <= exit_idx))
+        {
+            if (exit_idx != 0xFFu && tagert_point == exit_idx)
+            {
+                dist_exit_m = GPS_NavDistanceToPointM(exit_idx);
+                if (pre_accel_m > 0.0f && dist_exit_m <= pre_accel_m)
+                {
+                    return recovery_speed;
+                }
+            }
+            return Nag_ClampSpeedCap(nav_speed, cone_target);
+        }
+
+        dist_enter_m = GPS_NavDistanceToPointM(i);
+        if (pre_decel_m > 0.0f && dist_enter_m <= pre_decel_m)
+        {
+            return Nag_ClampSpeedCap(nav_speed, cone_target);
+        }
+    }
+
+    return nav_speed;
+}
+
+static float GPS_ApplyGenericEventSpeed(float nav_speed)
+{
+    uint8 i = 0u;
+    float target_speed = 0.0f;
+    float pre_decel_dist = 0.0f;
+    float pre_accel_dist = 0.0f;
+    float pre_decel_m = 0.0f;
+    float dist_m = 0.0f;
+    uint8 ins_type = 0u;
+
+    for (i = tagert_point; i < gps_point_count; i++)
+    {
+        uint8 unified = (uint8)u32yuansu[i];
+
+        if (Nav_UnifiedIsPassThrough(unified) || unified == NAV_ELEM_END || Nav_UnifiedIsMarker(unified))
+        {
+            continue;
+        }
+
+        ins_type = Nav_UnifiedToInsEvent(unified);
+        if (ins_type == 0xFFu)
+        {
+            continue;
+        }
+
+        if (!Nav_GetEventSpeedProfileConfig(ins_type,
+                                            &target_speed,
+                                            &pre_decel_dist,
+                                            &pre_accel_dist))
+        {
+            continue;
+        }
+
+        pre_decel_m = pre_decel_dist * 0.01f;
+        dist_m = GPS_NavDistanceToPointM(i);
+        if (pre_decel_m > 0.0f && dist_m <= pre_decel_m)
+        {
+            if (target_speed < 0.0f)
+            {
+                target_speed = 0.0f;
+            }
+            return Nag_ClampSpeedCap(nav_speed, target_speed);
+        }
+        break;
+    }
+
+    return nav_speed;
+}
+
+float GPS_ApplyEventSpeedAdjustments(float nav_speed)
+{
+#if Nag_EventSpeed_Enable
+    float cone_adjusted = 0.0f;
+    float turn_adjusted = 0.0f;
+
+    if (nav_heading_mode != NAV_HEADING_MODE_GPS)
+    {
+        return nav_speed;
+    }
+
+    cone_adjusted = GPS_ApplyConeZoneSpeed(nav_speed);
+    turn_adjusted = GPS_ApplyTurnaroundZoneSpeed(cone_adjusted);
+    return GPS_ApplyGenericEventSpeed(turn_adjusted);
+#else
+    return nav_speed;
+#endif
+}
+
 uint16 Nag_GetDebugProspectIndex(void)
 {
     return N.Prospect_index;
@@ -1312,14 +1516,54 @@ float Nag_GetControlSpeedTarget(void)
     float pre_decel_dist = 0.0f;
     float pre_accel_dist = 0.0f;
 
-    /* GPS 点导航由 GPS_PointNav_Run() 自己负责保护停车和到点停车。 */
+    /* GPS 点导航：叠加元素区段调速与预减速，到点/保护停车仍由 GPS_PointNav_Run 负责。 */
     if (nav_heading_mode == NAV_HEADING_MODE_GPS)
     {
         if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
         {
             return 0.0f;
         }
-        return motor_user_speed_cmd;
+
+        nav_speed = abs_user_speed;
+        nav_speed = GPS_ApplyEventSpeedAdjustments(nav_speed);
+
+        if (N.Event_Active)
+        {
+            switch (N.Event_Active_Type)
+            {
+                case NAG_EVENT_TYPE_JUMP:
+                    break;
+                case NAG_EVENT_TYPE_ENTER_TURNAROUND:
+                case NAG_EVENT_TYPE_EXIT_TURNAROUND:
+                case NAG_EVENT_TYPE_ENTER_CONES:
+                case NAG_EVENT_TYPE_EXIT_CONES:
+                    nav_speed = GPS_ApplyEventSpeedAdjustments(nav_speed);
+                    break;
+                case NAG_EVENT_TYPE_SPIN:
+                    if (Nav_GetEventSpeedProfileConfig(N.Event_Active_Type,
+                                                       &event_target,
+                                                       &pre_decel_dist,
+                                                       &pre_accel_dist) &&
+                        event_target >= 0.0f)
+                    {
+                        nav_speed = Nag_ClampSpeedCap(nav_speed, event_target);
+                    }
+                    else
+                    {
+                        nav_speed = MIN(nav_speed, abs_user_speed * Nag_Event_Speed_Ratio);
+                    }
+                    break;
+                default:
+                    nav_speed = MIN(nav_speed, abs_user_speed * Nag_Event_Speed_Ratio);
+                    break;
+            }
+        }
+
+        if ((float)motor_user_speed_cmd < 0.0f)
+        {
+            return -nav_speed;
+        }
+        return nav_speed;
     }
 
     if (N.Nag_Stop_f)
@@ -1356,7 +1600,7 @@ float Nag_GetControlSpeedTarget(void)
                 nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
                 break;
             case NAG_EVENT_TYPE_SPIN:
-                if (Nag_GetEventSpeedProfileConfig(N.Event_Active_Type,
+                if (Nav_GetEventSpeedProfileConfig(N.Event_Active_Type,
                                                    &event_target,
                                                    &pre_decel_dist,
                                                    &pre_accel_dist) &&
@@ -1634,7 +1878,24 @@ void Nag_Notify_Event_Done(void)
     uint16 resume_index = 0;
     uint16 max_run_index = 0;
 
-    if (!N.Event_Active || event_index >= N.Event_Count)
+    if (!N.Event_Active)
+    {
+        return;
+    }
+
+    if (nav_heading_mode == NAV_HEADING_MODE_GPS)
+    {
+        if (event_index >= gps_point_count)
+        {
+            return;
+        }
+        Nag_Element_Stop(N.Event_Active_Type);
+        Nag_ClearEventRuntimeState();
+        GPS_NavOnElementDone();
+        return;
+    }
+
+    if (event_index >= N.Event_Count)
     {
         return;
     }
@@ -1691,18 +1952,17 @@ void Nag_Element_Abort(void)
 //             Nag_SystemRun_Index==2 时 switch 无分支，不执行 Nag_Run；速度门控由 Nag_GetControlSpeedTarget 在索引!=3 时返回 0。
 //-------------------------------------------------------------------------------------------------------------------
 void Nag_System(){
-    //偏航角
-    if(!N.Nag_SystemRun_Index || N.Nag_Stop_f )  return;
-
     if (N.Event_Active)
     {
-        /* 元素接管期间不再直接 return，而是进入统一元素状态机：
-         * 1. ENTERED：刚切入元素，等待 Start 钩子真正接管；
-         * 2. RUNNING：周期执行 Run 钩子，并检测完成标志；
-         * 3. DONE：自动恢复惯导；
-         * 4. 若当前元素尚未补具体动作，默认空钩子会停留在 ENTERED，便于继续用 KEY4 / 串口 v 手动恢复。
-         */
         Nag_Element_StateMachine();
+        if (nav_heading_mode == NAV_HEADING_MODE_GPS)
+        {
+            return;
+        }
+    }
+
+    if(!N.Nag_SystemRun_Index || N.Nag_Stop_f )
+    {
         return;
     }
 
