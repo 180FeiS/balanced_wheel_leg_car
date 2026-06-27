@@ -20,18 +20,19 @@
 
 /* 速度积分式里程计参数：
  * 1. Nag_Set_mileage 表示每隔多少“距离单位”记录/回放一次 yaw，当前按 cm 理解；
- * 2. Nag_Speed_Source 为当前选用的前向速度源，先继续使用 car_speed；
- * 3. Nag_Speed_To_Mileage_Scale 用来把速度源换算成 cm/s，必须实车标定；
+ * 2. Nag_Speed_Source 为当前选用的前向速度源，先继续使用 car_speed（左右轮 RPM 平均）；
+ * 3. Nag_Speed_To_Mileage_Scale = 2π·WHEEL_RADIUS_CM/60，将 RPM 换算为 cm/s；换轮改 WHEEL_RADIUS_CM；
  * 4. Nag_Sample_Dt 必须与 Nag_System() 的真实调用周期严格一致。
  *    当前 Nag_System() 固定在 pit0_ch0_isr 的 1ms 中断里跑，因此这里必须是 0.001s。
- *    一旦修改导航调用周期或速度单位，Nag_Speed_To_Mileage_Scale 必须重新标定。
+ *    若 car_speed 非 RPM 或有减速比，改半径后仍建议卷尺短距离实测微调。
  */
+#define WHEEL_RADIUS_CM 3.73f             //驱动轮半径（cm）；3.64 为卡尺值，60cm 实车微调 +2.5%
 #define Nag_Set_mileage 2.0f              //每隔 2cm 记录一次 yaw
 #define Nag_Prev 200                      //保留的历史/预读缓存长度
 #define Nag_Yaw euler_angle.yaw           //航向角度取偏航角
 #define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
 #define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
-#define Nag_Speed_To_Mileage_Scale 0.37f  //速度单位到 cm/s 的换算系数，需标定
+#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
 #define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 /* 速度调试旁路：
