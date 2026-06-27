@@ -1164,6 +1164,12 @@
             <name>$PROJ_DIR$\..\..\code\Menu.h</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\nav_fusion.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\nav_fusion.h</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\my_gps.c</name>
         </file>
         <file>

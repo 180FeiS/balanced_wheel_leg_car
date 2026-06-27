@@ -35,6 +35,14 @@
 #define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
 #define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
+
+/*
+ * 惯导回放融合里程辅助（nav_fusion）：
+ * 1=Run_index 推进优先用融合位移(cm)，长距离/元素停车后漂移更小；0=纯 car_speed 积分。
+ * 录制/回放 KEY 流程不变；发车前建议 GPS 有效且静止 1~2s 以建立融合原点。
+ */
+#define NAG_USE_FUSION_MILEAGE 1u
+
 /* 速度调试旁路：
  * 1. 置 1 后，即使导航未进入回放态，也允许速度环直接使用 motor_user_speed_cmd；
  * 2. 仅用于直道阶跃调 PID，比赛/正式回放前务必改回 0；
@@ -391,7 +399,7 @@ extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
 /* 0~5：惯导/通用快照；6：GPS 几何与目标航向；7：GPS 距离/阶段/速度；8：转向执行链；9：元素调速调试 */
-#define NAG_VOFA_GROUP_COUNT (10u)
+#define NAG_VOFA_GROUP_COUNT (11u)
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,

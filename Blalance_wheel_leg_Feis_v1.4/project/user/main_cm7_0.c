@@ -184,6 +184,24 @@ static void send_nav_debug_to_vofa(void)
                            (float)N.Run_index,
                            (float)N.Event_Active_Type);
       break;
+#if NAV_FUSION_ENABLE
+    /* 组 10：融合调试 — 与 vofa.h VOFA_GROUP_FUSION_DEBUG / CM7_1 双核 VOFA 对齐 */
+    case 10:
+    {
+      const NavFusionState *fusion_st = NavFusion_GetState();
+      if (fusion_st != NULL)
+      {
+        SendDataStreamToVOFA(6,
+                             fusion_st->x_m,
+                             fusion_st->y_m,
+                             fusion_st->v_mps,
+                             fusion_st->gps_residual_m,
+                             fusion_st->gps_weight,
+                             (float)fusion_st->gps_used);
+      }
+      break;
+    }
+#endif
     default:
       break;
   }
@@ -217,6 +235,12 @@ int main(void)
     {
       gnss_flag = 0;
       gnss_data_parse();
+#if NAV_FUSION_ENABLE
+      NavFusion_UpdateGps(gnss.latitude,
+                          gnss.longitude,
+                          gnss.state,
+                          gnss.satellite_used);
+#endif
     }
 
     run_soft_tasks();

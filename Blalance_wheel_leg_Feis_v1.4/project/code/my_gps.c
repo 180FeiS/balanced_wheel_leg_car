@@ -172,6 +172,13 @@ static void GPS_NavClearDebug(void)
 static uint8 GPS_NavIsCurrentCoordValid(double latitude, double longitude)
 {
     uint8 frame_seen = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    /* 融合模式下：原点已建立即可继续导航，避免 GNSS 瞬时掉帧误触发保护 */
+    if (NavFusion_IsValid() != 0u && latitude != 0.0 && longitude != 0.0)
+    {
+        return 1u;
+    }
+#endif
     if (!frame_seen || latitude == 0.0 || longitude == 0.0)
     {
         return 0u;
@@ -201,6 +208,12 @@ static void GPS_NavStop(uint8 state, uint8 reason)
     steer_yaw_request_pending = 0u;
     steer_yaw_delayed_by_spin = 0u;
     steer_task_stop();
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (state == GPS_NAV_STATE_FINISHED || state == GPS_NAV_STATE_PROTECT)
+    {
+        NavFusion_Reset();
+    }
+#endif
 }
 
 /* 录点首点 (index0) 与本次发车锁存 GNSS 之差，平移到当前「卫星读数坐标系」。仅写 gps_drift_*，不改动 latitude_point[]。 */
@@ -452,6 +465,14 @@ void GPS_ApplyLaunchSpeed(void)
         }
     }
     GPS_NavTryUpdateDriftCorrection();
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (gps_nav_launch_fix_valid != 0u)
+    {
+        NavFusion_InitFromGps(gps_nav_launch_latitude,
+                              gps_nav_launch_longitude,
+                              gps_nav_launch_imu_yaw);
+    }
+#endif
     nav_heading_mode = NAV_HEADING_MODE_GPS;
     motor_user_speed_cmd = run_launch_speed;
 #endif
@@ -487,6 +508,12 @@ void GPS_PointNav_Run(void)
 
     gps_nav_current_latitude = gnss.latitude;
     gps_nav_current_longitude = gnss.longitude;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (NavFusion_IsValid() != 0u)
+    {
+        NavFusion_GetPositionLatLon(&gps_nav_current_latitude, &gps_nav_current_longitude);
+    }
+#endif
     gps_nav_imu_yaw_deg = (float)euler_angle.yaw;
 
     if (!GPS_NavIsCurrentCoordValid(gps_nav_current_latitude, gps_nav_current_longitude))
@@ -571,6 +598,17 @@ void GPS_PointNav_Run(void)
                           gps_nav_current_longitude,
                           &dist_from_launch_m,
                           NULL);
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (NavFusion_IsValid() != 0u)
+    {
+        const NavFusionState *fusion_st = NavFusion_GetState();
+        if (fusion_st != NULL)
+        {
+            dist_from_launch_m = sqrtf(fusion_st->x_m * fusion_st->x_m +
+                                       fusion_st->y_m * fusion_st->y_m);
+        }
+    }
+#endif
     gps_nav_dist_from_launch_m = dist_from_launch_m;
 
     /*

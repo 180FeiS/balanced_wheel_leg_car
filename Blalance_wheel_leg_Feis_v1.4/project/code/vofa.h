@@ -26,6 +26,17 @@ void vofa_send_nav_from_dualcore_snapshot(void);
  * 建议与 navigation.h 中 Nag_*_Target_Speed / Nag_*_PreDecel_Dist_cm 等参数联调。
  */
 #define VOFA_GROUP_EVENT_SPEED_DEBUG (9u)
+
+/*
+ * VOFA 组 10 — GPS+惯导融合调试（菜单 n 切组至 10）：
+ *   ch1 fusion_x_m           融合东向位移(m)
+ *   ch2 fusion_y_m           融合北向位移(m)
+ *   ch3 fusion_v_mps         标定后前向速度(m/s)
+ *   ch4 fusion_gps_residual_m  GPS 与融合位置残差(m)，>3 常见跳点
+ *   ch5 fusion_gps_weight    本帧 GPS 修正增益
+ *   ch6 fusion_gps_used      1=本帧 GPS 参与修正
+ */
+#define VOFA_GROUP_FUSION_DEBUG (10u)
 #endif
 
 #endif

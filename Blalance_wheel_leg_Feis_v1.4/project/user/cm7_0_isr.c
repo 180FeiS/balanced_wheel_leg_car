@@ -61,6 +61,11 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     dip_switch_motor_sync_from_hw();
     EKF_UpData();
     EKF_V_UPData();
+#if NAV_FUSION_ENABLE
+    /* 融合：1ms 惯导预测 + 静止零速约束；GPS 修正见 main 中 gnss_data_parse() 后 */
+    NavFusion_Predict1ms((float)euler_angle.yaw, (float)car_speed);
+    NavFusion_ZeroVelocityUpdate((float)car_speed);
+#endif
     /* 导航当前固定在 1ms 中断里运行：
      * 1. navigation.h 中 Nag_Sample_Dt 必须与这里保持一致；
      * 2. 不要再在 main 或 5ms 软任务里重复调用 Nag_System()，否则里程会被重复积分；

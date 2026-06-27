@@ -152,6 +152,14 @@ typedef struct
   float dbg_steer_enable;
   float dbg_steer_yaw_request_pending;
   float dbg_steer_yaw_request_deg;
+  /* VOFA 组 10：GPS+惯导融合调试（nav_fusion） */
+  float fusion_x_m;
+  float fusion_y_m;
+  float fusion_v_mps;
+  float fusion_gps_residual_m;
+  float fusion_gps_weight;
+  uint8 fusion_gps_used;
+  uint8 fusion_valid;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

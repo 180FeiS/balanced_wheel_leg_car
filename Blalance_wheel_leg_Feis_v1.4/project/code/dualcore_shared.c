@@ -12,6 +12,7 @@
 #include "navigation.h"
 #include "flash.h"
 #include "zf_device_gnss.h"
+#include "nav_fusion.h"
 #endif
 
 #if defined(CY_CORE_CM7_0)
@@ -143,6 +144,40 @@ void dualcore_ctrl_to_ui_publish(void)
   c->dbg_steer_enable = (float)steer_enable;
   c->dbg_steer_yaw_request_pending = (float)steer_yaw_request_pending;
   c->dbg_steer_yaw_request_deg = (float)steer_yaw_request_deg;
+
+#if NAV_FUSION_ENABLE
+  {
+    const NavFusionState *fusion_st = NavFusion_GetState();
+    if (fusion_st != NULL)
+    {
+      c->fusion_x_m = fusion_st->x_m;
+      c->fusion_y_m = fusion_st->y_m;
+      c->fusion_v_mps = fusion_st->v_mps;
+      c->fusion_gps_residual_m = fusion_st->gps_residual_m;
+      c->fusion_gps_weight = fusion_st->gps_weight;
+      c->fusion_gps_used = fusion_st->gps_used;
+      c->fusion_valid = fusion_st->valid;
+    }
+    else
+    {
+      c->fusion_x_m = 0.0f;
+      c->fusion_y_m = 0.0f;
+      c->fusion_v_mps = 0.0f;
+      c->fusion_gps_residual_m = 0.0f;
+      c->fusion_gps_weight = 0.0f;
+      c->fusion_gps_used = 0u;
+      c->fusion_valid = 0u;
+    }
+  }
+#else
+  c->fusion_x_m = 0.0f;
+  c->fusion_y_m = 0.0f;
+  c->fusion_v_mps = 0.0f;
+  c->fusion_gps_residual_m = 0.0f;
+  c->fusion_gps_weight = 0.0f;
+  c->fusion_gps_used = 0u;
+  c->fusion_valid = 0u;
+#endif
 
   c->seq++;
   __DSB();

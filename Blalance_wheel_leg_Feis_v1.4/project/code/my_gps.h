@@ -15,7 +15,11 @@
  *    bias = Wrap180(GPS_first − euler_ref)；指路角与 subject2 GPS_angle 同源（get_two_points_azimuth→±180°），
  *    TRACKING：target_imu = Wrap180(Theta_goal − GPS_first + euler_ref)。与坐标漂移修正相互独立。
  * 5) 勿与 gps_first_clearerr* 同时对同一次运行做「改表 + 运行时加 delta」，否则双重平移。
+ * 6) GPS_NAV_USE_FUSION_POSITION=1 时追点用 nav_fusion 位置，录点/发车 KEY 流程不变。
  */
+
+/* 1=GPS 点导航当前位置用融合坐标；0=直接用 gnss 经纬度（原行为） */
+#define GPS_NAV_USE_FUSION_POSITION 1u
 
 #define GPS_POINT_MAX 25u
 /* GPS 点导航参数：

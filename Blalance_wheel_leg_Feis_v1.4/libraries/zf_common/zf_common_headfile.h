@@ -117,6 +117,7 @@
 #include "UI.h"
 #include "flash.h"
 #include "navigation.h"
+#include "nav_fusion.h"
 #include "self_math.h"
 #include "step_detection.h"
 #include "task_schedule.h"

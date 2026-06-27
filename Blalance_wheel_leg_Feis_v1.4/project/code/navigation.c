@@ -1233,6 +1233,23 @@ static float Nag_GetMileageStep(void)
 {
     float speed_forward = (float)Nag_Speed_Source;
 
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    {
+        float fusion_step_cm = NavFusion_GetMileageStepCm();
+        if (fusion_step_cm >= 0.0f)
+        {
+            N.Speed_Forward = speed_forward;
+            if (fusion_step_cm < 0.001f)
+            {
+                N.Mileage_Step = 0.0f;
+                return 0.0f;
+            }
+            N.Mileage_Step = fusion_step_cm;
+            return fusion_step_cm;
+        }
+    }
+#endif
+
     /* 这里仍然采用 car_speed 积分距离，先在不引入编码器增量的前提下把导航打通。
      * 关键约束：
      * 1. Nag_Sample_Dt 必须与 Nag_System() 的真实调用周期一致；
@@ -1849,6 +1866,16 @@ void Nag_Begin_Replay(void)
     steer_yaw_delayed_by_spin = 0;
     steer_task_stop();
     flash_Nag_ResetReadState();
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_Reset();
+    {
+        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+        {
+            NavFusion_InitFromGps(gnss.latitude, gnss.longitude, (float)euler_angle.yaw);
+        }
+    }
+#endif
     N.Nag_SystemRun_Index = 2;
 }
 
