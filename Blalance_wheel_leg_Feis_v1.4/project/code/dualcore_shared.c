@@ -3,6 +3,7 @@
  *********************************************************************************************************************/
 #include "dualcore_shared.h"
 #include "cachel1_armv7.h"
+#include "Menu.h"
 
 #if defined(CY_CORE_CM7_0)
 #include "matrix.h"
@@ -83,6 +84,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->jump_allowed = jump_is_allowed();
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
   c->remote_local_keys_debug = g_remote_local_keys_debug;
+  c->menu_input_remote_first = g_menu_input_remote_first;
   c->gps_valid = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
   c->gps_year = gnss.time.year;
   c->gps_month = gnss.time.month;
@@ -231,6 +233,9 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     {
       Nag_LaunchParamAdjust((uint8)s->arg_u32, s->arg_f32);
     }
+    break;
+  case DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE:
+    Menu_RunConfigToggleField((uint8)s->arg_u32);
     break;
   case DUALCORE_UI_CMD_GPS_SAVE_POINT:
     (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);

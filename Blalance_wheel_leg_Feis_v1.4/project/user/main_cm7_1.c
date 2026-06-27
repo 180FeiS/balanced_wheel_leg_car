@@ -36,6 +36,8 @@
 #include "zf_common_headfile.h"
 #include "step_detection.h"
 #include "vofa.h"
+#include "image.h"
+#include "Menu.h"
 
 /*-------------------------------------------------------------------------------------------------------------------
  * CM7_1 主循环每圈最多发一帧 VOFA（JustFloat 经 wireless_uart）。
@@ -74,18 +76,25 @@ int main(void)
     while(true)
     {
         selectMenu_Key();
+        Menu_UpdateImageAeArm();
+        /* Debug→Image（2.1*）只做曝光/阈值调试，不跑台阶检测，避免与 AE 抢 mt9v03x_finish_flag */
+        if (!MenuIsImageSectionPage())
+        {
+            step_detect();
+        }
+        image_ae_session_poll();
         selectMenu();
+        (void)image_ae_session_consume_done_and_save();
         ui_pull_ctrl_snapshot();
 
         remote_lora_update_from_driver_and_publish();
 
-        step_detect();
         //step_visual_jump_after_step(); /* 视觉自动跳跃：见 step_detection.c / VISUAL_JUMP_* */
         static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
-        cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
+        //cm71_vofa_main_loop_tx_dispatch(); /* 详见 static 函数注释 */
     }
 }
 

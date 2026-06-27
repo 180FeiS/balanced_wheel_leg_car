@@ -56,7 +56,14 @@ void remote_lora_init(void)
 
 uint8 remote_lora_is_remote_menu_enabled(void)
 {
-    return (uint8)(MENU_INPUT_REMOTE_MENU_FIRST ? 1u : 0u);
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc;
+
+    dualcore_ctrl_to_ui_pull(&dc);
+    return dc.menu_input_remote_first;
+#else
+    return 0u;
+#endif
 }
 
 void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out)

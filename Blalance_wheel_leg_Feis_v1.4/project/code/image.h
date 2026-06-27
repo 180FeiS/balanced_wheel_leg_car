@@ -5,7 +5,8 @@
  * @note
  *   - MT9V03X_H、MT9V03X_W 须为偶数；压缩尺寸为 `IMAGE_COMPRESS_H/W`。
  *   - 遍历/识别建议以 `image_two_value` 为坐标系（与同尺寸二值图一致）。
- *   - `step_detection.c` 若仍用全场 `mt9v03x_image`，与菜单压缩显示可能不一致，见 UI 注释。
+ *   - 主循环在 Debug→Image（pos 2.1*）不调用 step_detect，AE 独占 mt9v03x_finish_flag。
+ *   - 进入 Debug→Image（pos 2.1）时 arm AE 会话；收敛后写 Flash 页 49；上电 camera_init 读回。
  *********************************************************************************************************************/
 #ifndef PROJECT_CODE_IMAGE_H_
 #define PROJECT_CODE_IMAGE_H_
@@ -56,6 +57,14 @@ extern volatile int White_Column[IMAGE_COMPRESS_W];
 extern int Longest_White_Column_Left[2];
 extern int Longest_White_Column_Right[2];
 
+typedef enum
+{
+    IMAGE_AE_IDLE = 0,
+    IMAGE_AE_RUNNING,
+    IMAGE_AE_DONE,
+    IMAGE_AE_FAILED,
+} image_ae_state_enum;
+
 void    image_photo_compress        (const uint8 *src_full_row0);
 /** 与 `image_photo_compress` 等价，旧代码/菜单仍可用此名 */
 void    image_gray_compress_from_full(const uint8 *src_full_row0);
@@ -76,10 +85,19 @@ void    Longest_White_Column        (void);
 float   Err_Sum                     (void);
 float   Err_bx_Sum                  (void);
 
-/**
- * @brief TC `v_iftc_camera_autoexposure`：在压缩 ROI 上统计亮度闭环调节 `image_camera_exposure`。
- * @note 不修改 `mt9v03x_finish_flag`（与台阶检测等共用场中断时的约定）；单次调用内有界迭代。
- */
+/** Flash 页 49：上电读 / AE 收敛后写 */
+void    image_camera_exposure_flash_read(void);
+void    image_camera_exposure_flash_write(void);
+
+/** 进入 Image 菜单区（pos 2.1*）时 arm；主循环 poll；DONE/FAILED 后 consume 写 Flash */
+void    image_ae_session_arm(void);
+void    image_ae_session_poll(void);
+uint8   image_ae_session_is_active(void);
+image_ae_state_enum image_ae_session_get_state(void);
+/** 返回 1：已写 Flash 并回到 IDLE */
+uint8   image_ae_session_consume_done_and_save(void);
+
+/** 阻塞版（调试用）；菜单路径请用 session API */
 void    image_camera_auto_exposure  (void);
 
 #endif /* PROJECT_CODE_IMAGE_H_ */

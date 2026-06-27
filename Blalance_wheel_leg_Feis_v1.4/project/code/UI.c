@@ -32,6 +32,9 @@
 ********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
+#if defined(CY_CORE_CM7_1)
+#include "single_bridge.h"
+#endif
 #include "my_gps.h"
 #if defined(CY_CORE_CM7_1)
 #include "dualcore_shared.h"
@@ -39,6 +42,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #else
 #include "control.h"
 #endif
+#include "Menu.h"
 
 /* Run：须让 pos 3.1~3.3 的 menuMember 头部一致，否则 HashPeer 切项时画面与真实 pos 不同步；勿在 pos「3」上用子菜单列表。 */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
@@ -333,22 +337,21 @@ static void GUI_Display_Level2_Common2(void)
     GUI_Display_FPS();
 }
 
-void GUI_2_1(void) // 图像设置
+void GUI_2_1(void) // Debug 二级列表：Image 行
 {
     GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
 
-    ips200_show_string(48,ROW_6,"-->");
-    ips200_show_string(152,ROW_6,"<--");
+    ips200_show_string(80, ROW_6, " Image  ");
+    ips200_show_string(80, ROW_8, " NavDbg ");
+    ips200_show_string(80, ROW_10, " GPS    ");
+    ips200_show_string(80, ROW_12, " Speed  ");
+    ips200_show_string(80, ROW_14, "W_Flash");
+    ips200_show_string(80, ROW_16, "C_Flash ");
+
+    ips200_show_string(48, ROW_6, "-->");
+    ips200_show_string(152, ROW_6, "<--");
 }
-void ACT_2_1() 
+void ACT_2_1()
 {
     ReadPos[0] = '2';
     ReadPos[1] = '.';
@@ -838,7 +841,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 
     ips200_show_string(80, ROW_8, " Launch ");
     ips200_show_string(80, ROW_10, " Save   ");
-    ips200_show_string(80, ROW_12, " More   ");
+    ips200_show_string(80, ROW_12, " Config ");
 
     switch (selected_row_index)
     {
@@ -856,7 +859,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     ips200_show_string(152, ay, "<--");
     if (selected_row_index == 1u)
     {
-        ips200_show_string(24, ROW_15, "KEY3: save launch");
+        ips200_show_string(24, ROW_15, "KEY3: save run");
     }
 }
 
@@ -897,6 +900,53 @@ void ACT_3_3()
     ReadPos[2] = '3';
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
+}
+
+void GUI_3_3_1(void)
+{
+    uint8 field_index = Menu_GetRunConfigFieldIndex();
+    uint8 input_remote = 0u;
+
+    GUI_Display_Level2_Common3();
+    ips200_show_string(56, ROW_3, "Config");
+    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    input_remote = s_ui_dc.menu_input_remote_first;
+#else
+    input_remote = g_menu_input_remote_first;
+#endif
+
+    if (field_index == Run_Config_Field_InputMode)
+    {
+        ips200_show_string(0, ROW_6, "->");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_6, "  ");
+    }
+    ips200_show_string(16, ROW_6, "InputMode:");
+    if (input_remote != 0u)
+    {
+        ips200_show_string(112, ROW_6, "Remote");
+    }
+    else
+    {
+        ips200_show_string(112, ROW_6, "Key   ");
+    }
+
+    ips200_show_string(8, ROW_15, "K1:nxt K2:chg K4:bk");
+}
+
+void ACT_3_3_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '3';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
 }
 
 static float GUI_RunLaunchParamValue(uint8 field_index)
@@ -1143,56 +1193,60 @@ void ACT_1_5_1()
     ReadPos[5] = 0x00;
 }
 
-static void GUI_Display_Level3_ImageDetect(uint8 current_idx)
+/** Image 三级列表：与 GUI_Run_ShowSubmenuList 同构；selected 0=Step 1=Bridge 2=Bumpy */
+static void GUI_Image_ShowSubmenuList(uint8 selected_row_index)
 {
-    GUI_Display_Level3_Common1();
-    ips200_show_string(0,ROW_1,"Image");
+    int16 ay;
 
-    ips200_show_string(24,ROW_3,"Step Detection");
-    ips200_show_string(24,ROW_4,"Single Bridge");
-    ips200_show_string(24,ROW_5,"Bumpy Road");
+    ips200_draw_line(0, 20, 239, 20, IPS200_DEFAULT_PENCOLOR);
+    ips200_show_string(0, ROW_1, "Image");
+    GUI_Display_FPS();
 
-    switch(current_idx)
+    ips200_show_string(80, ROW_6, " Step   ");
+    ips200_show_string(80, ROW_8, " Bridge ");
+    ips200_show_string(80, ROW_10, " Bumpy  ");
+
+    switch (selected_row_index)
     {
-        case 1:
-            ips200_show_string(0,ROW_3,"->");
-            break;
-        case 2:
-            ips200_show_string(0,ROW_4,"->");
-            break;
-        case 3:
-            ips200_show_string(0,ROW_5,"->");
-            break;
-        default:
-            break;
+    default:
+        ay = ROW_6;
+        break;
+    case 1u:
+        ay = ROW_8;
+        break;
+    case 2u:
+        ay = ROW_10;
+        break;
     }
+    ips200_show_string(48, ay, "-->");
+    ips200_show_string(152, ay, "<--");
+
+#if defined(CY_CORE_CM7_1)
+    switch (image_ae_session_get_state())
+    {
+    case IMAGE_AE_RUNNING:
+        ips200_show_string(0, ROW_18, "AE:Run   ");
+        break;
+    case IMAGE_AE_DONE:
+        ips200_show_string(0, ROW_18, "AE:Done  ");
+        break;
+    case IMAGE_AE_FAILED:
+        ips200_show_string(0, ROW_18, "AE:Fail  ");
+        break;
+    default:
+        ips200_show_string(0, ROW_18, "AE:Idle  ");
+        break;
+    }
+    ips200_show_string(0, ROW_19, "Exp:");
+    ips200_show_int(40, ROW_19, (int32)image_camera_exposure, 5);
+    ips200_show_string(96, ROW_19, "Lt:");
+    ips200_show_int(120, ROW_19, (int32)test_printf_light, 6);
+#endif
 }
 
-void GUI_2_1_1(void) // 台阶检测
+void GUI_2_1_1(void) // Image 三级列表：Step 行
 {
-    GUI_Display_Level3_ImageDetect(1);
-
-    ips200_show_string(0,ROW_7,"Detected:");
-    ips200_show_string(88,ROW_7,step_data.detected ? "Yes" : "No ");
-
-    ips200_show_string(0,ROW_6,"压缩灰度");
-    ips200_show_string(0,ROW_8,"Distance:");
-    ips200_show_float(88,ROW_8,step_data.distance_cm,3,1);
-    ips200_show_string(136,ROW_8,"cm");
-
-    ips200_show_string(0,ROW_9,"Height:");
-    ips200_show_uint(88,ROW_9,step_data.step_height_pix,3);
-    ips200_show_string(136,ROW_9,"pix");
-
-    /*
-     * 主图：1/2 压缩灰度 image_two_value，与视觉主域、AE 统计坐标系一致。
-     * step_detection 若仍基于全场 mt9v03x_image（raw），与屏上压缩观感可能不一致，属有意分层。
-     */
-    image_photo_compress(mt9v03x_image[0]);
-    ips200_show_gray_image(0,ROW_10,image_two_value[0],
-                           IMAGE_COMPRESS_W,IMAGE_COMPRESS_H,
-                           MT9V03X_W,MT9V03X_H,0);
-
+    GUI_Image_ShowSubmenuList(0u);
 }
 void ACT_2_1_1()
 {
@@ -1201,23 +1255,12 @@ void ACT_2_1_1()
     ReadPos[2] = '1';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
 }
 
-void GUI_2_1_2(void) // 单边桥检测
+void GUI_2_1_2(void) // Image 三级列表：Bridge 行
 {
-    GUI_Display_Level3_ImageDetect(2);
-
-    ips200_show_string(0,ROW_7,"Bridge");
-    /*
-     * 单列「压缩 AE 后」：本页不叠双图，避免竖向两窗占位不足。与台阶页切菜单一同对照。
-     * image_camera_auto_exposure() 内有界迭代，勿在 bot==0 盲清 armed；AE 后在当前曝光下再压一帧用于显示。
-     */
-    ips200_show_string(0,ROW_8,"压缩 AE 后");
-    image_camera_auto_exposure();
-    image_photo_compress(mt9v03x_image[0]);
-    ips200_show_gray_image(0,ROW_10,image_two_value[0],
-                           IMAGE_COMPRESS_W,IMAGE_COMPRESS_H,
-                           MT9V03X_W,MT9V03X_H,0);
+    GUI_Image_ShowSubmenuList(1u);
 }
 void ACT_2_1_2()
 {
@@ -1226,17 +1269,12 @@ void ACT_2_1_2()
     ReadPos[2] = '1';
     ReadPos[3] = '.';
     ReadPos[4] = '2';
+    ReadPos[5] = 0x00;
 }
 
-void GUI_2_1_3(void) // 颠簸路段检测
+void GUI_2_1_3(void) // Image 三级列表：Bumpy 行
 {
-    GUI_Display_Level3_ImageDetect(3);
-
-    ips200_show_string(0,ROW_8,"Bumpy Road");
-    ips200_show_string(0,ROW_9,"Reserved Page");
-    ips200_show_string(0,ROW_11,"Use this page");
-    ips200_show_string(0,ROW_12,"for future image");
-    ips200_show_string(0,ROW_13,"detection logic.");
+    GUI_Image_ShowSubmenuList(2u);
 }
 void ACT_2_1_3()
 {
@@ -1245,6 +1283,100 @@ void ACT_2_1_3()
     ReadPos[2] = '1';
     ReadPos[3] = '.';
     ReadPos[4] = '3';
+    ReadPos[5] = 0x00;
+}
+
+void GUI_2_1_1_1(void) // 台阶检测
+{
+    GUI_Display_Level2_Common2();
+    ips200_show_string(56, ROW_3, "Step Detect");
+
+    ips200_show_string(0, ROW_7, "Detected:");
+    ips200_show_string(88, ROW_7, step_data.detected ? "Yes" : "No ");
+
+    ips200_show_string(0, ROW_6, "压缩灰度");
+    ips200_show_string(0, ROW_8, "Distance:");
+    ips200_show_float(88, ROW_8, step_data.distance_cm, 3, 1);
+    ips200_show_string(136, ROW_8, "cm");
+
+    ips200_show_string(0, ROW_9, "Height:");
+    ips200_show_uint(88, ROW_9, step_data.step_height_pix, 3);
+    ips200_show_string(136, ROW_9, "pix");
+
+#if defined(CY_CORE_CM7_1)
+    image_photo_compress(mt9v03x_image[0]);
+    ips200_show_gray_image(0, ROW_10, image_two_value[0],
+                           IMAGE_COMPRESS_W, IMAGE_COMPRESS_H,
+                           MT9V03X_W, MT9V03X_H, 0);
+#endif
+}
+void ACT_2_1_1_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = '.';
+    ReadPos[6] = '1';
+    ReadPos[7] = 0x00;
+}
+
+void GUI_2_1_2_1(void) // 单边桥检测
+{
+    GUI_Display_Level2_Common2();
+    ips200_show_string(56, ROW_3, "Single Bridge");
+
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(0, ROW_7, "Bridge");
+    ips200_show_string(0, ROW_8, "DiffTrack");
+
+    single_bridge_debug_show(0, ROW_10, hd_threshold);
+
+    ips200_show_string(0, ROW_6, "Th:");
+    ips200_show_int(24, ROW_6, hd_threshold, 3);
+    ips200_show_string(64, ROW_6, "End:");
+    ips200_show_int(96, ROW_6, end_line, 3);
+    ips200_show_string(0, ROW_9, "Err:");
+    ips200_show_float(32, ROW_9, Cammer_Err, 4, 1);
+#else
+    ips200_show_string(0, ROW_7, "Bridge");
+    ips200_show_string(0, ROW_8, "UI on M7_1");
+#endif
+}
+void ACT_2_1_2_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '2';
+    ReadPos[5] = '.';
+    ReadPos[6] = '1';
+    ReadPos[7] = 0x00;
+}
+
+void GUI_2_1_3_1(void) // 颠簸路段检测
+{
+    GUI_Display_Level2_Common2();
+    ips200_show_string(56, ROW_3, "Bumpy Road");
+
+    ips200_show_string(0, ROW_8, "Bumpy Road");
+    ips200_show_string(0, ROW_9, "Reserved Page");
+    ips200_show_string(0, ROW_11, "Use this page");
+    ips200_show_string(0, ROW_12, "for future image");
+    ips200_show_string(0, ROW_13, "detection logic.");
+}
+void ACT_2_1_3_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = '.';
+    ReadPos[4] = '3';
+    ReadPos[5] = '.';
+    ReadPos[6] = '1';
+    ReadPos[7] = 0x00;
 }
 
 // void GUI_1_3_1(void) // 测试摄像头

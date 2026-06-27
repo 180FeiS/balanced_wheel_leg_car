@@ -50,6 +50,7 @@ typedef enum
   DUALCORE_UI_CMD_GPS_BEGIN_RECORD = 23,
   DUALCORE_UI_CMD_GPS_END_SAVE_FLASH = 24,
   DUALCORE_UI_CMD_GPS_LAUNCH = 25,
+  DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE = 27, /* Config 页：arg_u32=字段索引，切换当前字段取值 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -92,7 +93,8 @@ typedef struct
   uint8 spin_done;
   uint8 jump_allowed; /* jump_is_allowed()，为 0 时不应再发视觉跳跃命令 */
   uint8 jump_active;  /* jump_flag!=0，跳跃流程进行中 */
-  uint8 remote_local_keys_debug; /* 1：MENU_INPUT_REMOTE_MENU_FIRST==1 且遥控拨码=板载调试电平；CM7_1 菜单/拨码路径对齐宏=0。仅 CM7_0 写入 */
+  uint8 remote_local_keys_debug; /* 1：g_menu_input_remote_first==1 且遥控拨码=板载调试电平；CM7_1 菜单/拨码路径对齐 0。仅 CM7_0 写入 */
+  uint8 menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Run Config 可配，Save 写 Flash */
   uint8 gps_valid; /* 1：已解析到至少一帧 GNSS 数据 */
   uint16 gps_year;
   uint8 gps_month;

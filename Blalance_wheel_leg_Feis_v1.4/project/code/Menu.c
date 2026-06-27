@@ -64,6 +64,7 @@
 #include <string.h>
 #include "dualcore_shared.h"
 #include "my_gps.h"
+#include "image.h"
 #if defined(CY_CORE_CM7_0)
 #include "control.h"
 #include "navigation.h"
@@ -107,17 +108,77 @@ static uint8 MenuIsNavDebugPage(void);
 static uint8 MenuIsGpsDebugPage(void);
 static uint8 MenuIsRunLaunchSpeedPage(void);
 static uint8 MenuIsRunFlashPage(void);
+static uint8 MenuIsRunConfigPage(void);
 static void MenuAdjustRunLaunchParam(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
+static uint8 MenuTryHandleRunConfigKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
+static uint8 MenuIsRemoteMenuFirst(void);
+
+static uint8 s_was_in_image_section = 0u;
+
+uint8 MenuIsImageSectionPage(void)
+{
+    return (uint8)(strncmp(menuMember.pos, "2.1", 3) == 0);
+}
+
+void Menu_UpdateImageAeArm(void)
+{
+    uint8 in_image = MenuIsImageSectionPage();
+
+    if (in_image && (s_was_in_image_section == 0u))
+    {
+        image_ae_session_arm();
+    }
+
+    if (!in_image)
+    {
+        s_was_in_image_section = 0u;
+    }
+    else
+    {
+        s_was_in_image_section = 1u;
+    }
+}
 
 /* Launch 页：KEY1 循环选中字段；KEY2/KEY3 按速度±100、距离±10 调节。 */
 static uint8 s_run_launch_field_index = 0u;
+/* Config 页：KEY1 循环选中预配置字段；KEY2 切换当前字段取值。 */
+static uint8 s_run_config_field_index = 0u;
 
 uint8 Menu_GetRunLaunchFieldIndex(void)
 {
     return s_run_launch_field_index;
+}
+
+uint8 Menu_GetRunConfigFieldIndex(void)
+{
+    return s_run_config_field_index;
+}
+
+void Menu_RunConfigToggleField(uint8 field_index)
+{
+#if defined(CY_CORE_CM7_0)
+    if (field_index == Run_Config_Field_InputMode)
+    {
+        g_menu_input_remote_first = (uint8)(g_menu_input_remote_first ? 0u : 1u);
+    }
+#else
+    (void)field_index;
+#endif
+}
+
+static uint8 MenuIsRemoteMenuFirst(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc_rm;
+
+    dualcore_ctrl_to_ui_pull(&dc_rm);
+    return dc_rm.menu_input_remote_first;
+#else
+    return g_menu_input_remote_first;
+#endif
 }
 
 /*-------------------------------------------------------------------------
@@ -171,20 +232,18 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
  * 2. SWITCH1：Motor_Switch 唯一来源（失控锁存除外）。
  * 3. 导航未进入回放执行态前，速度环仍由 Nag_GetControlSpeedTarget() 门控为 0。
  * 4. Motor_Runaway_Latch：最高优先级关电机；遥控优先关闭时须 SWITCH1 到 OFF 后才清除锁存。
- *    MENU_INPUT_REMOTE_MENU_FIRST==1 时不读拨码，锁存仅能遥控清或复位；关断与轮速失控仍见 control.c。
+ *    g_menu_input_remote_first==1 时不读拨码，锁存仅能遥控清或复位；关断与轮速失控仍见 control.c。
  *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
 #if defined(CY_CORE_CM7_1)
     (void)0;
 #else
-#if MENU_INPUT_REMOTE_MENU_FIRST
-    /* 遥控优先且非板载调试：不读 SWITCH；板载调试时读 GPIO，等同宏=0。 */
-    if (g_remote_local_keys_debug == 0u)
+    /* 遥控优先且非板载调试：不读 SWITCH；板载调试时读 GPIO，等同按键模式。 */
+    if (g_menu_input_remote_first != 0u && g_remote_local_keys_debug == 0u)
     {
         return;
     }
-#endif
     uint8 dip_motor = (gpio_get_level(SWITCH1) == GPIO_LOW) ? MOTOR_ON : MOTOR_OFF;
 
     motor_poll_switch2_speed_baseline();
@@ -226,12 +285,10 @@ void menu_key_capture_event(void)
 #if defined(CY_CORE_CM7_1)
    dualcore_ctrl_to_ui_t dc;
    dualcore_ctrl_to_ui_pull(&dc);
-#if MENU_INPUT_REMOTE_MENU_FIRST
-   if (dc.remote_local_keys_debug == 0u)
+   if (MenuIsRemoteMenuFirst() != 0u && dc.remote_local_keys_debug == 0u)
    {
        return;
    }
-#endif
    uint8 nav_recording_active = dc.nav_recording_active;
    uint8 event_active = dc.event_active;
    if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
@@ -239,6 +296,10 @@ void menu_key_capture_event(void)
         return;
    }
    if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunConfigPage() && MenuTryHandleRunConfigKeyEvent())
    {
         return;
    }
@@ -312,17 +373,19 @@ void menu_key_capture_event(void)
         }
    }
 #else
-#if MENU_INPUT_REMOTE_MENU_FIRST
-    if (g_remote_local_keys_debug == 0u)
-    {
-        return;
-    }
-#endif
+   if (MenuIsRemoteMenuFirst() != 0u && g_remote_local_keys_debug == 0u)
+   {
+       return;
+   }
    if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
    {
         return;
    }
    if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunConfigPage() && MenuTryHandleRunConfigKeyEvent())
    {
         return;
    }
@@ -517,10 +580,16 @@ static uint8 MenuIsRunLaunchSpeedPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.1.1") == 0);
 }
 
-/* Run/Flash 二级项没有真实下级；在该页按 KEY3（进入）时解释为保存 run_launch_speed 到 flash。 */
+/* Run/Flash 二级项没有真实下级；在该页按 KEY3（进入）时解释为保存 Run 参数到 flash。 */
 static uint8 MenuIsRunFlashPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "3.2") == 0);
+}
+
+/* Run/Config 三级页：KEY1 选字段，KEY2 切换取值。 */
+static uint8 MenuIsRunConfigPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.3.1") == 0);
 }
 
 static void MenuAdjustRunLaunchParam(float delta)
@@ -577,6 +646,32 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
 #endif
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* 返回 1 表示 Config 页已消费 KEY1/KEY2；KEY3 无动作，KEY4 仍走通用返回。 */
+static uint8 MenuTryHandleRunConfigKeyEvent(void)
+{
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        s_run_config_field_index =
+            (uint8)((s_run_config_field_index + 1u) % Run_Config_Field_Count);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE,
+                                   (uint32)s_run_config_field_index, 0.0f);
+#else
+        Menu_RunConfigToggleField(s_run_config_field_index);
+#endif
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_2);
         return 1u;
     }
     return 0u;
@@ -681,7 +776,8 @@ void selectMenu(void)
 #else
     uint8 motor_sw_sel = Motor_Switch;
 #endif
-#if MENU_INPUT_REMOTE_MENU_FIRST
+    if (MenuIsRemoteMenuFirst() != 0u)
+    {
 #if defined(CY_CORE_CM7_1)
     if (dc_s.remote_local_keys_debug == 0u)
 #else
@@ -832,9 +928,7 @@ void selectMenu(void)
         break;
     }
     }
-#else
-    /* 按键+拨码模式：不消费串口单字节菜单命令，避免与按键双触发。 */
-#endif
+    }
 
     Menu_command = 0;
     if(motor_sw_sel == MOTOR_OFF
@@ -949,6 +1043,11 @@ void MenuInit()
     menuMember.act = ACT_3_1_1;
     strcpy(menuMember.pos, "3.1.1");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_3_1;
+    menuMember.act = ACT_3_3_1;
+    strcpy(menuMember.pos, "3.3.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
     
     menuMember.gui = GUI_1_1_1;
     menuMember.act = ACT_1_1_1;
@@ -1000,6 +1099,21 @@ void MenuInit()
         menuMember.gui = GUI_2_1_3;
         menuMember.act = ACT_2_1_3;
         strcpy(menuMember.pos, "2.1.3");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_1_1_1;
+        menuMember.act = ACT_2_1_1_1;
+        strcpy(menuMember.pos, "2.1.1.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_1_2_1;
+        menuMember.act = ACT_2_1_2_1;
+        strcpy(menuMember.pos, "2.1.2.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_1_3_1;
+        menuMember.act = ACT_2_1_3_1;
+        strcpy(menuMember.pos, "2.1.3.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
         menuMember.gui = GUI_2_2_1;

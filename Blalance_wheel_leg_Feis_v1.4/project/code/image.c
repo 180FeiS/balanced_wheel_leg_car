@@ -3,7 +3,9 @@
  * @brief   TC387 camera.c 迁入：压缩、大津、二值、边线、最长白列、误差与自动曝光（见 image.h）。
  *********************************************************************************************************************/
 #include "image.h"
+#include "zf_driver_flash.h"
 #include <stdlib.h>
+#include <string.h>
 
 uint16 image_camera_exposure = (uint16)MT9V03X_EXP_TIME_DEF;
 
@@ -570,53 +572,266 @@ float Err_bx_Sum(void)
 }
 
 /*--------------------------------------------------------------------------------------------------------------------
- * @brief  TC `v_iftc_camera_autoexposure`：压缩 ROI 亮度驱动曝光；有界迭代，不操作 `mt9v03x_finish_flag`。
- *         门限 380000/410000 对应原 TC 中心 ROI 标定，改分辨率需重标。
+ * Flash 页 49：摄像头曝光（CM7_1 读写；与导航页 46~48 独立）
  *-------------------------------------------------------------------------------------------------------------------*/
-void image_camera_auto_exposure(void)
+#define IMAGE_CAMERA_EXP_PAGE     49u
+#define IMAGE_CAMERA_EXP_MAGIC      0x494D4745u /* "IMGE" */
+#define IMAGE_CAMERA_EXP_VERSION    1u
+
+static uint32 image_camera_exp_checksum(uint32 exposure_raw)
 {
-    int         camera_light;
-    int         i;
-    int         j;
-    uint32      k;
-    const int   ae_lo = 380000;
-    const int   ae_hi = 410000;
-    const uint32 max_iter = 128u;
+    return IMAGE_CAMERA_EXP_MAGIC ^ IMAGE_CAMERA_EXP_VERSION ^ exposure_raw;
+}
 
-    for (k = 0u; k < max_iter; k++)
+void image_camera_exposure_flash_read(void)
+{
+    uint32 magic = 0;
+    uint32 version = 0;
+    uint32 checksum = 0;
+    uint32 exposure_raw = 0;
+
+    if (!flash_check(0, IMAGE_CAMERA_EXP_PAGE))
     {
-        image_photo_compress(mt9v03x_image[0]);
+        return;
+    }
 
-        camera_light = 0;
-        for (j = 10; j < (int)IMAGE_COMPRESS_W - 10; j++)
-        {
-            for (i = 10; i < (int)IMAGE_COMPRESS_H - 10; i++)
-            {
-                camera_light += (int)image_two_value[i][j];
-            }
-        }
+    flash_buffer_clear();
+    flash_read_page_to_buffer(0, IMAGE_CAMERA_EXP_PAGE, FLASH_PAGE_LENGTH);
+    magic = flash_union_buffer[0].uint32_type;
+    version = flash_union_buffer[1].uint32_type;
+    checksum = flash_union_buffer[2].uint32_type;
+    exposure_raw = flash_union_buffer[3].uint32_type;
 
-        if (camera_light < ae_lo)
+    if ((magic != IMAGE_CAMERA_EXP_MAGIC) ||
+        (version != IMAGE_CAMERA_EXP_VERSION) ||
+        (checksum != image_camera_exp_checksum(exposure_raw)))
+    {
+        flash_buffer_clear();
+        return;
+    }
+
+    image_camera_exposure = (uint16)(exposure_raw & 0xFFFFu);
+    flash_buffer_clear();
+}
+
+void image_camera_exposure_flash_write(void)
+{
+    uint32 exposure_raw = (uint32)image_camera_exposure;
+
+    flash_buffer_clear();
+    flash_union_buffer[0].uint32_type = IMAGE_CAMERA_EXP_MAGIC;
+    flash_union_buffer[1].uint32_type = IMAGE_CAMERA_EXP_VERSION;
+    flash_union_buffer[2].uint32_type = image_camera_exp_checksum(exposure_raw);
+    flash_union_buffer[3].uint32_type = exposure_raw;
+
+    if (flash_check(0, IMAGE_CAMERA_EXP_PAGE))
+    {
+        flash_erase_page(0, IMAGE_CAMERA_EXP_PAGE);
+    }
+    flash_write_page_from_buffer(0, IMAGE_CAMERA_EXP_PAGE, FLASH_PAGE_LENGTH);
+    flash_buffer_clear();
+}
+
+/*--------------------------------------------------------------------------------------------------------------------
+ * AE 会话：每次改曝光后等非阻塞等帧，再统计 ROI；收敛或失败后由 consume 写 Flash。
+ *-------------------------------------------------------------------------------------------------------------------*/
+#define IMAGE_AE_LO                 380000
+#define IMAGE_AE_HI                 410000
+#define IMAGE_AE_TARGET             395000
+#define IMAGE_AE_MAX_ITER           48u
+#define IMAGE_AE_FRAME_WAIT_LOOPS   2000u
+#define IMAGE_AE_IN_RANGE_STREAK    2u
+#define IMAGE_AE_STUCK_LIMIT        3u
+
+typedef enum
+{
+    AE_SUB_MEASURE = 0,
+    AE_SUB_WAIT_FRAME,
+} image_ae_sub_step_enum;
+
+static image_ae_state_enum s_ae_state = IMAGE_AE_IDLE;
+static image_ae_sub_step_enum s_ae_sub = AE_SUB_MEASURE;
+static uint32 s_ae_iter = 0u;
+static uint32 s_ae_frame_wait_loops = 0u;
+static uint8  s_ae_in_range_streak = 0u;
+static uint8  s_ae_stuck_count = 0u;
+
+/** 按 ROI 亮度与目标比估算下一曝光（近似线性），避免每步 ±1 导致 128 步远不够 */
+static uint16 image_ae_compute_next_exposure(int camera_light, uint16 cur_exp)
+{
+    uint32 new_exp;
+
+    if (camera_light <= 0)
+    {
+        new_exp = (uint32)cur_exp + 64u;
+    }
+    else
+    {
+        new_exp = ((uint32)cur_exp * (uint32)IMAGE_AE_TARGET) / (uint32)camera_light;
+        if (new_exp == (uint32)cur_exp)
         {
-            if (image_camera_exposure < 65535u)
+            if (camera_light < IMAGE_AE_LO)
             {
-                image_camera_exposure++;
+                new_exp = (uint32)cur_exp + 1u;
             }
-            (void)mt9v03x_set_exposure_time(image_camera_exposure);
-        }
-        else if (camera_light > ae_hi)
-        {
-            if (image_camera_exposure > 0u)
+            else
             {
-                image_camera_exposure--;
+                new_exp = (uint32)cur_exp - 1u;
             }
-            (void)mt9v03x_set_exposure_time(image_camera_exposure);
-        }
-        else
-        {
-            break;
         }
     }
 
+    if (new_exp > 65535u)
+    {
+        new_exp = 65535u;
+    }
+    return (uint16)new_exp;
+}
+
+static int image_ae_measure_roi_light(void)
+{
+    int camera_light = 0;
+    int i;
+    int j;
+
+    image_photo_compress(mt9v03x_image[0]);
+    for (j = 10; j < (int)IMAGE_COMPRESS_W - 10; j++)
+    {
+        for (i = 10; i < (int)IMAGE_COMPRESS_H - 10; i++)
+        {
+            camera_light += (int)image_two_value[i][j];
+        }
+    }
     test_printf_light = camera_light;
+    return camera_light;
+}
+
+void image_ae_session_arm(void)
+{
+    if (s_ae_state == IMAGE_AE_IDLE)
+    {
+        s_ae_state = IMAGE_AE_RUNNING;
+        /* 先等新帧再测量，避免用进入菜单前的旧图误判 DONE */
+        s_ae_sub = AE_SUB_WAIT_FRAME;
+        s_ae_iter = 0u;
+        s_ae_frame_wait_loops = 0u;
+        s_ae_in_range_streak = 0u;
+        s_ae_stuck_count = 0u;
+    }
+}
+
+void image_ae_session_poll(void)
+{
+    int camera_light;
+
+    if (s_ae_state != IMAGE_AE_RUNNING)
+    {
+        return;
+    }
+
+    if (s_ae_sub == AE_SUB_WAIT_FRAME)
+    {
+        if (mt9v03x_finish_flag != 0u)
+        {
+            mt9v03x_finish_flag = 0u;
+            s_ae_sub = AE_SUB_MEASURE;
+            s_ae_frame_wait_loops = 0u;
+        }
+        else
+        {
+            s_ae_frame_wait_loops++;
+            if (s_ae_frame_wait_loops > IMAGE_AE_FRAME_WAIT_LOOPS)
+            {
+                /* 超时仍用当前缓冲试测，避免因偶发丢 flag 整段结束 */
+                s_ae_sub = AE_SUB_MEASURE;
+                s_ae_frame_wait_loops = 0u;
+            }
+        }
+        return;
+    }
+
+    camera_light = image_ae_measure_roi_light();
+
+    if ((camera_light >= IMAGE_AE_LO) && (camera_light <= IMAGE_AE_HI))
+    {
+        s_ae_in_range_streak++;
+        if (s_ae_in_range_streak >= IMAGE_AE_IN_RANGE_STREAK)
+        {
+            s_ae_state = IMAGE_AE_DONE;
+            return;
+        }
+        s_ae_sub = AE_SUB_WAIT_FRAME;
+        s_ae_frame_wait_loops = 0u;
+        return;
+    }
+
+    s_ae_in_range_streak = 0u;
+
+    s_ae_iter++;
+    if (s_ae_iter >= IMAGE_AE_MAX_ITER)
+    {
+        s_ae_state = IMAGE_AE_FAILED;
+        return;
+    }
+
+    {
+        uint16 next_exp = image_ae_compute_next_exposure(camera_light, image_camera_exposure);
+
+        if (next_exp == image_camera_exposure)
+        {
+            s_ae_stuck_count++;
+            if (s_ae_stuck_count >= IMAGE_AE_STUCK_LIMIT)
+            {
+                s_ae_state = IMAGE_AE_FAILED;
+                return;
+            }
+        }
+        else
+        {
+            s_ae_stuck_count = 0u;
+        }
+
+        image_camera_exposure = next_exp;
+        (void)mt9v03x_set_exposure_time(image_camera_exposure);
+    }
+
+    s_ae_sub = AE_SUB_WAIT_FRAME;
+    s_ae_frame_wait_loops = 0u;
+}
+
+uint8 image_ae_session_is_active(void)
+{
+    return (uint8)(s_ae_state == IMAGE_AE_RUNNING);
+}
+
+image_ae_state_enum image_ae_session_get_state(void)
+{
+    return s_ae_state;
+}
+
+uint8 image_ae_session_consume_done_and_save(void)
+{
+    if (s_ae_state == IMAGE_AE_DONE)
+    {
+        image_camera_exposure_flash_write();
+        s_ae_state = IMAGE_AE_IDLE;
+        return 1u;
+    }
+    if (s_ae_state == IMAGE_AE_FAILED)
+    {
+        /* 未收敛不写 Flash，避免把半成品曝光当成有效值持久化 */
+        s_ae_state = IMAGE_AE_IDLE;
+        return 1u;
+    }
+    return 0u;
+}
+
+void image_camera_auto_exposure(void)
+{
+    image_ae_session_arm();
+    while (s_ae_state == IMAGE_AE_RUNNING)
+    {
+        image_ae_session_poll();
+    }
+    (void)image_ae_session_consume_done_and_save();
 }

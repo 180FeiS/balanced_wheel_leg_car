@@ -1572,15 +1572,14 @@ float Nag_GetControlSpeedTarget(void)
         return 0.0f;
     }
 
-#if MENU_INPUT_REMOTE_MENU_FIRST
     /* 惯导录制 + 遥控在线：速度环直接使用遥控映射的 motor_user_speed_cmd；掉线立即停车 */
-    if (nav_heading_mode == NAV_HEADING_MODE_INS &&
+    if (g_menu_input_remote_first != 0u &&
+        nav_heading_mode == NAV_HEADING_MODE_INS &&
         N.Nag_SystemRun_Index == 1u && N.End_f == 0u &&
         remote_lora_steer_snapshot_valid != 0u)
     {
         return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
     }
-#endif
 
 #if Nag_Debug_Speed_Bypass_Enable
     return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;

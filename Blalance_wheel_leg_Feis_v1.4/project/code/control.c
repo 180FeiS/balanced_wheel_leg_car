@@ -194,8 +194,10 @@ volatile float remote_lora_steer_rate_cmd_dps = 0.0f;
 /* 本次周期是否具备有效 LORA 遥控数据（在线且摇杆/键语义有效时置 1，离线或禁用时由 apply 清 0） */
 volatile uint8 remote_lora_steer_snapshot_valid = 0u;
 
-/* 1：遥控优先工程下已切到板载按键/拨码调试（见 remote_lora_apply）；仅 MENU_INPUT_REMOTE_MENU_FIRST 时由 apply 更新 */
+/* 1：遥控优先工程下已切到板载按键/拨码调试（见 remote_lora_apply）；g_menu_input_remote_first==1 时由 apply 更新 */
 uint8 g_remote_local_keys_debug = 0u;
+/* 0=按键+拨码，1=遥控优先；Run→Config 编辑，Run→Save 写 Flash 页 47 V5 */
+uint8 g_menu_input_remote_first = 0u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)

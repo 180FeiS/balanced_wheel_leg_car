@@ -26,15 +26,21 @@
 #define HASH_ERROR (HASH_SIZE + 2) // 哈希操作失败返回值
 
 /*
- * 菜单输入源（编译期）：改后需重编译烧录。
+ * 菜单输入源（Flash 可配，Run→Config 编辑、Run→Save 持久化；无有效 Flash 时用编译默认 0）。
  * 0 = 按键+拨码：板载键与 SWITCH1/2；不读遥控快照做模式切换；selectMenu 不执行 Menu_command 的 switch，避免与按键双触发。
- * 1 = 遥控优先：初始为全遥控（板载键与本地拨码默认不介入）；CM7_0 侧 dip_switch_motor_sync_from_hw 默认不读 SWITCH1/2；
+ * 1 = 遥控优先：全遥控（板载键与本地拨码默认不介入）；CM7_0 侧 dip_switch_motor_sync_from_hw 默认不读 SWITCH1/2；
  *    可用遥控第 4 路拨码电平（remote_lora.h：REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX / REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL）
- *    切到「板载调试」：与宏=0 类似的按键与本地拨码路径；全遥控时 Motor_Runaway_Latch 不能靠拨码清除；保护性关断仍以 control.c 为准。
+ *    切到「板载调试」：与 0 类似的按键与本地拨码路径；全遥控时 Motor_Runaway_Latch 不能靠拨码清除；保护性关断仍以 control.c 为准。
+ * 运行时变量 g_menu_input_remote_first（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 1
+#define MENU_INPUT_REMOTE_MENU_FIRST 0
 #endif
+
+#define Run_Config_Field_InputMode 0u
+#define Run_Config_Field_Count 1u
+
+extern uint8 g_menu_input_remote_first;
 
 /*
  * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。
@@ -99,5 +105,13 @@ extern uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count);
 
 /* Run -> Launch 三级页当前选中的参数字段索引（0..Nag_Run_Launch_Param_Count-1） */
 extern uint8 Menu_GetRunLaunchFieldIndex(void);
+
+/* Run -> Config 三级页当前选中的预配置字段索引（0..Run_Config_Field_Count-1） */
+extern uint8 Menu_GetRunConfigFieldIndex(void);
+extern void Menu_RunConfigToggleField(uint8 field_index);
+
+/* Debug -> Image（pos 2.1*）：边沿进入时 arm 自动曝光会话 */
+extern uint8 MenuIsImageSectionPage(void);
+extern void Menu_UpdateImageAeArm(void);
 
 #endif /* CODE_LOGIC_MENU_H_ */

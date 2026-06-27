@@ -1175,6 +1175,12 @@
         <file>
             <name>$PROJ_DIR$\..\..\code\image.h</name>
         </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\single_bridge.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\single_bridge.h</name>
+        </file>
     </group>
     <group>
         <name>doc</name>

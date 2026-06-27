@@ -74,27 +74,28 @@ void remote_lora_apply_validate_motor(void)
 
     dualcore_remote_pull(&r);
 
-#if MENU_INPUT_REMOTE_MENU_FIRST
-    if ((r.enabled == 0u) || (r.online == 0u))
+    if (g_menu_input_remote_first != 0u)
     {
-        g_remote_local_keys_debug = 0u;
-    }
-    else
-    {
-        uint8 swv = 0u;
+        if ((r.enabled == 0u) || (r.online == 0u))
+        {
+            g_remote_local_keys_debug = 0u;
+        }
+        else
+        {
+            uint8 swv = 0u;
 #if REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX < 4u
-        swv = (r.switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX] != 0u) ? 1u : 0u;
+            swv = (r.switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX] != 0u) ? 1u : 0u;
 #endif
-        g_remote_local_keys_debug = (uint8)((swv == REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL) ? 1u : 0u);
-    }
+            g_remote_local_keys_debug = (uint8)((swv == REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL) ? 1u : 0u);
+        }
 
-    if (g_remote_local_keys_debug != 0u)
-    {
-        remote_lora_steer_snapshot_valid = 0u;
-        remote_lora_steer_rate_cmd_dps = 0.0f;
-        return;
+        if (g_remote_local_keys_debug != 0u)
+        {
+            remote_lora_steer_snapshot_valid = 0u;
+            remote_lora_steer_rate_cmd_dps = 0.0f;
+            return;
+        }
     }
-#endif /* MENU_INPUT_REMOTE_MENU_FIRST */
 
     if ((r.enabled == 0u) || (r.online == 0u))
     {

@@ -122,7 +122,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 
   if (key_flag == 1 && menu_flag == 1)
   {
-    /* MENU_INPUT_REMOTE_MENU_FIRST==1 时此处不读拨码，Motor_Switch 等保持默认直至控制/串口侧更新。 */
+    /* g_menu_input_remote_first==1 时此处不读拨码，Motor_Switch 等保持默认直至控制/串口侧更新。 */
     dip_switch_motor_sync_from_hw();
   }
 }
@@ -214,6 +214,15 @@ void my_camera_init(void)
 -------------------------------------------------------------------------------------------------------------------*/
 void camera_init_ips200(void)
 {
+  static uint8 s_camera_flash_inited = 0u;
+
+  if (s_camera_flash_inited == 0u)
+  {
+    flash_init();
+    s_camera_flash_inited = 1u;
+  }
+  image_camera_exposure_flash_read();
+
   ips200_show_init();
   if (mt9v03x_init() == 0u)
   {

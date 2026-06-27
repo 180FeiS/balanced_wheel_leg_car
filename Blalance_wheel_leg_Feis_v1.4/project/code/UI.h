@@ -27,11 +27,12 @@
 *    - 1_5. GPS
 *      - 1_5_1. GPS 数据
 *
-* 2. 调试模式 (GUI_2)
-*    - 2_1. 图像设置
-*      - 2_1_1. 台阶检测
-*      - 2_1_2. 单边桥检测
-*      - 2_1_3. 颠簸路段检测
+ * 2. 调试模式 (GUI_2)
+ *    - 2_1. Image（Debug 二级 Image 行；KEY3 进入三级列表）
+ *      - 2_1_1 / 2_1_2 / 2_1_3. Step / Bridge / Bumpy 三级列表（同级切换）
+ *      - 2_1_1_1. 台阶检测功能页
+ *      - 2_1_2_1. 单边桥检测功能页
+ *      - 2_1_3_1. 颠簸路段功能页
 *    - 2_2. 速度环设置
 *      - 2_2_1. 角速度环P
 *      - 2_2_2. 角速度环I
@@ -52,8 +53,9 @@
 *    - 3    pos「3」一级 Run（与主菜单其它一级同级）
 *    - GUI_3 仅限上述顶层三行；Launch/Flash/More 二级列表仅用 GUI_3_1～3_3（勿把列表画进 GUI_3）。
 *    - 3_1  Launch 二级列表（同级 3_2 Flash / 3_3 More；进入见 3_1_1）
-*    - 3_2  Save（KEY3 保存 Launch 参数）
-*    - 3_3  More 占位
+*    - 3_2  Save（KEY3 保存 Run 参数：Launch + Config）
+*    - 3_3  Config 预配置（进入 3_3_1：KEY1 选字段 KEY2 改值）
+*      - 3_3_1. 输入模式等预配置项
 *      - 3_1_1. Launch 参数子页（速度/制动距离）
 *********************************************************************************************************************/
 #ifndef __UI_H__
@@ -139,6 +141,9 @@ extern void ACT_3_2();
 extern void GUI_3_3();
 extern void ACT_3_3();
 
+extern void GUI_3_3_1();
+extern void ACT_3_3_1();
+
 extern void GUI_1_1_1();
 extern void ACT_1_1_1();
 
@@ -162,6 +167,15 @@ extern void ACT_2_1_2();
 
 extern void GUI_2_1_3();
 extern void ACT_2_1_3();
+
+extern void GUI_2_1_1_1();
+extern void ACT_2_1_1_1();
+
+extern void GUI_2_1_2_1();
+extern void ACT_2_1_2_1();
+
+extern void GUI_2_1_3_1();
+extern void ACT_2_1_3_1();
 
 extern void GUI_2_2_1();
 extern void ACT_2_2_1();

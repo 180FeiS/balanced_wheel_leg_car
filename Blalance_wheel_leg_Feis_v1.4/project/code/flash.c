@@ -1,6 +1,7 @@
 #include "zf_common_headfile.h"
 #include "flash.h"
 #include "my_gps.h"
+#include "control.h"
 
 static uint8 nag_flash_index_read = 0;
 
@@ -33,6 +34,7 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[10].float_type = nag_enter_cones_target_speed;
     flash_union_buffer[11].float_type = nag_enter_cones_pre_decel_dist_cm;
     flash_union_buffer[12].float_type = spin_rate_max_dps;
+    flash_union_buffer[13].uint32_type = (g_menu_input_remote_first != 0u) ? 1u : 0u;
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -49,11 +51,26 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V4,
-                                           Nag_Run_Launch_Param_Count);
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,
+                                           Nag_Run_Launch_Config_Word_Count);
 }
 
 static void flash_RunLaunchParamsUnpack(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = flash_union_buffer[8].float_type;
+    nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    spin_set_rate_max_dps(flash_union_buffer[12].float_type);
+    g_menu_input_remote_first = (uint8)(flash_union_buffer[13].uint32_type & 1u);
+}
+
+static void flash_RunLaunchParamsUnpackV4(void)
 {
     run_launch_speed = flash_union_buffer[3].float_type;
     nag_spin_target_speed = flash_union_buffer[4].float_type;
@@ -248,12 +265,12 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run Launch 参数（无元素速度 + 元素目标速度 + 提前减速距离）。 */
+/* 保存 Run Launch 参数 + 输入模式（页 47 V5）。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V4;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V5;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -291,11 +308,17 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V4) &&
+    if ((speed_version == Nag_Run_Launch_Params_Version_V5) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,
+                                                           Nag_Run_Launch_Config_Word_Count)))
+    {
+        flash_RunLaunchParamsUnpack();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V4) &&
         (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V4,
                                                            Nag_Run_Launch_Param_Count)))
     {
-        flash_RunLaunchParamsUnpack();
+        flash_RunLaunchParamsUnpackV4();
     }
     else if ((speed_version == Nag_Run_Launch_Params_Version_V3) &&
         (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V3,
