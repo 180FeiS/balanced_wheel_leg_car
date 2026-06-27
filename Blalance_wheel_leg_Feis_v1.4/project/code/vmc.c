@@ -8,6 +8,13 @@ const float A_min = -25.000000; // 角度最小
 const float P_step = 0.100000;
 const float A_step = 0.100000;
 
+#define A_EXT_MAX           VMC_A_EXT_MAX
+#define A_EXTRAP_DELTA      3.0f
+#define PWM_EXTRAP_INVALID  10000
+#define PWM_EXTRAP_MARGIN   400
+#define VMC_LEG_ROWS        122
+#define VMC_ANGLE_COLS      501
+
 //左腿舵机PWM表
 const int16 pwm_table_1[122][501] = {
     {10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, -1264, -1276, -1289, -1301, -1314, -1327, -1341, -1355, -1369, -1384, -1399, -1415, -1431, -1448, -1466, -1484, -1504, -1526, -1549, -1574, -1603, -1637, -1683, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000},
@@ -260,6 +267,179 @@ const int16 pwm_table_2[122][501] = {
 };
 
 
+static int vmc_p_index(float p)
+{
+    int idx = (int)round((p - P_min) / (P_max - P_min) * (VMC_LEG_ROWS - 1));
+
+    if(idx < 0)
+    {
+        idx = 0;
+    }
+    if(idx >= VMC_LEG_ROWS)
+    {
+        idx = VMC_LEG_ROWS - 1;
+    }
+    return idx;
+}
+
+static int vmc_angle_index(float angle)
+{
+    int idx = (int)round((angle - A_min) / (A_max - A_min) * (VMC_ANGLE_COLS - 1));
+
+    if(idx < 0)
+    {
+        idx = 0;
+    }
+    if(idx >= VMC_ANGLE_COLS)
+    {
+        idx = VMC_ANGLE_COLS - 1;
+    }
+    return idx;
+}
+
+static float vmc_index_to_angle(int angle_idx)
+{
+    return A_min + (float)angle_idx * A_step;
+}
+
+static uint8 vmc_row_lookup_pwm(int p_idx, int a_idx, int16 *o1, int16 *o2)
+{
+    int16 v1 = pwm_table_1[p_idx][a_idx];
+    int16 v2 = pwm_table_2[p_idx][a_idx];
+
+    if(v1 == PWM_EXTRAP_INVALID || v2 == PWM_EXTRAP_INVALID)
+    {
+        return 0u;
+    }
+    *o1 = v1;
+    *o2 = v2;
+    return 1u;
+}
+
+static int vmc_find_edge_index(int p_idx, int sign)
+{
+    int i;
+    int start = (sign > 0) ? (VMC_ANGLE_COLS - 1) : 0;
+    int step = (sign > 0) ? -1 : 1;
+    int16 dummy1, dummy2;
+
+    for(i = start; (sign > 0) ? (i >= 0) : (i < VMC_ANGLE_COLS); i += step)
+    {
+        if(vmc_row_lookup_pwm(p_idx, i, &dummy1, &dummy2))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void vmc_row_pwm_bounds(int p_idx, int16 *min1, int16 *max1, int16 *min2, int16 *max2)
+{
+    int a;
+    int16 v1, v2;
+    uint8 init = 0u;
+
+    for(a = 0; a < VMC_ANGLE_COLS; a++)
+    {
+        if(!vmc_row_lookup_pwm(p_idx, a, &v1, &v2))
+        {
+            continue;
+        }
+        if(!init)
+        {
+            *min1 = *max1 = v1;
+            *min2 = *max2 = v2;
+            init = 1u;
+        }
+        else
+        {
+            if(v1 < *min1) { *min1 = v1; }
+            if(v1 > *max1) { *max1 = v1; }
+            if(v2 < *min2) { *min2 = v2; }
+            if(v2 > *max2) { *max2 = v2; }
+        }
+    }
+    if(!init)
+    {
+        *min1 = *max1 = 0;
+        *min2 = *max2 = 0;
+    }
+}
+
+static int16 vmc_clip_i16(int32 v, int16 lo, int16 hi)
+{
+    if(v < lo) { return lo; }
+    if(v > hi) { return hi; }
+    return (int16)v;
+}
+
+static uint8 vmc_clip_pwm_extrap(int p_idx, int16 *pwm1, int16 *pwm2)
+{
+    int16 min1, max1, min2, max2;
+
+    vmc_row_pwm_bounds(p_idx, &min1, &max1, &min2, &max2);
+    if(min1 == 0 && max1 == 0 && min2 == 0 && max2 == 0)
+    {
+        return 0u;
+    }
+    *pwm1 = vmc_clip_i16((int32)(*pwm1), (int16)(min1 - PWM_EXTRAP_MARGIN), (int16)(max1 + PWM_EXTRAP_MARGIN));
+    *pwm2 = vmc_clip_i16((int32)(*pwm2), (int16)(min2 - PWM_EXTRAP_MARGIN), (int16)(max2 + PWM_EXTRAP_MARGIN));
+    return 1u;
+}
+
+static uint8 vmc_extrap_pwm(int p_idx, float angle, int16 *o1, int16 *o2)
+{
+    int sign = (angle >= 0.0f) ? 1 : -1;
+    int edge_idx = vmc_find_edge_index(p_idx, sign);
+    int delta_cols = (int)round(A_EXTRAP_DELTA / A_step);
+    int prev_idx;
+    float edge_angle, prev_angle, delta_angle;
+    int16 edge1, edge2, prev1, prev2;
+    float slope1, slope2;
+
+    if(edge_idx < 0 || delta_cols <= 0)
+    {
+        return 0u;
+    }
+
+    prev_idx = (sign > 0) ? (edge_idx - delta_cols) : (edge_idx + delta_cols);
+    if(prev_idx < 0 || prev_idx >= VMC_ANGLE_COLS)
+    {
+        return 0u;
+    }
+    if(!vmc_row_lookup_pwm(p_idx, edge_idx, &edge1, &edge2))
+    {
+        return 0u;
+    }
+    if(!vmc_row_lookup_pwm(p_idx, prev_idx, &prev1, &prev2))
+    {
+        *o1 = edge1;
+        *o2 = edge2;
+        return 1u;
+    }
+
+    edge_angle = vmc_index_to_angle(edge_idx);
+    prev_angle = vmc_index_to_angle(prev_idx);
+    delta_angle = edge_angle - prev_angle;
+    if(fabsf(delta_angle) < 1e-3f)
+    {
+        *o1 = edge1;
+        *o2 = edge2;
+        return 1u;
+    }
+
+    slope1 = (float)(edge1 - prev1) / delta_angle;
+    slope2 = (float)(edge2 - prev2) / delta_angle;
+    *o1 = (int16)((float)edge1 + slope1 * (angle - edge_angle));
+    *o2 = (int16)((float)edge2 + slope2 * (angle - edge_angle));
+    if(!vmc_clip_pwm_extrap(p_idx, o1, o2))
+    {
+        *o1 = edge1;
+        *o2 = edge2;
+    }
+    return 1u;
+}
+
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     根据舵机PWM表设置舵机输出
 // 参数说明     p          腿长
@@ -268,43 +448,36 @@ const int16 pwm_table_2[122][501] = {
               *pwm2      舵机2的PWM值
 // 返回参数     实际PWM值
 // 使用示例     servo_control_table(5.5, 0, &pwm1, &pwm2);
-// 备注信息     函数内部调用
+// 备注信息     |angle|<=A_max 查表；A_max<|angle|<=A_EXT_MAX 线性外推
 -------------------------------------------------------------------------------------------------------------------*/
 void servo_control_table(float p, float angle, int16 *pwm1, int16 *pwm2)
 {
-    uint16 num_legs = (uint16)((P_max - P_min) / P_step + 1);
-    uint16 num_angles = (uint16)((A_max - A_min) / A_step + 1);
+    int p_index;
+    int angle_index;
+    float abs_angle = fabsf(angle);
 
-    //限幅
-    if(p > P_max || p < P_min || angle > A_max || angle < A_min)
+    if(p > P_max || p < P_min || abs_angle > A_EXT_MAX)
     {
-        *pwm1 = 10000;
-        *pwm2 = 10000;
+        *pwm1 = PWM_EXTRAP_INVALID;
+        *pwm2 = PWM_EXTRAP_INVALID;
         return;
     }
 
-    int p_index = round((p - P_min) / (P_max - P_min) * (num_legs - 1));
-    int angle_index = round((angle - A_min) / (A_max - A_min) * (num_angles - 1));
+    p_index = vmc_p_index(p);
 
-    if(p_index < 0)
+    if(abs_angle <= A_max)
     {
-        p_index = 0;
-    }
-    if(p_index >= num_legs)
-    {
-        p_index = num_legs - 1;
-    }
-    if(angle_index < 0)
-    {
-        angle_index = 0;
-    }
-    if(angle_index >= num_angles)
-    {
-        angle_index = num_angles - 1;
+        angle_index = vmc_angle_index(angle);
+        *pwm1 = pwm_table_1[p_index][angle_index];
+        *pwm2 = pwm_table_2[p_index][angle_index];
+        return;
     }
 
-    *pwm1 = pwm_table_1[p_index][angle_index];
-    *pwm2 = pwm_table_2[p_index][angle_index];
+    if(!vmc_extrap_pwm(p_index, angle, pwm1, pwm2))
+    {
+        *pwm1 = PWM_EXTRAP_INVALID;
+        *pwm2 = PWM_EXTRAP_INVALID;
+    }
 }
 
 

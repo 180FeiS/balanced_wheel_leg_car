@@ -32,8 +32,8 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 2.5;  // pitch机械中值（俯仰平衡）4.5
-float roll_mid = -9.0; // roll机械中值（横滚平衡，leg_hight PID目标）
+float pitch_mid = 4.0;  // pitch机械中值（俯仰平衡）4.5
+float roll_mid = 4.2; // roll机械中值（横滚平衡，leg_hight PID目标）
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -49,7 +49,7 @@ float dt_pid_turn_angle = 0.001f;
 float dt_pid_turn_gyro = 0.001f;
 
 // 初始腿高（非跳跃时基准）
-float leg_long = 3.5f; 
+float leg_long = 3.5f; //3.5
 // float leg_high_integral = 0;
 
 /*---------------------------------------------------------------------------
@@ -600,8 +600,8 @@ void set_steer_cmd(float cmd)
 /*---------- 通用腿/舵机参数 ----------*/
 #define LEG_P_MIN           2.4f   // 腿长下限
 #define LEG_P_MAX          14.5f   // 腿长上限
-#define LEG_STEP_P_MAX      0.2f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
-#define LEG_STEP_ANGLE_MAX  0.5f   // 每5ms腿部倾角最大变化(度)
+#define LEG_STEP_P_MAX      1.0f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
+#define LEG_STEP_ANGLE_MAX  1.0f   // 每5ms腿部倾角最大变化(度)
 #define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
 /*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
@@ -613,7 +613,7 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 /*---------- 俯仰角参数（速度环→腿倾角，与横滚并级）----------*/
 #define LEG_SERVO_SPEED_TILT_EN  1     // 置0关闭速度环→舵机倾角
 #define LEG_TILT_K              0.016f // 速度环输出→腿倾角缩放系数
-#define LEG_TILT_MAX             20.0f // 腿倾角限幅±20°
+#define LEG_TILT_MAX             VMC_A_EXT_MAX // 腿倾角限幅，与 vmc 外推上限一致
 
 /*---------- 跳跃参数（障碍跨越）----------*/
 #define JUMP_PID_SCALE          0.4f  // 跳跃时angle/speed的kp缩放，维持稳定
