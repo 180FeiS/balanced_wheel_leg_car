@@ -34,7 +34,7 @@
  * 运行时变量 g_menu_input_remote_first（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
  */
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
-#define MENU_INPUT_REMOTE_MENU_FIRST 0
+#define MENU_INPUT_REMOTE_MENU_FIRST 1
 #endif
 
 #define Run_Config_Field_InputMode 0u

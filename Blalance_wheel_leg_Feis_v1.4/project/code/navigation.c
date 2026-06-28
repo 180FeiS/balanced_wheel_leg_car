@@ -9,6 +9,7 @@
 
 #include "zf_common_headfile.h"
 #include "navigation.h"
+#include "nav_fusion.h"
 #include "control.h"
 #include "Menu.h"
 #include "my_gps.h"
@@ -177,6 +178,13 @@ void Nag_EventPrepareEnter(uint8 event_type)
         event_type != NAG_EVENT_TYPE_EXIT_CONES)
     {
         steer_task_stop();
+    }
+    /* Spin 冻结 Run_index 期间融合 Predict 仍更新 x/y；进入时刷新里程 prev，避免退出后一次性推进索引。 */
+    if (event_type == NAG_EVENT_TYPE_SPIN)
+    {
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+        NavFusion_SyncMileageSnapshot();
+#endif
     }
     Nag_HeadingHold_OnEventEnter(event_type);
 }
@@ -489,6 +497,11 @@ static void Nag_UpdatePreviewAndSpeedTarget(void)
 #endif
 }
 
+static void Nag_ClearEventConsumed(void)
+{
+    memset(N.Event_Consumed, 0, sizeof(N.Event_Consumed));
+}
+
 static void Nag_ClearEventRuntimeState(void)
 {
     Nag_HeadingHold_OnEventExit();
@@ -501,6 +514,8 @@ static void Nag_ClearEventRuntimeState(void)
     N.Event_Done_Latched = 0;
     N.Event_Active_Type = NAG_EVENT_TYPE_SPIN;
     N.Event_Start_RunIndex = 0;
+    N.Event_Trigger_RunIndex = 0;
+    N.Event_Triggered_In_Window = 0;
     N.Spin_Saved_SetSpeed = 0.0f;
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
@@ -599,12 +614,82 @@ static uint8 Nag_FindEventByEnterIndex(uint16 run_index)
     for (event_index = 0; event_index < N.Event_Count; event_index++)
     {
         if (Nag_Event_Table[event_index].valid &&
+            (N.Event_Consumed[event_index] == 0u) &&
             Nag_Event_Table[event_index].enter_index == run_index)
         {
             return event_index;
         }
     }
     return 0xFFu;
+}
+
+/*
+ * 查找前方最近、尚未消费的 Spin，且 Run_index 已进入其触发区域（距 enter_index <= 窗口点数）。
+ * 仅用于 Spin；折返/锥桶等标记元素仍要求精确命中 enter_index。
+ */
+static uint8 Nag_FindSpinEventInTriggerWindow(uint16 run_index, uint16 *dist_points)
+{
+    uint8 event_index = 0;
+    uint8 best_index = 0xFFu;
+    uint16 best_dist = 0xFFFFu;
+    uint16 window_points = Nag_DistanceToPoints(Nag_Spin_Trigger_Window_cm);
+
+    if (window_points == 0u)
+    {
+        if (dist_points != NULL)
+        {
+            *dist_points = 0xFFFFu;
+        }
+        return 0xFFu;
+    }
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        uint16 enter_index = 0;
+        uint16 curr_dist = 0;
+
+        if (!Nag_Event_Table[event_index].valid ||
+            (N.Event_Consumed[event_index] != 0u) ||
+            (Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_SPIN))
+        {
+            continue;
+        }
+
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        if (enter_index < run_index)
+        {
+            continue;
+        }
+
+        curr_dist = (uint16)(enter_index - run_index);
+        if (curr_dist <= window_points && curr_dist < best_dist)
+        {
+            best_dist = curr_dist;
+            best_index = event_index;
+        }
+    }
+
+    if (dist_points != NULL)
+    {
+        *dist_points = best_dist;
+    }
+    return best_index;
+}
+
+static void Nag_ActivateEvent(uint8 event_index, uint8 triggered_in_window)
+{
+    N.Event_Active = 1;
+    N.Event_Active_Index = event_index;
+    N.Active_Event_Enter = Nag_Event_Table[event_index].enter_index;
+    N.Active_Event_Exit = Nag_Event_Table[event_index].exit_index;
+    N.Event_Active_Type = Nag_Event_Table[event_index].type;
+    N.Event_Start_RunIndex = N.Run_index;
+    N.Event_Trigger_RunIndex = N.Run_index;
+    N.Event_Triggered_In_Window = triggered_in_window;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0;
+    N.Event_Done_Latched = 0;
+    Nag_EventPrepareEnter(N.Event_Active_Type);
 }
 
 static uint8 Nag_FindNextEventAhead(uint16 run_index, uint16 *dist_points)
@@ -618,7 +703,8 @@ static uint8 Nag_FindNextEventAhead(uint16 run_index, uint16 *dist_points)
         uint16 enter_index = 0;
         uint16 curr_dist = 0;
 
-        if (!Nag_Event_Table[event_index].valid)
+        if (!Nag_Event_Table[event_index].valid ||
+            (N.Event_Consumed[event_index] != 0u))
         {
             continue;
         }
@@ -1201,8 +1287,9 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 
 static void Nag_TryEnterEvent(void)
 {
-    /* Run_Nag_GPS() 在里程推进到某条事件的 enter_index 时切入：置 Event_Active、
-     * 清 pending、锥桶标记类不 steer_task_stop() 以免打断沿路惯导转向。
+    /* 惯导回放：精确命中 enter_index，或 Spin 进入触发区域时切入元素态。
+     * 窗口触发只改变“允许进入 Spin 的时机”，不改变路径长度；完成后由 Nag_Notify_Event_Done()
+     * 按 Event_Trigger_RunIndex 恢复，并置 Event_Consumed 防止再次命中同一录制点。
      */
     uint8 event_index = 0;
 
@@ -1212,21 +1299,17 @@ static void Nag_TryEnterEvent(void)
     }
 
     event_index = Nag_FindEventByEnterIndex(N.Run_index);
-    if (event_index == 0xFFu)
+    if (event_index != 0xFFu)
     {
+        Nag_ActivateEvent(event_index, 0u);
         return;
     }
 
-    N.Event_Active = 1;
-    N.Event_Active_Index = event_index;
-    N.Active_Event_Enter = Nag_Event_Table[event_index].enter_index;
-    N.Active_Event_Exit = Nag_Event_Table[event_index].exit_index;
-    N.Event_Active_Type = Nag_Event_Table[event_index].type;
-    N.Event_Start_RunIndex = N.Run_index;
-    N.Event_State = NAG_EVENT_STATE_ENTERED;
-    N.Event_Start_Latched = 0;
-    N.Event_Done_Latched = 0;
-    Nag_EventPrepareEnter(N.Event_Active_Type);
+    event_index = Nag_FindSpinEventInTriggerWindow(N.Run_index, NULL);
+    if (event_index != 0xFFu)
+    {
+        Nag_ActivateEvent(event_index, 1u);
+    }
 }
 
 static float Nag_GetMileageStep(void)
@@ -1861,6 +1944,7 @@ void Nag_Begin_Replay(void)
     N.Flash_page_index = Nag_Start_Page;
     N.Requested_Target_Yaw = 0;
     N.Target_Request_Valid = 0;
+    Nag_ClearEventConsumed();
     Nag_ClearEventRuntimeState();
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
@@ -1939,14 +2023,20 @@ void Nag_Notify_Event_Done(void)
 
     enter_index = Nag_Event_Table[event_index].enter_index;
     exit_index = Nag_Event_Table[event_index].exit_index;
-    if (exit_index > enter_index)
+
+    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN && N.Event_Triggered_In_Window != 0u)
+    {
+        /* 窗口提前触发：从实际触发位置继续，不跳到 enter_index+1，避免路径长度被提前吃掉。 */
+        resume_index = N.Event_Trigger_RunIndex;
+    }
+    else if (exit_index > enter_index)
     {
         /* 旧双点录制：从 exit 索引接回惯导。 */
         resume_index = exit_index;
     }
     else
     {
-        /* 单点录制：推进到触发点之后，避免再次命中同一 enter_index。 */
+        /* 单点精确触发：推进到触发点之后，避免再次命中同一 enter_index。 */
         resume_index = (uint16)(enter_index + 1u);
         if (N.Save_index >= 2u)
         {
@@ -1958,6 +2048,15 @@ void Nag_Notify_Event_Done(void)
         }
     }
 
+    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN)
+    {
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+        /* 丢弃 Spin 期间融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
+        NavFusion_SyncMileageSnapshot();
+#endif
+    }
+
+    N.Event_Consumed[event_index] = 1u;
     N.Run_index = resume_index;
     N.Mileage_All = 0.0f;
     N.Target_Request_Valid = 0;
@@ -2060,6 +2159,7 @@ void NagFlashRead(){
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[0] / 100.0f) : (float)Nag_Yaw;
   N.Requested_Target_Yaw = 0;
   N.Target_Request_Valid = 0;
+  Nag_ClearEventConsumed();
   Nag_ClearEventRuntimeState();
   Nag_UpdatePreviewAndSpeedTarget();
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[N.Prospect_index] / 100.0f) : (float)Nag_Yaw;

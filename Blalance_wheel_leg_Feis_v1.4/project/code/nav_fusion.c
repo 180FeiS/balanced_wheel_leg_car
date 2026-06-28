@@ -280,6 +280,18 @@ float NavFusion_GetMileageStepCm(void)
     return step_m * 100.0f;
 }
 
+void NavFusion_SyncMileageSnapshot(void)
+{
+    if (g_fusion.valid == 0u)
+    {
+        return;
+    }
+
+    g_prev_x_m = g_fusion.x_m;
+    g_prev_y_m = g_fusion.y_m;
+    g_prev_xy_valid = 1u;
+}
+
 #else /* !NAV_FUSION_ENABLE */
 
 void NavFusion_Reset(void) {}
@@ -318,5 +330,6 @@ void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m)
     (void)y_m;
 }
 float NavFusion_GetMileageStepCm(void) { return -1.0f; }
+void NavFusion_SyncMileageSnapshot(void) {}
 
 #endif /* NAV_FUSION_ENABLE */

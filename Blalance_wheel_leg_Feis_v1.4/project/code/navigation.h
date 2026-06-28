@@ -94,6 +94,14 @@ extern float nag_spin_target_speed;
 extern float nag_spin_pre_decel_dist_cm;
 #define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离（Launch 页不调节）
 
+/*
+ * Spin 触发区域（cm）：不是预减速距离，仅决定“允许提前触发自旋元素”的物理范围。
+ * 当 Run_index 距前方未消费 Spin 的 enter_index <= 该距离时，可进入 Spin 元素态；
+ * 元素完成后从实际触发时的 Run_index 恢复，不跳到 enter_index+1，避免路径长度被提前吃掉。
+ * 停稳判定仍由 Nag_Hook_Spin_Run() 在元素内完成；预减速继续用 nag_spin_pre_decel_dist_cm。
+ */
+#define Nag_Spin_Trigger_Window_cm 30.0f
+
 /* 折返入弯：Launch 可调 */
 #define Nag_EnterTurn_Target_Speed_Default 220.0f
 #define Nag_EnterTurn_PreDecel_Dist_cm_Default 0.0f
@@ -380,6 +388,9 @@ typedef struct{
        uint8 Event_Done_Latched; //1表示当前元素报告完成，等待导航恢复
        uint8 Event_Active_Type; //回放阶段当前元素类型，供调试观察
        uint16 Event_Start_RunIndex; //当前元素开始接管时对应的 Run_index
+       uint16 Event_Trigger_RunIndex; //本次元素实际触发时的 Run_index（窗口提前触发时用于恢复）
+       uint8 Event_Triggered_In_Window; //1=在 Spin 触发区域内提前触发；0=精确命中 enter_index
+       uint8 Event_Consumed[Nag_Event_Max]; //本轮回放各事件是否已执行，防止窗口触发后再次命中同一点
        float Spin_Saved_SetSpeed; //自旋元素接管前保存的全局速度档位
        uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
        uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层

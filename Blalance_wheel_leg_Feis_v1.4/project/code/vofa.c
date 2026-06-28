@@ -242,7 +242,7 @@ void vofa_send_nav_from_dualcore_snapshot(void)
   dualcore_ctrl_to_ui_pull(&c);
   uint8 g = (uint8)(c.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
 
-  switch (g)
+  switch (VOFA_GROUP_FUSION_DEBUG)
   {
   case 0:
     SendDataStreamToVOFA(4, c.euler_pitch, c.euler_roll, c.euler_yaw, c.gyro_z_bias_mean);
