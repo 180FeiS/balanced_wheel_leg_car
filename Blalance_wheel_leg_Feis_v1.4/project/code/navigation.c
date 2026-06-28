@@ -607,6 +607,9 @@ static void Nag_Element_StateMachine(void)
     }
 }
 
+/* 将物理距离（cm）换算为导航点数；distance<=0 返回 0，否则至少 1 点。 */
+static uint16 Nag_DistanceToPoints(float distance_cm);
+
 static uint8 Nag_FindEventByEnterIndex(uint16 run_index)
 {
     uint8 event_index = 0;
