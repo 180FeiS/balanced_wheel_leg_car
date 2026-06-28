@@ -195,13 +195,7 @@ void Nag_EventPrepareEnter(uint8 event_type)
     {
         steer_task_stop();
     }
-    /* Spin 冻结 Run_index 期间融合 Predict 仍更新 x/y；进入时刷新里程 prev，避免退出后一次性推进索引。 */
-    if (event_type == NAG_EVENT_TYPE_SPIN)
-    {
-#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
-        NavFusion_SyncMileageSnapshot();
-#endif
-    }
+    /* Spin 等待期仍推进 Run_index；融合里程快照改在起转瞬间同步，见 Nag_Hook_Spin_Run()。 */
     Nag_HeadingHold_OnEventEnter(event_type);
 }
 
@@ -254,13 +248,14 @@ bool Nag_Hook_Spin_Start(void)
     N.Spin_Saved_SetSpeed = motor_user_speed_cmd;
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
+    N.Spin_Resume_RunIndex = 0;
     N.Spin_Speed_Latched = 1;
     motor_user_speed_cmd = 0.0f;
     return true;
 }
 void Nag_Hook_Spin_Run(void)
 {
-    /* 元素接管后导航里程更新会暂停，因此这里直接读取实时速度源做停稳判定。 */
+    /* 等待期 Run_index 仍推进；此处用实时速度源判定停稳，起转后索引才冻结。 */
     float abs_speed = fabsf((float)Nag_Speed_Source);
 
     if (N.Spin_Task_Started)
@@ -290,6 +285,11 @@ void Nag_Hook_Spin_Run(void)
      * 否则普通转向可能继续把车头往锁定方向拉，和 spin_task_start() 抢同一套差速控制。
      */
     Nag_HeadingHold_Disable();
+    N.Spin_Resume_RunIndex = N.Run_index;
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    /* 起转瞬间刷新融合里程快照，自旋期间位移不计入路径索引。 */
+    NavFusion_SyncMileageSnapshot();
+#endif
     spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
     N.Spin_Task_Started = 1;
 }
@@ -535,6 +535,7 @@ static void Nag_ClearEventRuntimeState(void)
     N.Spin_Saved_SetSpeed = 0.0f;
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
+    N.Spin_Resume_RunIndex = 0;
     N.Spin_Speed_Latched = 0;
     if (N.Jump_Element_Armed != 0u)
     {
@@ -1307,8 +1308,8 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 static void Nag_TryEnterEvent(void)
 {
     /* 惯导回放：精确命中 enter_index，或 Spin 进入触发区域时切入元素态。
-     * 窗口触发只改变“允许进入 Spin 的时机”，不改变路径长度；完成后由 Nag_Notify_Event_Done()
-     * 按 Event_Trigger_RunIndex 恢复，并置 Event_Consumed 防止再次命中同一录制点。
+     * 等待减速期 Run_index 仍推进；自旋完成后从 Spin_Resume_RunIndex 恢复，并置 Event_Consumed
+     * 防止提前/滞后再次经过同一录制点时重复触发。
      */
     uint8 event_index = 0;
 
@@ -1805,9 +1806,9 @@ void Nag_Run()
     /* 回放态总流程：
      * 1. 先根据里程推进 Run_index；
      * 2. 再按速度得到前瞻点 Prospect_index，控制目标使用前瞻点 yaw；
-     * 3. 如果跑到元素 enter_index，则冻结导航索引推进，把控制权让给元素逻辑；
-     * 4. Spin 例外：等待刹停起转前仍跟踪 Angle_Run；仅 spin_enable 期间释放航向；
-     * 5. 元素完成后通过 Nag_Notify_Event_Done() 接回惯导。
+     * 3. 非 Spin 元素 active 后冻结 Run_index；Spin 等待期仍推进索引与前瞻；
+     * 4. Spin 起转后冻结索引；等待期仍跟踪 Angle_Run，spin_enable 期间释放航向；
+     * 5. Spin 完成后从 Spin_Resume_RunIndex 接回；其他元素由 Nag_Notify_Event_Done() 恢复。
      */
     Run_Nag_GPS();  //偏航角读取函数
     if(N.Nag_Stop_f) //终点停止
@@ -1894,8 +1895,13 @@ void Run_Nag_GPS()
 
     if (N.Event_Active)
     {
-        N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
-        return;
+        if (!Nag_Spin_ShouldTrackInsYaw())
+        {
+            /* 非 Spin 等待态，或 Spin 已起转：冻结 Run_index，仅刷新当前 yaw 目标。 */
+            N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
+            return;
+        }
+        /* Spin 等待期：减速刹停阶段仍按里程推进 Run_index，但不尝试进入新元素。 */
     }
 
     N.Mileage_All += Nag_GetMileageStep();
@@ -1912,7 +1918,10 @@ void Run_Nag_GPS()
         N.Mileage_All -= Nag_Set_mileage;//里程计累加//保存到flash
     }
 
-    Nag_TryEnterEvent();
+    if (!N.Event_Active)
+    {
+        Nag_TryEnterEvent();
+    }
     Nag_UpdatePreviewAndSpeedTarget();
     N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
 }
@@ -2041,10 +2050,10 @@ void Nag_Notify_Event_Done(void)
     enter_index = Nag_Event_Table[event_index].enter_index;
     exit_index = Nag_Event_Table[event_index].exit_index;
 
-    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN && N.Event_Triggered_In_Window != 0u)
+    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN)
     {
-        /* 窗口提前触发：从实际触发位置继续，不跳到 enter_index+1，避免路径长度被提前吃掉。 */
-        resume_index = N.Event_Trigger_RunIndex;
+        /* 从起转前锁存的实际路径索引恢复，不按录制 enter_index 或 enter_index+1 跳点。 */
+        resume_index = (N.Spin_Task_Started != 0u) ? N.Spin_Resume_RunIndex : N.Run_index;
     }
     else if (exit_index > enter_index)
     {

@@ -56,7 +56,7 @@
  * 3. 与 Nag_Debug_Speed_Bypass_Enable 独立，正式录制可用、调试旁路仍保持关闭。
  */
 
-#define Nag_AdaptiveLookahead_Enable 0u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
+#define Nag_AdaptiveLookahead_Enable 1u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
 
 /* 速度自适应前瞻参数（仅当 Nag_AdaptiveLookahead_Enable==1 时参与 Nag_UpdatePreviewAndSpeedTarget 计算）：
  * 1. Run_index 代表“已经沿轨迹推进到的里程点”；
@@ -71,10 +71,10 @@
 /* 基于“前方 yaw 变化量”的简单弯道强度估计（仅当 Nag_AdaptiveLookahead_Enable==1 时使用）。
  * 当前先不把 curvature 持久化到 flash，而是直接用 Nav_read[] 前后点的 yaw 差来限速。
  */
-#define Nag_Curve_Threshold_Straight 6.0f   // 进入“普通弯道”判定阈值（deg）
+#define Nag_Curve_Threshold_Straight 8.0f   // 进入“普通弯道”判定阈值（deg）
 #define Nag_Curve_Threshold_Sharp 16.0f     // 进入“急弯”判定阈值（deg）
-#define Nag_Speed_Ratio_Curve 0.85f         // 普通弯道目标速度倍率（基于 motor_user_speed_cmd）
-#define Nag_Speed_Ratio_Sharp 0.75f         // 急弯目标速度倍率（基于 motor_user_speed_cmd）
+#define Nag_Speed_Ratio_Curve 0.9f         // 普通弯道目标速度倍率（基于 motor_user_speed_cmd）
+#define Nag_Speed_Ratio_Sharp 0.8f         // 急弯目标速度倍率（基于 motor_user_speed_cmd）
 #define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
 
 /* 元素调速总开关与距离换算：
@@ -97,7 +97,8 @@ extern float nag_spin_pre_decel_dist_cm;
 /*
  * Spin 触发区域（cm）：不是预减速距离，仅决定“允许提前触发自旋元素”的物理范围。
  * 当 Run_index 距前方未消费 Spin 的 enter_index <= 该距离时，可进入 Spin 元素态；
- * 元素完成后从实际触发时的 Run_index 恢复，不跳到 enter_index+1，避免路径长度被提前吃掉。
+ * 等待减速期 Run_index 仍按里程推进；自旋完成后从起转前锁存的 Spin_Resume_RunIndex 恢复，
+ * 不按录制 enter_index 或 enter_index+1 跳点。Event_Consumed 防止提前/滞后后再次触发同一点。
  * 停稳判定仍由 Nag_Hook_Spin_Run() 在元素内完成；预减速继续用 nag_spin_pre_decel_dist_cm。
  */
 #define Nag_Spin_Trigger_Window_cm 30.0f
@@ -210,10 +211,11 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 #define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
 
 /*
- * Spin 分阶段航向策略（实现见 Nag_Spin_ShouldTrackInsYaw / Nag_Run）：
- * - 预减速、触发窗口、刹停等待：继续 steer_request_target_yaw(Angle_Run)，跟录制路径；
- * - spin_task_start 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制；
- * - 不依赖 Nag_HeadingHold_Spin_Enable（该宏仅用于固定 yaw 锁航，与路径跟踪二选一）。
+ * Spin 分阶段策略（实现见 Nag_Spin_ShouldTrackInsYaw / Run_Nag_GPS / Nag_Hook_Spin_Run）：
+ * - 等待减速期：Run_index 与 Angle_Run 仍按里程/前瞻推进；
+ * - spin_task_start 起转后：冻结 Run_index，锁存 Spin_Resume_RunIndex，融合里程快照同步；
+ * - 自旋完成：从 Spin_Resume_RunIndex 接回惯导，Event_Consumed 防重复触发；
+ * - 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制。
  */
 
 /* 元素航向保持配置：
@@ -395,12 +397,13 @@ typedef struct{
        uint8 Event_Done_Latched; //1表示当前元素报告完成，等待导航恢复
        uint8 Event_Active_Type; //回放阶段当前元素类型，供调试观察
        uint16 Event_Start_RunIndex; //当前元素开始接管时对应的 Run_index
-       uint16 Event_Trigger_RunIndex; //本次元素实际触发时的 Run_index（窗口提前触发时用于恢复）
+       uint16 Event_Trigger_RunIndex; //本次元素进入时的 Run_index（调试用；Spin 恢复不依赖此字段）
        uint8 Event_Triggered_In_Window; //1=在 Spin 触发区域内提前触发；0=精确命中 enter_index
        uint8 Event_Consumed[Nag_Event_Max]; //本轮回放各事件是否已执行，防止窗口触发后再次命中同一点
        float Spin_Saved_SetSpeed; //自旋元素接管前保存的全局速度档位
        uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
        uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
+       uint16 Spin_Resume_RunIndex; //Spin 起转前锁存的路径索引，自旋完成后从此处继续惯导
        uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 motor_user_speed_cmd，退出时需恢复
        uint8 Jump_Element_Armed; //1表示跳跃元素已置 jump_flag，供 IsDone 防误判（Start 前 jump_flag 可能为 0）
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
