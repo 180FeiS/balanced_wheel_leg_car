@@ -38,6 +38,7 @@
 #include "vofa.h"
 #include "image.h"
 #include "Menu.h"
+#include "dualcore_shared.h"
 
 /*-------------------------------------------------------------------------------------------------------------------
  * CM7_1 主循环每圈最多发一帧 VOFA（JustFloat 经 wireless_uart）。
@@ -75,21 +76,23 @@ int main(void)
     /* 板载键扫描与 menu_key_capture_event 在 cm7_1_isr pit0_ch2(10ms) 中，此处只消费队列并刷新菜单/界面。 */
     while(true)
     {
+        dualcore_ctrl_to_ui_t ctrl;
         selectMenu_Key();
         Menu_UpdateImageAeArm();
-        /* Debug→Image（2.1*）只做曝光/阈值调试，不跑台阶检测，避免与 AE 抢 mt9v03x_finish_flag */
-        if (!MenuIsImageSectionPage())
+        dualcore_ctrl_to_ui_pull(&ctrl);
+        ui_pull_ctrl_snapshot();
+        /* 台阶检测：仅惯导 ENTER_STAIR 激活时跑；Image 菜单 AE 模式仍独占摄像头 */
+        if (!MenuIsImageSectionPage() && (ctrl.stair_enter_active != 0u))
         {
             step_detect();
+            step_visual_jump_after_step();
         }
         image_ae_session_poll();
         selectMenu();
         (void)image_ae_session_consume_done_and_save();
-        ui_pull_ctrl_snapshot();
 
         remote_lora_update_from_driver_and_publish();
 
-        //step_visual_jump_after_step(); /* 视觉自动跳跃：见 step_detection.c / VISUAL_JUMP_* */
         static uint32 step_frame_seq;
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);

@@ -121,7 +121,7 @@ float NavFusion_GetMileageStepCm(void);
 
 /*
  * 刷新融合里程 prev 快照（g_prev_x/y <- 当前 g_fusion.x/y），不重置融合位置。
- * Spin 等元素冻结 Run_index 期间 Predict 仍在跑；进入/退出元素时调用，
+ * Spin / ENTER_STAIR 等元素冻结 Run_index 期间 Predict 仍在跑；进入/退出元素时调用，
  * 避免恢复后 NavFusion_GetMileageStepCm() 一次性把元素期位移灌入 Run_index。
  */
 void NavFusion_SyncMileageSnapshot(void);

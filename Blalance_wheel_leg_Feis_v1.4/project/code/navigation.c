@@ -124,7 +124,7 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: return (Nag_HeadingHold_EnterTurn_Enable != 0u);
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
         case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
-        case NAG_EVENT_TYPE_JUMP: return (Nag_HeadingHold_Jump_Enable != 0u);
+        case NAG_EVENT_TYPE_ENTER_STAIR: return (Nag_HeadingHold_EnterStair_Enable != 0u);
         default: return false;
     }
 }
@@ -161,9 +161,13 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
         return;
     }
 
-    /* 当前先统一锁定“进入元素瞬间的实测 yaw”，这样元素里即使暂停导航前瞻推进，
-     * 也仍能把车头稳在切入该元素前的方向。
-     */
+    /* ENTER_STAIR：锁航向目标在 Nag_Hook_EnterStair_Start 内按 enter_index 前 lookback 圆均值设置。 */
+    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
+    {
+        return;
+    }
+
+    /* 其它元素：锁定进入瞬间的实测 yaw。 */
     Nag_HeadingHold_Enable((float)euler_angle.yaw);
 }
 
@@ -185,7 +189,7 @@ void Nag_EventPrepareEnter(uint8 event_type)
     steer_yaw_request_pending = 0u;
     steer_yaw_delayed_by_spin = 0u;
     /* 折返/锥桶：沿路惯导，不 steer_task_stop。Spin 等待期需继续跟踪 Angle_Run，也不 stop。
-     * Jump 等接管元素仍 stop，避免与元素动作抢转向。
+     * ENTER_STAIR 等接管元素仍 stop，避免与锁航向抢转向。
      */
     if (event_type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
@@ -329,29 +333,138 @@ void Nag_Hook_ExitCones_Run(void) {}
 bool Nag_Hook_ExitCones_IsDone(void) { return true; }
 void Nag_Hook_ExitCones_Stop(void) {}
 
-/* 跳跃元素：与串口调试 'i' 相同，置 jump_flag=1，由 control.c 的 jump_control() 在 ISR 内推进并在结束时清零。
- * Jump_Element_Armed 防止 IsDone 在 Start 前因 jump_flag 初值为 0 而误判完成。
+static uint16 Nag_DistanceToPoints(float distance_cm);
+
+/*
+ * 计算 anchor_index 向前 lookback_cm 范围内 Nav_read[] 存储 yaw 的圆均值（deg）。
+ * Nav_read 每 Nag_Set_mileage（2cm）一点，yaw 存为 int32×100。
+ * 点数不足或 anchor==0 时回退为 anchor 点 yaw 或当前 euler_angle.yaw。
  */
-bool Nag_Hook_Jump_Start(void)
+float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
 {
-    if (jump_flag != 0u || jump_is_allowed() == 0u)
+    uint16 point_count = 0u;
+    uint16 start_index = 0u;
+    uint16 i = 0u;
+    float sum_sin = 0.0f;
+    float sum_cos = 0.0f;
+    float yaw_deg = 0.0f;
+    float avg_yaw = 0.0f;
+
+    if (N.Save_index == 0u)
     {
-        return false;
+        return (float)euler_angle.yaw;
     }
-    N.Jump_Element_Armed = 1u;
-    jump_flag = 1u;
+
+    point_count = Nag_DistanceToPoints(lookback_cm);
+    if (point_count == 0u)
+    {
+        point_count = 1u;
+    }
+
+    if (anchor_index >= N.Save_index)
+    {
+        anchor_index = (uint16)(N.Save_index - 1u);
+    }
+
+    if (anchor_index >= point_count)
+    {
+        start_index = (uint16)(anchor_index - point_count + 1u);
+    }
+    else
+    {
+        start_index = 0u;
+    }
+
+    for (i = start_index; i <= anchor_index; i++)
+    {
+        if (i >= Read_MaxSize)
+        {
+            break;
+        }
+        yaw_deg = (float)(Nav_read[i] / 100.0f);
+        sum_sin += sinf(yaw_deg * (float)(3.1415926f / 180.0f));
+        sum_cos += cosf(yaw_deg * (float)(3.1415926f / 180.0f));
+    }
+
+    if (sum_sin == 0.0f && sum_cos == 0.0f)
+    {
+        if (anchor_index < Read_MaxSize && N.Save_index > 0u)
+        {
+            return (float)(Nav_read[anchor_index] / 100.0f);
+        }
+        return (float)euler_angle.yaw;
+    }
+
+    avg_yaw = atan2f(sum_sin, sum_cos) * 57.2957795f;
+    return avg_yaw;
+}
+
+/*
+ * 进入台阶元素（阶段一）：
+ * - 锁 enter_index 前 Nag_EnterStair_Yaw_Lookback_cm 的 yaw 圆均值；
+ * - 固定速度 Nag_EnterStair_Target_Speed、腿长 Nag_EnterStair_Leg_Long；
+ * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
+ * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
+ * IsDone 阶段一恒 false，须手动 Nag_Notify_Event_Done / Abort。
+ */
+bool Nag_Hook_EnterStair_Start(void)
+{
+    uint16 enter_index = 0u;
+    float avg_yaw = 0.0f;
+    float speed_sign = 1.0f;
+
+    if (N.Event_Active_Index < N.Event_Count &&
+        Nag_Event_Table[N.Event_Active_Index].valid)
+    {
+        enter_index = Nag_Event_Table[N.Event_Active_Index].enter_index;
+    }
+    else
+    {
+        enter_index = N.Run_index;
+    }
+
+    N.Stair_Saved_SetSpeed = motor_user_speed_cmd;
+    N.Stair_Saved_Leg_Long = leg_long;
+
+    avg_yaw = Nag_ComputeYawAverageLookback(enter_index, Nag_EnterStair_Yaw_Lookback_cm);
+    N.Stair_Lookback_Yaw = avg_yaw;
+    Nag_HeadingHold_Enable(avg_yaw);
+
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+
+    if ((float)motor_user_speed_cmd < 0.0f)
+    {
+        speed_sign = -1.0f;
+    }
+    motor_user_speed_cmd = speed_sign * Nag_EnterStair_Target_Speed;
+    leg_long = Nag_EnterStair_Leg_Long;
     return true;
 }
-void Nag_Hook_Jump_Run(void) {}
-bool Nag_Hook_Jump_IsDone(void)
+
+void Nag_Hook_EnterStair_Run(void) {}
+
+bool Nag_Hook_EnterStair_IsDone(void)
 {
-    return (N.Jump_Element_Armed != 0u) && (jump_flag == 0u);
+    /* 阶段二：由 EXIT_STAIR 或视觉/俯仰退出条件接入后再改。 */
+    return false;
 }
-void Nag_Hook_Jump_Stop(void)
+
+void Nag_Hook_EnterStair_Stop(void)
 {
-    jump_stop();
-    N.Jump_Element_Armed = 0u;
+    motor_user_speed_cmd = N.Stair_Saved_SetSpeed;
+    leg_long = N.Stair_Saved_Leg_Long;
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
 }
+
+/* 退出台阶：阶段二实现退出判定与 resume_index 接回；阶段一仅占位。 */
+bool Nag_Hook_ExitStair_Start(void) { return false; }
+void Nag_Hook_ExitStair_Run(void) {}
+bool Nag_Hook_ExitStair_IsDone(void) { return false; }
+void Nag_Hook_ExitStair_Stop(void) {}
 
 bool Nag_Element_Start(uint8 event_type)
 {
@@ -369,7 +482,8 @@ bool Nag_Element_Start(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_Start();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_Start();
-        case NAG_EVENT_TYPE_JUMP: return Nag_Hook_Jump_Start();
+        case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_Start();
+        case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_Start();
         default: return false;
     }
 }
@@ -386,7 +500,8 @@ void Nag_Element_Run(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Run(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Run(); break;
-        case NAG_EVENT_TYPE_JUMP: Nag_Hook_Jump_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Run(); break;
         default: break;
     }
 }
@@ -406,7 +521,8 @@ bool Nag_Element_IsDone(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_IsDone();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_IsDone();
-        case NAG_EVENT_TYPE_JUMP: return Nag_Hook_Jump_IsDone();
+        case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_IsDone();
+        case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_IsDone();
         default: return false;
     }
 }
@@ -426,7 +542,8 @@ void Nag_Element_Stop(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Stop(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Stop(); break;
-        case NAG_EVENT_TYPE_JUMP: Nag_Hook_Jump_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Stop(); break;
         default: break;
     }
 }
@@ -537,11 +654,9 @@ static void Nag_ClearEventRuntimeState(void)
     N.Spin_Task_Started = 0;
     N.Spin_Resume_RunIndex = 0;
     N.Spin_Speed_Latched = 0;
-    if (N.Jump_Element_Armed != 0u)
-    {
-        jump_flag = 0u;
-    }
-    N.Jump_Element_Armed = 0u;
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
 }
 
 void Nag_EventForceReset(void)
@@ -623,9 +738,6 @@ static void Nag_Element_StateMachine(void)
             break;
     }
 }
-
-/* 将物理距离（cm）换算为导航点数；distance<=0 返回 0，否则至少 1 点。 */
-static uint16 Nag_DistanceToPoints(float distance_cm);
 
 static uint8 Nag_FindEventByEnterIndex(uint16 run_index)
 {
@@ -820,10 +932,10 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             *target_speed = Nag_Bump_Target_Speed;
             *pre_decel_dist_cm = Nag_Bump_PreDecel_Dist_cm;
             return (*pre_decel_dist_cm > 0.0f);
-        case NAG_EVENT_TYPE_JUMP:
-            *target_speed = Nag_Jump_Target_Speed;
-            *pre_decel_dist_cm = Nag_Jump_PreDecel_Dist_cm;
-            return (*pre_decel_dist_cm > 0.0f);
+        case NAG_EVENT_TYPE_ENTER_STAIR:
+            *target_speed = Nag_EnterStair_Target_Speed;
+            *pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm;
+            return true;
         default:
             return false;
     }
@@ -1652,7 +1764,8 @@ float Nag_GetControlSpeedTarget(void)
         {
             switch (N.Event_Active_Type)
             {
-                case NAG_EVENT_TYPE_JUMP:
+                case NAG_EVENT_TYPE_ENTER_STAIR:
+                    nav_speed = Nag_EnterStair_Target_Speed;
                     break;
                 case NAG_EVENT_TYPE_ENTER_TURNAROUND:
                 case NAG_EVENT_TYPE_EXIT_TURNAROUND:
@@ -1719,8 +1832,8 @@ float Nag_GetControlSpeedTarget(void)
     {
         switch (N.Event_Active_Type)
         {
-            case NAG_EVENT_TYPE_JUMP:
-                /* 跳跃冲击段不限速。 */
+            case NAG_EVENT_TYPE_ENTER_STAIR:
+                nav_speed = Nag_EnterStair_Target_Speed;
                 break;
             case NAG_EVENT_TYPE_ENTER_TURNAROUND:
             case NAG_EVENT_TYPE_EXIT_TURNAROUND:
@@ -1823,7 +1936,7 @@ void Nag_Run()
 
     if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw())
     {
-        /* 非 Spin 等待态：Jump/已起转自旋等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
+        /* 非 Spin 等待态：ENTER_STAIR/已起转自旋等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
         N.Final_Out = 0.0f;
         return;
     }

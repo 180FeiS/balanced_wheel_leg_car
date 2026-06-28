@@ -6,6 +6,7 @@
  *   - MT9V03X_H、MT9V03X_W 须为偶数；压缩尺寸为 `IMAGE_COMPRESS_H/W`。
  *   - 遍历/识别建议以 `image_two_value` 为坐标系（与同尺寸二值图一致）。
  *   - 主循环在 Debug→Image（pos 2.1*）不调用 step_detect，AE 独占 mt9v03x_finish_flag。
+ *   - step_detect() 仅在惯导 ENTER_STAIR 激活（dualcore stair_enter_active）时由 CM7_1 调用。
  *   - 进入 Debug→Image（pos 2.1）时 arm AE 会话；收敛后写 Flash 页 49；上电 camera_init 读回。
  *********************************************************************************************************************/
 #ifndef PROJECT_CODE_IMAGE_H_

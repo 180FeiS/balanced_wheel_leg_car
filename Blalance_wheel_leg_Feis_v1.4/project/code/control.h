@@ -49,6 +49,7 @@ void motor_poll_switch2_speed_baseline(void); /* SWITCH2 边沿：任意时刻 y
 extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
 uint8 jump_is_allowed(void);              // 1=允许跳跃：MOTOR_ON 且无 Motor_Runaway_Latch；否则禁止
 void jump_stop(void);                     // 终止跳跃，清时序，leg_long 回默认；保护/关电机时调用
+extern float leg_long;                    // 目标腿长；惯导 ENTER_STAIR 期间由 navigation 设为 Nag_EnterStair_Leg_Long(5.5)
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 

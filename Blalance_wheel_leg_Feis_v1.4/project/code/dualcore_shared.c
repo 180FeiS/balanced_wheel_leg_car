@@ -84,6 +84,8 @@ void dualcore_ctrl_to_ui_publish(void)
   c->spin_done = spin_done;
   c->jump_allowed = jump_is_allowed();
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
+  c->stair_enter_active = (uint8)((N.Event_Active != 0u) &&
+                                  (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->gps_valid = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
@@ -394,7 +396,7 @@ void dualcore_vision_publish_after_step(uint32 frame_seq)
   dualcore_shared_dcache_invalidate(v, sizeof(*v));
 
   extern step_info_t step_data;
-  if (ctrl.jump_active != 0u)
+  if ((ctrl.jump_active != 0u) || (ctrl.stair_enter_active == 0u))
   {
     step_info_t invalid_step = {0};
     invalid_step.detected = 0u;

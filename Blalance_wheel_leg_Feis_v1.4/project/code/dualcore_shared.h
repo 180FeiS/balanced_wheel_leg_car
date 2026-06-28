@@ -71,7 +71,7 @@ typedef struct
   uint8 nav_recording_active; /* Nag_SystemRun_Index==1 && End_f==0 */
   uint8 event_active;
   uint8 event_state;
-  uint8 event_active_type; /* 0=SPIN 1=ENTER_TURN 2=EXIT_TURN 3=ENTER_CONES 4=EXIT_CONES … */
+  uint8 event_active_type; /* 0=SPIN … 7=ENTER_STAIR 8=EXIT_STAIR … */
   uint8 event_record_type; /* N.Event_Record_Type，录制时 KEY3 循环切换 */
   uint8 nag_vofa_group;
   float mileage_debug_total;
@@ -160,12 +160,14 @@ typedef struct
   float fusion_gps_weight;
   uint8 fusion_gps_used;
   uint8 fusion_valid;
+  /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
+  uint8 stair_enter_active;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct
 {
   volatile uint32 seq;
-  /* jump_active==1（CM7_0 jump_flag）时 dualcore_vision_publish_after_step 故意写全 0 无效帧，勿作控车/决策 */
+  /* jump_active==1 或 stair_enter_active==0 时 publish 写全 0 无效帧，勿作控车/决策 */
   step_info_t step;
   uint32 frame_seq;
 } dualcore_vision_to_ctrl_t;
@@ -226,7 +228,7 @@ void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
 #if defined(CY_CORE_CM7_1)
 void dualcore_ctrl_to_ui_pull(dualcore_ctrl_to_ui_t *out);
 uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f32);
-/* frame_seq 递增发布台阶快照；jump_active 时 step 写无效零帧（见 dualcore_vision_to_ctrl_t） */
+/* frame_seq 递增发布台阶快照；jump_active 或 !stair_enter_active 时 step 写无效零帧 */
 void dualcore_vision_publish_after_step(uint32 frame_seq);
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif

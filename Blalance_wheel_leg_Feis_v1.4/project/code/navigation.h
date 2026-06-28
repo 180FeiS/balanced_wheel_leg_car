@@ -129,8 +129,13 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_SingleBridge_PreDecel_Dist_cm 0.0f
 #define Nag_Bump_Target_Speed 220.0f
 #define Nag_Bump_PreDecel_Dist_cm 0.0f
-#define Nag_Jump_Target_Speed 0.0f             // 0=不限速（跳跃冲击段）
-#define Nag_Jump_PreDecel_Dist_cm 0.0f
+
+/* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 前回溯 yaw 均值；见 Nag_Hook_EnterStair_* */
+#define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
+#define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
+#define Nag_EnterStair_Yaw_Lookback_cm 20.0f     // 锁航向：enter_index 向前该距离内 Nav_read yaw 圆均值
+#define Nag_EnterStair_PreDecel_Dist_cm 0.0f      // 预减速距离（cm）；0=关闭
+#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 lookback 均值）
 
 /* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -141,7 +146,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 3u            // v3：折返拆分为进/出口；旧事件表需重录
+#define Nag_Event_Version 4u            // v4：JUMP 拆为 ENTER/EXIT_STAIR；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；v5：v4 + menu_input_remote_first。
@@ -229,14 +234,13 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
 #define Nag_HeadingHold_SingleBridge_Enable 0u  // 单边桥默认整段保持进入元素时的航向
 #define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
-#define Nag_HeadingHold_Jump_Enable 0u          // 跳跃元素默认整段保持进入元素时的航向
 //********************************************************//
 
 /* 元素类型枚举：
  * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
  * 折返/锥桶进/出口：惯导路径上的分段标记；区段调速见对应 Launch 参数或宏。
  */
-/* GPS 路点统一元素（Normal=0，惯导 Spin~Jump 后移一位；END 仅末点自动标记）：
+/* GPS 路点统一元素（Normal=0，惯导 Spin~StairOut 后移一位；END 仅末点自动标记）：
  * u32yuansu[] / gps_current_yuansu 存此枚举；执行时 Nav_UnifiedToInsEvent() 映射到 Nag_Event_Type。
  */
 typedef enum
@@ -249,12 +253,13 @@ typedef enum
     NAV_ELEM_CONE_OUT = 5,
     NAV_ELEM_BRIDGE = 6,
     NAV_ELEM_BUMP = 7,
-    NAV_ELEM_JUMP = 8,
-    NAV_ELEM_END = 9,
-    NAV_ELEM_COUNT = 10,
+    NAV_ELEM_STAIR_IN = 8,
+    NAV_ELEM_STAIR_OUT = 9,
+    NAV_ELEM_END = 10,
+    NAV_ELEM_COUNT = 11,
 } Nav_Unified_Element;
 
-#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_JUMP
+#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR_OUT
 
 static inline uint8 Nav_UnifiedToInsEvent(uint8 unified)
 {
@@ -283,7 +288,7 @@ static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
 
 static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
 {
-    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_JUMP));
+    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_STAIR_IN));
 }
 
 static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
@@ -304,7 +309,8 @@ static inline const char *Nav_GetUnifiedElementName(uint8 unified)
         case NAV_ELEM_CONE_OUT: return "ConeOut";
         case NAV_ELEM_BRIDGE: return "Bridge";
         case NAV_ELEM_BUMP: return "Bump";
-        case NAV_ELEM_JUMP: return "Jump";
+        case NAV_ELEM_STAIR_IN: return "StairIn";
+        case NAV_ELEM_STAIR_OUT: return "StairOut";
         case NAV_ELEM_END: return "End";
         default: return "Unknown";
     }
@@ -319,8 +325,9 @@ typedef enum
        NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
        NAG_EVENT_TYPE_SINGLE_BRIDGE = 5,     // 单边桥元素
        NAG_EVENT_TYPE_BUMP = 6,              // 减速带/颠簸元素
-       NAG_EVENT_TYPE_JUMP = 7,              // 跳跃元素
-       NAG_EVENT_TYPE_COUNT = 8,             // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_ENTER_STAIR = 7,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉（阶段一）
+       NAG_EVENT_TYPE_EXIT_STAIR = 8,        // 退出台阶：占位，阶段二实现
+       NAG_EVENT_TYPE_COUNT = 9,             // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
 /* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
@@ -335,7 +342,8 @@ static inline const char *Nag_GetEventTypeName(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return "ConeOut";
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return "Bridge";
         case NAG_EVENT_TYPE_BUMP: return "Bump";
-        case NAG_EVENT_TYPE_JUMP: return "Jump";
+        case NAG_EVENT_TYPE_ENTER_STAIR: return "EnterStair";
+        case NAG_EVENT_TYPE_EXIT_STAIR: return "ExitStair";
         default: return "Unknown";
     }
 }
@@ -405,7 +413,9 @@ typedef struct{
        uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
        uint16 Spin_Resume_RunIndex; //Spin 起转前锁存的路径索引，自旋完成后从此处继续惯导
        uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 motor_user_speed_cmd，退出时需恢复
-       uint8 Jump_Element_Armed; //1表示跳跃元素已置 jump_flag，供 IsDone 防误判（Start 前 jump_flag 可能为 0）
+       float Stair_Saved_Leg_Long; //进入台阶前备份的 leg_long，Stop/Done 时恢复
+       float Stair_Saved_SetSpeed; //进入台阶前备份的 motor_user_speed_cmd，Stop/Done 时恢复
+       float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -485,10 +495,17 @@ void Nag_Hook_Bump_Run(void);
 bool Nag_Hook_Bump_IsDone(void);
 void Nag_Hook_Bump_Stop(void);
 
-bool Nag_Hook_Jump_Start(void);
-void Nag_Hook_Jump_Run(void);
-bool Nag_Hook_Jump_IsDone(void);
-void Nag_Hook_Jump_Stop(void);
+float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm);
+
+bool Nag_Hook_EnterStair_Start(void);
+void Nag_Hook_EnterStair_Run(void);
+bool Nag_Hook_EnterStair_IsDone(void);
+void Nag_Hook_EnterStair_Stop(void);
+
+bool Nag_Hook_ExitStair_Start(void);
+void Nag_Hook_ExitStair_Run(void);
+bool Nag_Hook_ExitStair_IsDone(void);
+void Nag_Hook_ExitStair_Stop(void);
 
 /* 锥桶：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导，供后续按 Run_index/事件表做区段限速 */
 bool Nag_Hook_EnterCones_Start(void);
