@@ -206,13 +206,20 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
  */
 #define Nag_Spin_Demo_Turns 2.0f
 #define Nag_Spin_Demo_Dir 1
-#define Nag_Spin_Stop_Speed_Threshold 10.0f // 当前速度低于该值时视为进入低速区
+#define Nag_Spin_Stop_Speed_Threshold 30.0f // 当前速度低于该值时视为进入低速区
 #define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
+
+/*
+ * Spin 分阶段航向策略（实现见 Nag_Spin_ShouldTrackInsYaw / Nag_Run）：
+ * - 预减速、触发窗口、刹停等待：继续 steer_request_target_yaw(Angle_Run)，跟录制路径；
+ * - spin_task_start 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制；
+ * - 不依赖 Nag_HeadingHold_Spin_Enable（该宏仅用于固定 yaw 锁航，与路径跟踪二选一）。
+ */
 
 /* 元素航向保持配置：
  * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw；
  * 2. ISR 会在 steer_yaw_request_pending 消费前，按需重新登记该固定目标；
- * 3. 自旋元素推荐只在“减速等待起转”的阶段保持，真正 spin_task_start() 前解除；
+ * 3. 自旋元素：等待期由 Nag_Run 继续跟踪 Angle_Run；起转后 spin_enable 接管，见 Nag_HeadingHold_Spin_Enable 说明；
  * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
  */
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求

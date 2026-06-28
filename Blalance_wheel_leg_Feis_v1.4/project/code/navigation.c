@@ -167,15 +167,31 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
     Nag_HeadingHold_Enable((float)euler_angle.yaw);
 }
 
+/*
+ * Spin 等待期（已 Event_Active 但尚未 spin_task_start）：继续惯导路径 yaw 跟踪。
+ * 仅 spin_enable==1 起转后由 spin_cmd 接管，避免减速/刹停阶段无航向闭环而乱走。
+ */
+static uint8 Nag_Spin_ShouldTrackInsYaw(void)
+{
+    return (uint8)(N.Event_Active &&
+                   (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN) &&
+                   (N.Spin_Task_Started == 0u) &&
+                   (spin_enable == 0u));
+}
+
 void Nag_EventPrepareEnter(uint8 event_type)
 {
     N.Target_Request_Valid = 0u;
     steer_yaw_request_pending = 0u;
     steer_yaw_delayed_by_spin = 0u;
+    /* 折返/锥桶：沿路惯导，不 steer_task_stop。Spin 等待期需继续跟踪 Angle_Run，也不 stop。
+     * Jump 等接管元素仍 stop，避免与元素动作抢转向。
+     */
     if (event_type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_ENTER_CONES &&
-        event_type != NAG_EVENT_TYPE_EXIT_CONES)
+        event_type != NAG_EVENT_TYPE_EXIT_CONES &&
+        event_type != NAG_EVENT_TYPE_SPIN)
     {
         steer_task_stop();
     }
@@ -1790,7 +1806,8 @@ void Nag_Run()
      * 1. 先根据里程推进 Run_index；
      * 2. 再按速度得到前瞻点 Prospect_index，控制目标使用前瞻点 yaw；
      * 3. 如果跑到元素 enter_index，则冻结导航索引推进，把控制权让给元素逻辑；
-     * 4. 元素完成后通过 Nag_Notify_Event_Done() 接回惯导。
+     * 4. Spin 例外：等待刹停起转前仍跟踪 Angle_Run；仅 spin_enable 期间释放航向；
+     * 5. 元素完成后通过 Nag_Notify_Event_Done() 接回惯导。
      */
     Run_Nag_GPS();  //偏航角读取函数
     if(N.Nag_Stop_f) //终点停止
@@ -1803,12 +1820,9 @@ void Nag_Run()
         return;
     }
 
-    if (N.Event_Active)
+    if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw())
     {
-        /* 元素期间导航不再用前瞻点刷新目标航向；
-         * 若该元素配置了“保持航向”，则改由 1ms ISR 在 steer_yaw_request_pending 消费前，
-         * 按锁存的 HeadingHold_Target_Yaw 重新登记请求。
-         */
+        /* 非 Spin 等待态：Jump/已起转自旋等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
         N.Final_Out = 0.0f;
         return;
     }
