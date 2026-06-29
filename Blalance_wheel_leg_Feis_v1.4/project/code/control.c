@@ -253,9 +253,9 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define SPIN_ANGLE_OUT_MAX_DPS_DEFAULT 200.0f  // 自旋巡航角速度默认值 (deg/s)
 #define SPIN_RATE_MIN_DPS               30.0f
 #define SPIN_RATE_MAX_DPS              1000.0f
-#define SPIN_ANGLE_SETTLE_DEG         10.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
-#define SPIN_RATE_SETTLE_DPS         6.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
-#define SPIN_SETTLE_COUNT_MAX        80u
+#define SPIN_ANGLE_SETTLE_DEG         70.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
+#define SPIN_RATE_SETTLE_DPS         20.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
+#define SPIN_SETTLE_COUNT_MAX        25u
 #define SPIN_TIMEOUT_BASE_MS       3000u
 #define SPIN_PITCH_ABORT_DEG         20.0f
 
