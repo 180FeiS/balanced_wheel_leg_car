@@ -35,6 +35,7 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[11].float_type = nag_enter_cones_pre_decel_dist_cm;
     flash_union_buffer[12].float_type = spin_rate_max_dps;
     flash_union_buffer[13].uint32_type = (g_menu_input_remote_first != 0u) ? 1u : 0u;
+    flash_union_buffer[14].uint32_type = (g_menu_vofa_enable != 0u) ? 1u : 0u;
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -51,11 +52,27 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V6,
                                            Nag_Run_Launch_Config_Word_Count);
 }
 
 static void flash_RunLaunchParamsUnpack(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = flash_union_buffer[8].float_type;
+    nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    spin_set_rate_max_dps(flash_union_buffer[12].float_type);
+    g_menu_input_remote_first = (uint8)(flash_union_buffer[13].uint32_type & 1u);
+    g_menu_vofa_enable = (uint8)(flash_union_buffer[14].uint32_type & 1u);
+}
+
+static void flash_RunLaunchParamsUnpackV5(void)
 {
     run_launch_speed = flash_union_buffer[3].float_type;
     nag_spin_target_speed = flash_union_buffer[4].float_type;
@@ -265,12 +282,12 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run Launch 参数 + 输入模式（页 47 V5）。 */
+/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关（页 47 V6）。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V5;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V6;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -308,11 +325,17 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V5) &&
-        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,
+    if ((speed_version == Nag_Run_Launch_Params_Version_V6) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V6,
                                                            Nag_Run_Launch_Config_Word_Count)))
     {
         flash_RunLaunchParamsUnpack();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V5) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,
+                                                           Nag_Run_Launch_Config_Word_Count_V5)))
+    {
+        flash_RunLaunchParamsUnpackV5();
     }
     else if ((speed_version == Nag_Run_Launch_Params_Version_V4) &&
         (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V4,
@@ -336,6 +359,114 @@ void flash_RunLaunchSpeed_Read(void)
              (speed_checksum == flash_RunLaunchSpeedChecksum(speed_raw)))
     {
         run_launch_speed = flash_union_buffer[3].float_type;
+    }
+    flash_buffer_clear();
+}
+
+#define Nag_Jump_Params_Page 50u
+#define Nag_Jump_Params_Magic 0x4A504D50u   /* "JPMP" */
+#define Nag_Jump_Params_Version 1u
+#define Nag_Jump_Params_Version_V2 2u
+#define Nag_Jump_Params_Word_Count_V1 8u
+#define Nag_Jump_Params_Word_Count 9u
+
+static uint32 flash_JumpParamsChecksumEx(uint32 version, uint8 word_count)
+{
+    uint32 checksum = Nag_Jump_Params_Magic ^ version;
+    uint8 index = 0u;
+
+    for (index = 0u; index < word_count; index++)
+    {
+        checksum ^= flash_union_buffer[3u + index].uint32_type;
+    }
+    return checksum;
+}
+
+static uint32 flash_JumpParamsChecksum(void)
+{
+    return flash_JumpParamsChecksumEx(Nag_Jump_Params_Version_V2,
+                                      Nag_Jump_Params_Word_Count);
+}
+
+static void flash_JumpParamsPack(void)
+{
+    uint8 index = 0u;
+
+    for (index = 0u; index < Nag_Jump_Params_Word_Count; index++)
+    {
+        flash_union_buffer[3u + index].float_type = JumpParamGet(index);
+    }
+}
+
+static void flash_JumpParamsUnpackV1(void)
+{
+    uint8 index = 0u;
+
+    for (index = 0u; index < Nag_Jump_Params_Word_Count_V1; index++)
+    {
+        JumpParamSet(index, flash_union_buffer[3u + index].float_type);
+    }
+    jump_buffer_step_p_max = JUMP_BUFFER_STEP_P_MAX_DEFAULT;
+    JumpParamRecalcBufferTimeFromLeg();
+}
+
+static void flash_JumpParamsUnpack(void)
+{
+    uint8 index = 0u;
+
+    for (index = 0u; index < Nag_Jump_Params_Word_Count; index++)
+    {
+        JumpParamSet(index, flash_union_buffer[3u + index].float_type);
+    }
+    JumpParamRecalcBufferTimeFromLeg();
+}
+
+void flash_JumpParams_Write(void)
+{
+    flash_buffer_clear();
+    flash_union_buffer[0].uint32_type = Nag_Jump_Params_Magic;
+    flash_union_buffer[1].uint32_type = Nag_Jump_Params_Version_V2;
+    flash_JumpParamsPack();
+    flash_union_buffer[2].uint32_type = flash_JumpParamsChecksum();
+
+    if (flash_check(0, Nag_Jump_Params_Page))
+    {
+        flash_erase_page(0, Nag_Jump_Params_Page);
+    }
+    flash_write_page_from_buffer(0, Nag_Jump_Params_Page, FLASH_PAGE_LENGTH);
+    flash_buffer_clear();
+}
+
+void flash_JumpParams_Read(void)
+{
+    uint32 jump_magic = 0;
+    uint32 jump_version = 0;
+    uint32 jump_checksum = 0;
+
+    if (!flash_check(0, Nag_Jump_Params_Page))
+    {
+        return;
+    }
+
+    flash_buffer_clear();
+    flash_read_page_to_buffer(0, Nag_Jump_Params_Page, FLASH_PAGE_LENGTH);
+    jump_magic = flash_union_buffer[0].uint32_type;
+    jump_version = flash_union_buffer[1].uint32_type;
+    jump_checksum = flash_union_buffer[2].uint32_type;
+
+    if ((jump_magic == Nag_Jump_Params_Magic) &&
+        (jump_version == Nag_Jump_Params_Version_V2) &&
+        (jump_checksum == flash_JumpParamsChecksumEx(Nag_Jump_Params_Version_V2,
+                                                      Nag_Jump_Params_Word_Count)))
+    {
+        flash_JumpParamsUnpack();
+    }
+    else if ((jump_magic == Nag_Jump_Params_Magic) &&
+             (jump_version == Nag_Jump_Params_Version) &&
+             (jump_checksum == flash_JumpParamsChecksumEx(Nag_Jump_Params_Version,
+                                                          Nag_Jump_Params_Word_Count_V1)))
+    {
+        flash_JumpParamsUnpackV1();
     }
     flash_buffer_clear();
 }

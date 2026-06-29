@@ -149,7 +149,8 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Event_Version 4u            // v4：JUMP 拆为 ENTER/EXIT_STAIR；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
- * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；v5：v4 + menu_input_remote_first。
+ * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
+ * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -158,8 +159,10 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V3 3u      /* v3：9 个 float */
 #define Nag_Run_Launch_Params_Version_V4 4u      /* v4：10 个 float */
 #define Nag_Run_Launch_Params_Version_V5 5u      /* v5：10 float + input mode */
+#define Nag_Run_Launch_Params_Version_V6 6u      /* v6：v5 + vofa enable */
 #define Nag_Run_Launch_Param_Count 10u
-#define Nag_Run_Launch_Config_Word_Count 11u     /* v5：10 float + menu_input_remote_first @ [13] */
+#define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
+#define Nag_Run_Launch_Config_Word_Count 12u     /* v6：v5 + menu_vofa_enable @ [14] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u

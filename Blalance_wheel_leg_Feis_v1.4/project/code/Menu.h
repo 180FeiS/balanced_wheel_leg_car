@@ -38,9 +38,17 @@
 #endif
 
 #define Run_Config_Field_InputMode 0u
-#define Run_Config_Field_Count 1u
+#define Run_Config_Field_VofaEnable 1u
+#define Run_Config_Field_Count 2u
 
 extern uint8 g_menu_input_remote_first;
+/*
+ * VOFA 无线调试开关（Flash 可配，Run→Config 编辑、Run→Save 持久化 V6）。
+ * 0 = 关闭 JustFloat 无线发包（默认，避免与 LORA 遥控共用 UART_1 时互相干扰）。
+ * 1 = 开启；CM7_1 主循环按此标志调用 cm71_vofa_main_loop_tx_dispatch()。
+ * 运行时变量 g_menu_vofa_enable（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
+ */
+extern uint8 g_menu_vofa_enable;
 
 /*
  * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。
@@ -109,6 +117,9 @@ extern uint8 Menu_GetRunLaunchFieldIndex(void);
 /* Run -> Config 三级页当前选中的预配置字段索引（0..Run_Config_Field_Count-1） */
 extern uint8 Menu_GetRunConfigFieldIndex(void);
 extern void Menu_RunConfigToggleField(uint8 field_index);
+
+/* Run -> Jump 三级页当前选中的参数字段索引（0..Run_Jump_Param_Count-1） */
+extern uint8 Menu_GetRunJumpFieldIndex(void);
 
 /* Debug -> Image（pos 2.1*）：边沿进入时 arm 自动曝光会话 */
 extern uint8 MenuIsImageSectionPage(void);

@@ -196,8 +196,10 @@ volatile uint8 remote_lora_steer_snapshot_valid = 0u;
 
 /* 1：遥控优先工程下已切到板载按键/拨码调试（见 remote_lora_apply）；g_menu_input_remote_first==1 时由 apply 更新 */
 uint8 g_remote_local_keys_debug = 0u;
-/* 0=按键+拨码，1=遥控优先；Run→Config 编辑，Run→Save 写 Flash 页 47 V5 */
+/* 0=按键+拨码，1=遥控优先；Run→Config 编辑，Run→Save 写 Flash 页 47 V5/V6 */
 uint8 g_menu_input_remote_first = 0u;
+/* 0=关，1=开 VOFA 无线调试；Run→Config 编辑，Run→Save 写 Flash 页 47 V6 */
+uint8 g_menu_vofa_enable = 0u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)
@@ -595,7 +597,7 @@ void set_steer_cmd(float cmd)
  * 参数分类速查：
  *   横滚角：roll_balance_en, ROLL_LEG_SCALE, ROLL_LEG_OFFSET_MAX, roll_mid, leg_hight, dt_leg
  *   俯仰角：LEG_TILT_K, LEG_TILT_MAX, LEG_SERVO_SPEED_TILT_EN
- *   跳跃：  JUMP_* 系列, jump_control_config
+ *   跳跃：  JUMP_* 系列, jump_stage_*_cycles, jump_control_config
  *   通用：  LEG_STEP_P_MAX, LEG_STEP_ANGLE_MAX, LEG_P_MIN/MAX
  *=============================================================================*/
 
@@ -619,26 +621,218 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 
 /*---------- 跳跃参数（障碍跨越）----------*/
 #define JUMP_PID_SCALE          0.4f  // 跳跃时angle/speed的kp缩放，维持稳定
-#define JUMP_TAKEOFF_P          12.5f // 起跳爆发目标腿长（直通伸腿）
-#define JUMP_RETRACT_P          5.5f // 收腿阶段目标腿长（起跳爆发后空中收回一小段，直通到达；实车可调）
-#define JUMP_PREPARE_P          7.5f // 准备缓冲目标腿长（起跳后伸腿高度）
-#define JUMP_BUFFER_P           5.5f  // 执行缓冲最终腿长（落地收腿高度）
-#define JUMP_BUFFER_STEP_P_MAX  0.14f  // 执行缓冲时每5ms腿高最大变化
-#define JUMP_BUFFER_STEP_PER_20MS  (JUMP_BUFFER_STEP_P_MAX * 4)  // 每20ms步进（4次5ms）
-#define JUMP_BUFFER_MARGIN      2     // 缓冲周期余量
-#define JUMP_BUFFER_CYCLES  ((int)(((JUMP_PREPARE_P - JUMP_BUFFER_P) / JUMP_BUFFER_STEP_PER_20MS) + 0.999f) + JUMP_BUFFER_MARGIN)
+#define JUMP_TAKEOFF_P_DEFAULT   12.5f
+#define JUMP_RETRACT_P_DEFAULT   5.5f
+#define JUMP_PREPARE_P_DEFAULT   7.5f
+#define JUMP_BUFFER_P_DEFAULT    5.5f
+#define JUMP_BUFFER_STEP_PER_20MS_DEFAULT  (JUMP_BUFFER_STEP_P_MAX_DEFAULT * 4.0f)
+#define JUMP_BUFFER_MARGIN      1     // 缓冲周期余量
+#define JUMP_BUFFER_CYCLES_DEFAULT  ((int)(((JUMP_PREPARE_P_DEFAULT - JUMP_BUFFER_P_DEFAULT) / JUMP_BUFFER_STEP_PER_20MS_DEFAULT) + 0.999f) + JUMP_BUFFER_MARGIN)
+
+float jump_takeoff_p  = JUMP_TAKEOFF_P_DEFAULT;
+float jump_retract_p  = JUMP_RETRACT_P_DEFAULT;
+float jump_prepare_p  = JUMP_PREPARE_P_DEFAULT;
+float jump_buffer_p   = JUMP_BUFFER_P_DEFAULT;
+float jump_buffer_step_p_max = JUMP_BUFFER_STEP_P_MAX_DEFAULT;
+/* 跳跃四阶段时长（1 格 = 20ms，与 jump_time 一致）；由 jump_control_config_sync() 累加生成 min/max */
+float jump_stage_takeoff_cycles  = 4.0f;
+float jump_stage_retract_cycles  = 3.0f;
+float jump_stage_prepare_cycles  = 2.0f;
+float jump_stage_buffer_cycles   = (float)JUMP_BUFFER_CYCLES_DEFAULT;
 
 /* 跳跃时序表（pit0_ch10 每 20ms）：闭区间 [min,max]，与 jump_step_index 0..3 一一对应。
+ * min/max 由 jump_control_config_sync() 根据 jump_stage_*_cycles 写入。
  * 仅第 4 段在 leg_servo_step_update 内按缓冲步幅逼近 leg_long；前三段均为直通目标腿长。
  */
-const jump_control_struct jump_control_config[] =
+static jump_control_struct jump_control_config[4] =
     {
-        {0,  4,  jump_set_step, "起跳"},                                      // 伸腿爆发
-        {4, 7,  jump_set_step, "收腿"},                                       // 空中收回一小段
-        {7, 9, jump_set_step, "准备缓冲"},                                   // 过渡到缓冲前姿态
-        {9, 9 + JUMP_BUFFER_CYCLES - 1, jump_set_step, "执行缓冲"},          // 落地缓冲（步进收腿）
+        {0, 0, jump_set_step, "起跳"},
+        {0, 0, jump_set_step, "收腿"},
+        {0, 0, jump_set_step, "准备缓冲"},
+        {0, 0, jump_set_step, "执行缓冲"},
 };
-const uint8 jump_step_num = sizeof(jump_control_config) / sizeof(jump_control_struct);
+static const uint8 jump_step_num = 4u;
+
+static int16 jump_cycles_round(float cycles)
+{
+    int16 r = (int16)(cycles + 0.5f);
+
+    if (r < 1)
+    {
+        r = 1;
+    }
+    if (r > 255)
+    {
+        r = 255;
+    }
+    return r;
+}
+
+static void jump_control_config_sync(void)
+{
+    int16 t0 = jump_cycles_round(jump_stage_takeoff_cycles);
+    int16 t1 = (int16)(t0 + jump_cycles_round(jump_stage_retract_cycles));
+    int16 t2 = (int16)(t1 + jump_cycles_round(jump_stage_prepare_cycles));
+    int16 t3_max = (int16)(t2 + jump_cycles_round(jump_stage_buffer_cycles) - 1);
+
+    jump_control_config[0].min = 0;
+    jump_control_config[0].max = t0;
+    jump_control_config[1].min = t0;
+    jump_control_config[1].max = t1;
+    jump_control_config[2].min = t1;
+    jump_control_config[2].max = t2;
+    jump_control_config[3].min = t2;
+    jump_control_config[3].max = t3_max;
+}
+
+static float jump_param_clamp_leg(float value)
+{
+    if (value < 3.0f)
+    {
+        return 3.0f;
+    }
+    if (value > 15.0f)
+    {
+        return 15.0f;
+    }
+    return value;
+}
+
+static float jump_param_clamp_time(float value)
+{
+    if (value < 1.0f)
+    {
+        return 1.0f;
+    }
+    if (value > 255.0f)
+    {
+        return 255.0f;
+    }
+    return value;
+}
+
+static float jump_param_clamp_step(float value)
+{
+    if (value < 0.01f)
+    {
+        return 0.01f;
+    }
+    if (value > 1.0f)
+    {
+        return 1.0f;
+    }
+    return value;
+}
+
+/* 第 4 段时长：按 PrepP→BufP 落差与 BufSp（每20ms步进）推算 */
+static void jump_recalc_buffer_cycles_from_leg(void)
+{
+    float delta = jump_prepare_p - jump_buffer_p;
+    float step_per_20ms = jump_buffer_step_p_max * 4.0f;
+
+    if (delta < 0.0f)
+    {
+        delta = 0.0f;
+    }
+    if (step_per_20ms < 0.001f)
+    {
+        step_per_20ms = 0.001f;
+    }
+    jump_stage_buffer_cycles = jump_param_clamp_time(
+        (float)((int)((delta / step_per_20ms) + 0.999f) + JUMP_BUFFER_MARGIN));
+}
+
+void JumpParamRecalcBufferTimeFromLeg(void)
+{
+    jump_recalc_buffer_cycles_from_leg();
+    jump_control_config_sync();
+}
+
+void JumpParamApplyDefaults(void)
+{
+    jump_takeoff_p = JUMP_TAKEOFF_P_DEFAULT;
+    jump_retract_p = JUMP_RETRACT_P_DEFAULT;
+    jump_prepare_p = JUMP_PREPARE_P_DEFAULT;
+    jump_buffer_p = JUMP_BUFFER_P_DEFAULT;
+    jump_buffer_step_p_max = JUMP_BUFFER_STEP_P_MAX_DEFAULT;
+    jump_stage_takeoff_cycles = 4.0f;
+    jump_stage_retract_cycles = 3.0f;
+    jump_stage_prepare_cycles = 2.0f;
+    jump_recalc_buffer_cycles_from_leg();
+    jump_control_config_sync();
+}
+
+float JumpParamGet(uint8 field_index)
+{
+    switch (field_index)
+    {
+    case Run_Jump_Field_Takeoff_P:
+        return jump_takeoff_p;
+    case Run_Jump_Field_Retract_P:
+        return jump_retract_p;
+    case Run_Jump_Field_Prepare_P:
+        return jump_prepare_p;
+    case Run_Jump_Field_Buffer_P:
+        return jump_buffer_p;
+    case Run_Jump_Field_Takeoff_T:
+        return jump_stage_takeoff_cycles;
+    case Run_Jump_Field_Retract_T:
+        return jump_stage_retract_cycles;
+    case Run_Jump_Field_Prepare_T:
+        return jump_stage_prepare_cycles;
+    case Run_Jump_Field_Buffer_T:
+        return jump_stage_buffer_cycles;
+    case Run_Jump_Field_Buffer_Step:
+        return jump_buffer_step_p_max;
+    default:
+        return 0.0f;
+    }
+}
+
+void JumpParamSet(uint8 field_index, float value)
+{
+    switch (field_index)
+    {
+    case Run_Jump_Field_Takeoff_P:
+        jump_takeoff_p = jump_param_clamp_leg(value);
+        break;
+    case Run_Jump_Field_Retract_P:
+        jump_retract_p = jump_param_clamp_leg(value);
+        break;
+    case Run_Jump_Field_Prepare_P:
+        jump_prepare_p = jump_param_clamp_leg(value);
+        jump_recalc_buffer_cycles_from_leg();
+        break;
+    case Run_Jump_Field_Buffer_P:
+        jump_buffer_p = jump_param_clamp_leg(value);
+        jump_recalc_buffer_cycles_from_leg();
+        break;
+    case Run_Jump_Field_Takeoff_T:
+        jump_stage_takeoff_cycles = jump_param_clamp_time(value);
+        break;
+    case Run_Jump_Field_Retract_T:
+        jump_stage_retract_cycles = jump_param_clamp_time(value);
+        break;
+    case Run_Jump_Field_Prepare_T:
+        jump_stage_prepare_cycles = jump_param_clamp_time(value);
+        break;
+    case Run_Jump_Field_Buffer_T:
+        jump_stage_buffer_cycles = jump_param_clamp_time(value);
+        break;
+    case Run_Jump_Field_Buffer_Step:
+        jump_buffer_step_p_max = jump_param_clamp_step(value);
+        jump_recalc_buffer_cycles_from_leg();
+        break;
+    default:
+        break;
+    }
+    jump_control_config_sync();
+}
+
+void JumpParamAdjust(uint8 field_index, float delta)
+{
+    JumpParamSet(field_index, JumpParamGet(field_index) + delta);
+}
 
 // 导航相关全局变量
 double victual_point_lat[] = {0};           //虚拟点纬度数组
@@ -671,6 +865,7 @@ void pid_ctrl_Init(void)
     //pid_init(&turn, 0.01, 0.0000667, 0, 0.02, 0, 0, 0, 10000, Position_pid);
     pid_set_target(&leg_hight, roll_mid);  // 横滚目标=机械零点
     pid_set_target(&speed, 0);
+    jump_control_config_sync();
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -1062,7 +1257,7 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
 
     if (use_step)
     {
-        float step_p = (jump_step_index == 3) ? JUMP_BUFFER_STEP_P_MAX : LEG_STEP_P_MAX;
+        float step_p = (jump_step_index == 3) ? jump_buffer_step_p_max : LEG_STEP_P_MAX;
         float delta;
         delta = desired_left_p - current_left_p;
         current_left_p += clip2(delta, step_p);
@@ -1201,16 +1396,16 @@ void jump_set_step(int step_num)
     switch (step_num)
     {
     case 0:
-        leg_long = JUMP_TAKEOFF_P;   // 起跳：直接爆发伸腿
+        leg_long = jump_takeoff_p;
         break;
     case 1:
-        leg_long = JUMP_RETRACT_P;   // 收腿：直通
+        leg_long = jump_retract_p;
         break;
     case 2:
-        leg_long = JUMP_PREPARE_P;   // 准备缓冲：直通到过渡姿态
+        leg_long = jump_prepare_p;
         break;
     case 3:
-        leg_long = JUMP_BUFFER_P;    // 执行缓冲：步进收腿到落地（步进在 leg_servo_step_update）
+        leg_long = jump_buffer_p;
         break;
     default:
         break;
@@ -1234,6 +1429,11 @@ void jump_control(void)
         {
             jump_stop();
             return;
+        }
+
+        if (jump_time == 0)
+        {
+            jump_control_config_sync();
         }
 
         jump_time++;

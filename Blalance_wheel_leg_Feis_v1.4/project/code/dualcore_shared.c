@@ -88,6 +88,16 @@ void dualcore_ctrl_to_ui_publish(void)
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
+  c->menu_vofa_enable = g_menu_vofa_enable;
+  c->jump_takeoff_p = jump_takeoff_p;
+  c->jump_retract_p = jump_retract_p;
+  c->jump_prepare_p = jump_prepare_p;
+  c->jump_buffer_p = jump_buffer_p;
+  c->jump_stage_takeoff_cycles = jump_stage_takeoff_cycles;
+  c->jump_stage_retract_cycles = jump_stage_retract_cycles;
+  c->jump_stage_prepare_cycles = jump_stage_prepare_cycles;
+  c->jump_stage_buffer_cycles = jump_stage_buffer_cycles;
+  c->jump_buffer_step_p_max = jump_buffer_step_p_max;
   c->gps_valid = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
   c->gps_year = gnss.time.year;
   c->gps_month = gnss.time.month;
@@ -264,6 +274,7 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     break;
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH:
     flash_RunLaunchSpeed_Write();
+    flash_JumpParams_Write();
     break;
   case DUALCORE_UI_CMD_RUN_LAUNCH_PARAM_DELTA:
     if (s->arg_u32 < Nag_Run_Launch_Param_Count)
@@ -273,6 +284,12 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     break;
   case DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE:
     Menu_RunConfigToggleField((uint8)s->arg_u32);
+    break;
+  case DUALCORE_UI_CMD_RUN_JUMP_PARAM_DELTA:
+    if (s->arg_u32 < Run_Jump_Param_Count)
+    {
+      JumpParamAdjust((uint8)s->arg_u32, s->arg_f32);
+    }
     break;
   case DUALCORE_UI_CMD_GPS_SAVE_POINT:
     (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);

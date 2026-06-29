@@ -65,8 +65,8 @@
 #include "dualcore_shared.h"
 #include "my_gps.h"
 #include "image.h"
-#if defined(CY_CORE_CM7_0)
 #include "control.h"
+#if defined(CY_CORE_CM7_0)
 #include "navigation.h"
 #include "flash.h"
 #endif
@@ -107,10 +107,12 @@ static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 static uint8 MenuIsNavDebugPage(void);
 static uint8 MenuIsGpsDebugPage(void);
 static uint8 MenuIsRunLaunchSpeedPage(void);
+static uint8 MenuIsRunJumpPage(void);
 static uint8 MenuIsRunFlashPage(void);
 static uint8 MenuIsRunConfigPage(void);
 static void MenuAdjustRunLaunchParam(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
+static uint8 MenuTryHandleRunJumpKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
 static uint8 MenuTryHandleRunConfigKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
@@ -146,6 +148,8 @@ void Menu_UpdateImageAeArm(void)
 static uint8 s_run_launch_field_index = 0u;
 /* Config 页：KEY1 循环选中预配置字段；KEY2 切换当前字段取值。 */
 static uint8 s_run_config_field_index = 0u;
+/* Jump 页：KEY1 循环选中字段；KEY2/KEY3 按 ±0.5 调节。 */
+static uint8 s_run_jump_field_index = 0u;
 
 uint8 Menu_GetRunLaunchFieldIndex(void)
 {
@@ -157,12 +161,21 @@ uint8 Menu_GetRunConfigFieldIndex(void)
     return s_run_config_field_index;
 }
 
+uint8 Menu_GetRunJumpFieldIndex(void)
+{
+    return s_run_jump_field_index;
+}
+
 void Menu_RunConfigToggleField(uint8 field_index)
 {
 #if defined(CY_CORE_CM7_0)
     if (field_index == Run_Config_Field_InputMode)
     {
         g_menu_input_remote_first = (uint8)(g_menu_input_remote_first ? 0u : 1u);
+    }
+    else if (field_index == Run_Config_Field_VofaEnable)
+    {
+        g_menu_vofa_enable = (uint8)(g_menu_vofa_enable ? 0u : 1u);
     }
 #else
     (void)field_index;
@@ -295,6 +308,10 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsRunJumpPage() && MenuTryHandleRunJumpKeyEvent())
+   {
+        return;
+   }
    if(MenuIsRunFlashPage() && MenuTryHandleRunFlashKeyEvent())
    {
         return;
@@ -378,6 +395,10 @@ void menu_key_capture_event(void)
        return;
    }
    if(MenuIsRunLaunchSpeedPage() && MenuTryHandleRunLaunchSpeedKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunJumpPage() && MenuTryHandleRunJumpKeyEvent())
    {
         return;
    }
@@ -592,6 +613,11 @@ static uint8 MenuIsRunConfigPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.3.1") == 0);
 }
 
+static uint8 MenuIsRunJumpPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.4.1") == 0);
+}
+
 static void MenuAdjustRunLaunchParam(float delta)
 {
 #if defined(CY_CORE_CM7_1)
@@ -634,6 +660,46 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     return 0u;
 }
 
+static void MenuAdjustRunJumpParam(float delta)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_JUMP_PARAM_DELTA,
+                               (uint32)s_run_jump_field_index, delta);
+#else
+    JumpParamAdjust(s_run_jump_field_index, delta);
+#endif
+}
+
+/* 返回 1 表示 KEY1/2/3 已被 Jump 页消费；KEY4 仍走通用返回。 */
+static uint8 MenuTryHandleRunJumpKeyEvent(void)
+{
+    float step = JumpParamGetStep(s_run_jump_field_index);
+
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        s_run_jump_field_index =
+            (uint8)((s_run_jump_field_index + 1u) % Run_Jump_Param_Count);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+        MenuAdjustRunJumpParam(step);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_2);
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+        MenuAdjustRunJumpParam(-step);
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
 /* 返回 1 表示 Run/Flash 页已消费 KEY3 保存动作；KEY1/KEY2/KEY4 仍走普通菜单导航。 */
 static uint8 MenuTryHandleRunFlashKeyEvent(void)
 {
@@ -643,6 +709,7 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH, 0, 0.0f);
 #else
         flash_RunLaunchSpeed_Write();
+        flash_JumpParams_Write();
 #endif
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
@@ -1039,6 +1106,11 @@ void MenuInit()
     strcpy(menuMember.pos, "3.3");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
+    menuMember.gui = GUI_3_4;
+    menuMember.act = ACT_3_4;
+    strcpy(menuMember.pos, "3.4");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
     menuMember.gui = GUI_3_1_1;
     menuMember.act = ACT_3_1_1;
     strcpy(menuMember.pos, "3.1.1");
@@ -1047,6 +1119,11 @@ void MenuInit()
     menuMember.gui = GUI_3_3_1;
     menuMember.act = ACT_3_3_1;
     strcpy(menuMember.pos, "3.3.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_4_1;
+    menuMember.act = ACT_3_4_1;
+    strcpy(menuMember.pos, "3.4.1");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
     
     menuMember.gui = GUI_1_1_1;

@@ -43,8 +43,9 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "control.h"
 #endif
 #include "Menu.h"
+#include "control.h"
 
-/* Run：须让 pos 3.1~3.3 的 menuMember 头部一致，否则 HashPeer 切项时画面与真实 pos 不同步；勿在 pos「3」上用子菜单列表。 */
+/* Run：须让 pos 3.1~3.4 的 menuMember 头部一致，否则 HashPeer 切项时画面与真实 pos 不同步；勿在 pos「3」上用子菜单列表。 */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 
 void ui_pull_ctrl_snapshot(void)
@@ -832,16 +833,17 @@ static void GUI_Display_Level2_Common3(void)
     GUI_Display_FPS();
 }
 
-/** 二级 Run 列表：与 GUI_2_1 版式对齐；selected_row_index 须与当前 pos 末位 1/2/3 一致 */
+/** 二级 Run 列表：selected_row_index 0=Launch 1=Save 2=Config 3=Jump */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
 
     GUI_Display_Level2_Common3();
 
-    ips200_show_string(80, ROW_8, " Launch ");
+    ips200_show_string(80, ROW_8,  " Launch ");
     ips200_show_string(80, ROW_10, " Save   ");
     ips200_show_string(80, ROW_12, " Config ");
+    ips200_show_string(80, ROW_14, " Jump   ");
 
     switch (selected_row_index)
     {
@@ -853,6 +855,9 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
         break;
     case 2u:
         ay = ROW_12;
+        break;
+    case 3u:
+        ay = ROW_14;
         break;
     }
     ips200_show_string(48, ay, "-->");
@@ -902,10 +907,24 @@ void ACT_3_3()
     ReadPos[4] = 0x00;
 }
 
+void GUI_3_4(void)
+{
+    GUI_Run_ShowSubmenuList(3u);
+}
+void ACT_3_4()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '4';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
 void GUI_3_3_1(void)
 {
     uint8 field_index = Menu_GetRunConfigFieldIndex();
     uint8 input_remote = 0u;
+    uint8 vofa_enable = 0u;
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Config");
@@ -914,8 +933,10 @@ void GUI_3_3_1(void)
 #if defined(CY_CORE_CM7_1)
     dualcore_ctrl_to_ui_pull(&s_ui_dc);
     input_remote = s_ui_dc.menu_input_remote_first;
+    vofa_enable = s_ui_dc.menu_vofa_enable;
 #else
     input_remote = g_menu_input_remote_first;
+    vofa_enable = g_menu_vofa_enable;
 #endif
 
     if (field_index == Run_Config_Field_InputMode)
@@ -936,6 +957,24 @@ void GUI_3_3_1(void)
         ips200_show_string(112, ROW_6, "Key   ");
     }
 
+    if (field_index == Run_Config_Field_VofaEnable)
+    {
+        ips200_show_string(0, ROW_8, "->");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_8, "  ");
+    }
+    ips200_show_string(16, ROW_8, "VofaEnable:");
+    if (vofa_enable != 0u)
+    {
+        ips200_show_string(112, ROW_8, "On ");
+    }
+    else
+    {
+        ips200_show_string(112, ROW_8, "Off");
+    }
+
     ips200_show_string(8, ROW_15, "K1:nxt K2:chg K4:bk");
 }
 
@@ -944,6 +983,95 @@ void ACT_3_3_1()
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '3';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
+static float GUI_RunJumpParamValue(uint8 field_index)
+{
+#if defined(CY_CORE_CM7_1)
+    switch (field_index)
+    {
+    case Run_Jump_Field_Takeoff_P:
+        return s_ui_dc.jump_takeoff_p;
+    case Run_Jump_Field_Retract_P:
+        return s_ui_dc.jump_retract_p;
+    case Run_Jump_Field_Prepare_P:
+        return s_ui_dc.jump_prepare_p;
+    case Run_Jump_Field_Buffer_P:
+        return s_ui_dc.jump_buffer_p;
+    case Run_Jump_Field_Takeoff_T:
+        return s_ui_dc.jump_stage_takeoff_cycles;
+    case Run_Jump_Field_Retract_T:
+        return s_ui_dc.jump_stage_retract_cycles;
+    case Run_Jump_Field_Prepare_T:
+        return s_ui_dc.jump_stage_prepare_cycles;
+    case Run_Jump_Field_Buffer_T:
+        return s_ui_dc.jump_stage_buffer_cycles;
+    case Run_Jump_Field_Buffer_Step:
+        return s_ui_dc.jump_buffer_step_p_max;
+    default:
+        return 0.0f;
+    }
+#else
+    return JumpParamGet(field_index);
+#endif
+}
+
+void GUI_3_4_1(void)
+{
+    static const char *const labels[Run_Jump_Param_Count] =
+    {
+        "TkfP", "RetP", "PrepP", "BufP",
+        "TkfT", "RetT", "PrepT", "BufT", "BufSp"
+    };
+    static const int16 rows[Run_Jump_Param_Count] =
+    {
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12
+    };
+    uint8 field_index = 0u;
+    uint8 selected = Menu_GetRunJumpFieldIndex();
+
+    GUI_Display_Level2_Common3();
+    ips200_show_string(64, ROW_3, "Jump");
+    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+#endif
+
+    for (field_index = 0u; field_index < Run_Jump_Param_Count; field_index++)
+    {
+        float value = GUI_RunJumpParamValue(field_index);
+
+        if (selected == field_index)
+        {
+            ips200_show_string(0, rows[field_index], "->");
+        }
+        else
+        {
+            ips200_show_string(0, rows[field_index], "  ");
+        }
+        ips200_show_string(16, rows[field_index], labels[field_index]);
+        if (field_index == Run_Jump_Field_Buffer_Step)
+        {
+            ips200_show_float(96, rows[field_index], (double)value, 5, 2);
+        }
+        else
+        {
+            ips200_show_float(96, rows[field_index], (double)value, 5, 1);
+        }
+    }
+
+    ips200_show_string(8, ROW_15, "K1:nxt K2:+ K3:- K4:bk");
+}
+
+void ACT_3_4_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '4';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;

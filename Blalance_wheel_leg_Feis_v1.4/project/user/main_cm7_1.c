@@ -97,7 +97,10 @@ int main(void)
         step_frame_seq++;
         dualcore_vision_publish_after_step(step_frame_seq);
 
-        //cm71_vofa_main_loop_tx_dispatch(); /* Ïê¼û static º¯Êý×¢ÊÍ */
+        if (ctrl.menu_vofa_enable != 0u)
+        {
+            cm71_vofa_main_loop_tx_dispatch();
+        }
     }
 }
 

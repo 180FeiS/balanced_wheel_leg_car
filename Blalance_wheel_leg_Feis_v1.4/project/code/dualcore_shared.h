@@ -51,6 +51,7 @@ typedef enum
   DUALCORE_UI_CMD_GPS_END_SAVE_FLASH = 24,
   DUALCORE_UI_CMD_GPS_LAUNCH = 25,
   DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE = 27, /* Config 页：arg_u32=字段索引，切换当前字段取值 */
+  DUALCORE_UI_CMD_RUN_JUMP_PARAM_DELTA = 28, /* Jump 页：arg_u32=字段索引，arg_f32=增量 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -95,6 +96,16 @@ typedef struct
   uint8 jump_active;  /* jump_flag!=0，跳跃流程进行中 */
   uint8 remote_local_keys_debug; /* 1：g_menu_input_remote_first==1 且遥控拨码=板载调试电平；CM7_1 菜单/拨码路径对齐 0。仅 CM7_0 写入 */
   uint8 menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Run Config 可配，Save 写 Flash */
+  uint8 menu_vofa_enable;      /* 0=关 1=开 VOFA 无线调试；Run Config 可配，Save 写 Flash V6 */
+  float jump_takeoff_p;
+  float jump_retract_p;
+  float jump_prepare_p;
+  float jump_buffer_p;
+  float jump_stage_takeoff_cycles;
+  float jump_stage_retract_cycles;
+  float jump_stage_prepare_cycles;
+  float jump_stage_buffer_cycles;
+  float jump_buffer_step_p_max;
   uint8 gps_valid; /* 1：已解析到至少一帧 GNSS 数据 */
   uint16 gps_year;
   uint8 gps_month;

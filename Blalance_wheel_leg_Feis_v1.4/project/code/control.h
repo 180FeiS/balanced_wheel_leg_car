@@ -49,6 +49,44 @@ void motor_poll_switch2_speed_baseline(void); /* SWITCH2 边沿：任意时刻 y
 extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
 uint8 jump_is_allowed(void);              // 1=允许跳跃：MOTOR_ON 且无 Motor_Runaway_Latch；否则禁止
 void jump_stop(void);                     // 终止跳跃，清时序，leg_long 回默认；保护/关电机时调用
+/* 跳跃四阶段目标腿长（Run→Jump 菜单可配，Flash 页 50） */
+extern float jump_takeoff_p;
+extern float jump_retract_p;
+extern float jump_prepare_p;
+extern float jump_buffer_p;
+#define JUMP_BUFFER_STEP_P_MAX_DEFAULT  0.25f
+extern float jump_buffer_step_p_max; /* 第4段每5ms缓冲收腿步幅；与 PrepP/BufP 共同重算 BufT */
+/* 跳跃四阶段时长（pit0_ch10 节拍，1 格 = 20ms，可为 0.5 步进）；修改后下一跳生效 */
+extern float jump_stage_takeoff_cycles;
+extern float jump_stage_retract_cycles;
+extern float jump_stage_prepare_cycles;
+extern float jump_stage_buffer_cycles;    /* 阶段3 执行缓冲；改 PrepP/BufP/BufSp 时自动按步进公式重算，也可菜单手动调 BufT */
+
+#define Run_Jump_Param_Count 9u
+#define Run_Jump_Field_Takeoff_P   0u
+#define Run_Jump_Field_Retract_P     1u
+#define Run_Jump_Field_Prepare_P     2u
+#define Run_Jump_Field_Buffer_P      3u
+#define Run_Jump_Field_Takeoff_T     4u
+#define Run_Jump_Field_Retract_T     5u
+#define Run_Jump_Field_Prepare_T     6u
+#define Run_Jump_Field_Buffer_T      7u
+#define Run_Jump_Field_Buffer_Step   8u  /* BufSp：每5ms缓冲步幅，菜单步进 0.01 */
+
+float JumpParamGet(uint8 field_index);
+void JumpParamSet(uint8 field_index, float value);
+void JumpParamAdjust(uint8 field_index, float delta);
+void JumpParamApplyDefaults(void);
+void JumpParamRecalcBufferTimeFromLeg(void); /* PrepP/BufP/BufSp 变更或 Flash 读回后，按步进公式重算 BufT */
+
+static inline float JumpParamGetStep(uint8 field_index)
+{
+    if (field_index == Run_Jump_Field_Buffer_Step)
+    {
+        return 0.01f;
+    }
+    return 0.5f;
+}
 extern float leg_long;                    // 目标腿长；惯导 ENTER_STAIR 期间由 navigation 设为 Nag_EnterStair_Leg_Long(5.5)
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
@@ -171,6 +209,7 @@ extern volatile uint8 remote_lora_steer_snapshot_valid;
 
 extern uint8 g_remote_local_keys_debug; /* 1：板载调试路径；由 remote_lora_apply 更新，dualcore publish 给 CM7_1 */
 extern uint8 g_menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Flash 可配，见 Menu.h */
+extern uint8 g_menu_vofa_enable;         /* 0=关 1=开 VOFA 无线调试；Flash 可配 V6，见 Menu.h */
 
 uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
 uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */
