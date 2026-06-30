@@ -80,7 +80,7 @@ void step_reset_distance_tracking(void);
  * step_visual_jump_after_step() 内有实际逻辑；否则为空实现（含 CM7_0 工程链接）。
  *
  * 【惯导门控】CM7_1 主循环仅在 dualcore ctrl.stair_enter_active==1（ENTER_STAIR 接管）
- * 时调用 step_detect() 与本函数；非元素期不跑台阶检测以省算力。
+ * 时调用 step_detect() 与本函数；EXIT_STAIR 或元素结束后 stair_enter_active 下降沿会复位视觉跳计数。
  *
  * 判定量：step_data.bottom_row_raw（与 VOFA CH1 同语义）。
  *

@@ -134,8 +134,14 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
 #define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
 #define Nag_EnterStair_Yaw_Lookback_cm 20.0f     // 锁航向：enter_index 向前该距离内 Nav_read yaw 圆均值
-#define Nag_EnterStair_PreDecel_Dist_cm 0.0f      // 预减速距离（cm）；0=关闭
+#define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f  // 进入台阶预减速默认（cm）；Launch/Flash 可调
+extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 lookback 均值）
+
+/* 退出台阶元素（EXIT_STAIR）：三次跳跃完成后软件链式切入；见 Nag_Hook_ExitStair_* */
+#define Nag_ExitStair_Leg_Long 3.5f              // 退出后恢复腿长
+#define Nag_Stair_Jump_Exit_Count 3u             // 进入台阶内完成该次数跳跃后切 EXIT
+#define Nag_HeadingHold_ExitStair_Enable 0u      // 退出后立即交还惯导 yaw
 
 /* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -150,7 +156,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 
 /* Run Launch 参数页（页 47）：
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
- * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable。
+ * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -160,9 +166,11 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V4 4u      /* v4：10 个 float */
 #define Nag_Run_Launch_Params_Version_V5 5u      /* v5：10 float + input mode */
 #define Nag_Run_Launch_Params_Version_V6 6u      /* v6：v5 + vofa enable */
-#define Nag_Run_Launch_Param_Count 10u
+#define Nag_Run_Launch_Params_Version_V7 7u      /* v7：v6 + enter_stair pre_decel */
+#define Nag_Run_Launch_Param_Count 11u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
-#define Nag_Run_Launch_Config_Word_Count 12u     /* v6：v5 + menu_vofa_enable @ [14] */
+#define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
+#define Nag_Run_Launch_Config_Word_Count 13u     /* v7：11 float + 2 config word */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -175,6 +183,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_Launch_Field_Cone_Spd 7u
 #define Nag_Launch_Field_Cone_Dec 8u
 #define Nag_Launch_Field_Spin_Rate 9u
+#define Nag_Launch_Field_Stair_Dec 10u
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -328,8 +337,8 @@ typedef enum
        NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
        NAG_EVENT_TYPE_SINGLE_BRIDGE = 5,     // 单边桥元素
        NAG_EVENT_TYPE_BUMP = 6,              // 减速带/颠簸元素
-       NAG_EVENT_TYPE_ENTER_STAIR = 7,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉（阶段一）
-       NAG_EVENT_TYPE_EXIT_STAIR = 8,        // 退出台阶：占位，阶段二实现
+       NAG_EVENT_TYPE_ENTER_STAIR = 7,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
+       NAG_EVENT_TYPE_EXIT_STAIR = 8,        // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
        NAG_EVENT_TYPE_COUNT = 9,             // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
@@ -419,6 +428,8 @@ typedef struct{
        float Stair_Saved_Leg_Long; //进入台阶前备份的 leg_long，Stop/Done 时恢复
        float Stair_Saved_SetSpeed; //进入台阶前备份的 motor_user_speed_cmd，Stop/Done 时恢复
        float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
+       uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
+       uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -454,6 +465,7 @@ void Nag_Request_Stop_Record(void); //录制结束请求
 void Nag_Request_Event_Mark(void); /* 录制：单击在当前 Save_index 保存一条有效元素事件 */
 void Nag_Cycle_Record_Event_Type(void); /* 录制：N.Event_Record_Type 加一模 NAG_EVENT_TYPE_COUNT */
 void Nag_Notify_Event_Done(void); /* 元素完成：恢复 Run_index 并清 Event_Active，继续惯导前瞻 */
+void Nag_NotifyStairJumpDone(void); /* jump_control 时序正常结束时调用；ENTER_STAIR 内计数 */
 void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态并停留在当前元素态
 float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
 float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，叠加弯道限速、元素区段调速与提前加减速

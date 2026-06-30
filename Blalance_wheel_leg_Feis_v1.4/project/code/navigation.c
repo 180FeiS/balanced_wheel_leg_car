@@ -29,6 +29,7 @@ float nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
 float nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
 float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
 float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+float nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
 
 void Nag_LaunchParamApplyDefaults(void)
 {
@@ -40,6 +41,7 @@ void Nag_LaunchParamApplyDefaults(void)
     nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
     nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+    nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
     spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
@@ -67,6 +69,8 @@ float Nag_LaunchParamGet(uint8 field_index)
         return nag_enter_cones_pre_decel_dist_cm;
     case Nag_Launch_Field_Spin_Rate:
         return spin_rate_max_dps;
+    case Nag_Launch_Field_Stair_Dec:
+        return nag_enter_stair_pre_decel_dist_cm;
     default:
         return 0.0f;
     }
@@ -106,6 +110,9 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
     case Nag_Launch_Field_Spin_Rate:
         spin_set_rate_max_dps(value);
         break;
+    case Nag_Launch_Field_Stair_Dec:
+        nag_enter_stair_pre_decel_dist_cm = value;
+        break;
     default:
         break;
     }
@@ -125,6 +132,7 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
         case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
         case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
         case NAG_EVENT_TYPE_ENTER_STAIR: return (Nag_HeadingHold_EnterStair_Enable != 0u);
+        case NAG_EVENT_TYPE_EXIT_STAIR: return (Nag_HeadingHold_ExitStair_Enable != 0u);
         default: return false;
     }
 }
@@ -195,6 +203,7 @@ void Nag_EventPrepareEnter(uint8 event_type)
         event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_ENTER_CONES &&
         event_type != NAG_EVENT_TYPE_EXIT_CONES &&
+        event_type != NAG_EVENT_TYPE_EXIT_STAIR &&
         event_type != NAG_EVENT_TYPE_SPIN)
     {
         steer_task_stop();
@@ -400,18 +409,21 @@ float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
 }
 
 /*
- * 进入台阶元素（阶段一）：
+ * 进入台阶元素：
  * - 锁 enter_index 前 Nag_EnterStair_Yaw_Lookback_cm 的 yaw 圆均值；
  * - 固定速度 Nag_EnterStair_Target_Speed、腿长 Nag_EnterStair_Leg_Long；
  * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
  * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
- * IsDone 阶段一恒 false，须手动 Nag_Notify_Event_Done / Abort。
+ * IsDone：三次 jump_control 正常结束后链式切入 EXIT_STAIR。
  */
 bool Nag_Hook_EnterStair_Start(void)
 {
     uint16 enter_index = 0u;
     float avg_yaw = 0.0f;
     float speed_sign = 1.0f;
+
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
 
     if (N.Event_Active_Index < N.Event_Count &&
         Nag_Event_Table[N.Event_Active_Index].valid)
@@ -447,24 +459,97 @@ void Nag_Hook_EnterStair_Run(void) {}
 
 bool Nag_Hook_EnterStair_IsDone(void)
 {
-    /* 阶段二：由 EXIT_STAIR 或视觉/俯仰退出条件接入后再改。 */
-    return false;
+    return (N.Stair_Jump_Completed_Count >= Nag_Stair_Jump_Exit_Count);
 }
 
 void Nag_Hook_EnterStair_Stop(void)
 {
+    if (N.Stair_Chain_To_Exit != 0u)
+    {
+        N.Stair_Lookback_Yaw = 0.0f;
+        N.Stair_Jump_Completed_Count = 0u;
+        return;
+    }
+
     motor_user_speed_cmd = N.Stair_Saved_SetSpeed;
     leg_long = N.Stair_Saved_Leg_Long;
     N.Stair_Saved_SetSpeed = 0.0f;
     N.Stair_Saved_Leg_Long = 0.0f;
     N.Stair_Lookback_Yaw = 0.0f;
+    N.Stair_Jump_Completed_Count = 0u;
 }
 
-/* 退出台阶：阶段二实现退出判定与 resume_index 接回；阶段一仅占位。 */
-bool Nag_Hook_ExitStair_Start(void) { return false; }
+void Nag_NotifyStairJumpDone(void)
+{
+    if (N.Event_Active != 0u &&
+        N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR &&
+        N.Stair_Jump_Completed_Count < 255u)
+    {
+        N.Stair_Jump_Completed_Count++;
+    }
+}
+
+static void Nag_ConsumeTableExitStairEvents(void)
+{
+    uint8 event_index = 0u;
+
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        if (Nag_Event_Table[event_index].valid &&
+            (N.Event_Consumed[event_index] == 0u) &&
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_STAIR)
+        {
+            N.Event_Consumed[event_index] = 1u;
+        }
+    }
+}
+
+static void Nag_ActivateChainedExitStair(void)
+{
+    N.Event_Active = 1u;
+    N.Event_Active_Index = 0xFFu;
+    N.Active_Event_Enter = N.Run_index;
+    N.Active_Event_Exit = N.Run_index;
+    N.Event_Active_Type = NAG_EVENT_TYPE_EXIT_STAIR;
+    N.Event_Start_RunIndex = N.Run_index;
+    N.Event_Trigger_RunIndex = N.Run_index;
+    N.Event_Triggered_In_Window = 0u;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0u;
+    N.Event_Done_Latched = 0u;
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
+    Nag_EventPrepareEnter(NAG_EVENT_TYPE_EXIT_STAIR);
+}
+
+/*
+ * 退出台阶元素：ENTER_STAIR 三次跳跃完成后软件链式切入。
+ * 恢复进入前基准速度与腿长 3.5；首拍 IsDone 接回惯导前瞻。
+ */
+bool Nag_Hook_ExitStair_Start(void)
+{
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    motor_user_speed_cmd = N.Stair_Saved_SetSpeed;
+    leg_long = Nag_ExitStair_Leg_Long;
+    stair_jump_reset_boost_phase();
+    return true;
+}
+
 void Nag_Hook_ExitStair_Run(void) {}
-bool Nag_Hook_ExitStair_IsDone(void) { return false; }
-void Nag_Hook_ExitStair_Stop(void) {}
+
+bool Nag_Hook_ExitStair_IsDone(void)
+{
+    return true;
+}
+
+void Nag_Hook_ExitStair_Stop(void)
+{
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
+}
 
 bool Nag_Element_Start(uint8 event_type)
 {
@@ -657,6 +742,8 @@ static void Nag_ClearEventRuntimeState(void)
     N.Stair_Saved_SetSpeed = 0.0f;
     N.Stair_Saved_Leg_Long = 0.0f;
     N.Stair_Lookback_Yaw = 0.0f;
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
 }
 
 void Nag_EventForceReset(void)
@@ -934,7 +1021,7 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             return (*pre_decel_dist_cm > 0.0f);
         case NAG_EVENT_TYPE_ENTER_STAIR:
             *target_speed = Nag_EnterStair_Target_Speed;
-            *pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm;
+            *pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
             return true;
         default:
             return false;
@@ -1767,6 +1854,13 @@ float Nag_GetControlSpeedTarget(void)
                 case NAG_EVENT_TYPE_ENTER_STAIR:
                     nav_speed = Nag_EnterStair_Target_Speed;
                     break;
+                case NAG_EVENT_TYPE_EXIT_STAIR:
+                    nav_speed = fabsf(N.Stair_Saved_SetSpeed);
+                    if (nav_speed <= 0.0f)
+                    {
+                        nav_speed = abs_user_speed;
+                    }
+                    break;
                 case NAG_EVENT_TYPE_ENTER_TURNAROUND:
                 case NAG_EVENT_TYPE_EXIT_TURNAROUND:
                 case NAG_EVENT_TYPE_ENTER_CONES:
@@ -1834,6 +1928,13 @@ float Nag_GetControlSpeedTarget(void)
         {
             case NAG_EVENT_TYPE_ENTER_STAIR:
                 nav_speed = Nag_EnterStair_Target_Speed;
+                break;
+            case NAG_EVENT_TYPE_EXIT_STAIR:
+                nav_speed = fabsf(N.Stair_Saved_SetSpeed);
+                if (nav_speed <= 0.0f)
+                {
+                    nav_speed = abs_user_speed;
+                }
                 break;
             case NAG_EVENT_TYPE_ENTER_TURNAROUND:
             case NAG_EVENT_TYPE_EXIT_TURNAROUND:
@@ -1934,9 +2035,10 @@ void Nag_Run()
         return;
     }
 
-    if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw())
+    if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw() &&
+        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR)
     {
-        /* 非 Spin 等待态：ENTER_STAIR/已起转自旋等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
+        /* 非 Spin 等待态 / 非 EXIT：ENTER_STAIR 等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
         N.Final_Out = 0.0f;
         return;
     }
@@ -2008,13 +2110,14 @@ void Run_Nag_GPS()
 
     if (N.Event_Active)
     {
-        if (!Nag_Spin_ShouldTrackInsYaw())
+        if (!Nag_Spin_ShouldTrackInsYaw() &&
+            N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR)
         {
-            /* 非 Spin 等待态，或 Spin 已起转：冻结 Run_index，仅刷新当前 yaw 目标。 */
+            /* 非 Spin 等待态、非 EXIT_STAIR：ENTER_STAIR 等冻结 Run_index。 */
             N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
             return;
         }
-        /* Spin 等待期：减速刹停阶段仍按里程推进 Run_index，但不尝试进入新元素。 */
+        /* Spin 等待期 / EXIT_STAIR：仍按里程推进 Run_index。 */
     }
 
     N.Mileage_All += Nag_GetMileageStep();
@@ -2133,6 +2236,10 @@ void Nag_Cycle_Record_Event_Type(void)
 void Nag_Notify_Event_Done(void)
 {
     uint8 event_index = N.Event_Active_Index;
+    uint8 event_type = N.Event_Active_Type;
+    uint8 chain_exit_stair = 0u;
+    float preserved_saved_speed = 0.0f;
+    float preserved_saved_leg = 0.0f;
     uint16 enter_index = 0;
     uint16 exit_index = 0;
     uint16 resume_index = 0;
@@ -2149,45 +2256,59 @@ void Nag_Notify_Event_Done(void)
         {
             return;
         }
-        Nag_Element_Stop(N.Event_Active_Type);
+        Nag_Element_Stop(event_type);
         Nag_ClearEventRuntimeState();
         GPS_NavOnElementDone();
         return;
     }
 
-    if (event_index >= N.Event_Count)
+    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
+    {
+        chain_exit_stair = 1u;
+        preserved_saved_speed = N.Stair_Saved_SetSpeed;
+        preserved_saved_leg = N.Stair_Saved_Leg_Long;
+        N.Stair_Chain_To_Exit = 1u;
+    }
+
+    if (event_type == NAG_EVENT_TYPE_EXIT_STAIR && event_index == 0xFFu)
+    {
+        resume_index = N.Run_index;
+    }
+    else if (event_index != 0xFFu && event_index < N.Event_Count)
+    {
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        exit_index = Nag_Event_Table[event_index].exit_index;
+
+        if (event_type == NAG_EVENT_TYPE_SPIN)
+        {
+            /* 从起转前锁存的实际路径索引恢复，不按录制 enter_index 或 enter_index+1 跳点。 */
+            resume_index = (N.Spin_Task_Started != 0u) ? N.Spin_Resume_RunIndex : N.Run_index;
+        }
+        else if (exit_index > enter_index)
+        {
+            /* 旧双点录制：从 exit 索引接回惯导。 */
+            resume_index = exit_index;
+        }
+        else
+        {
+            /* 单点精确触发：推进到触发点之后，避免再次命中同一 enter_index。 */
+            resume_index = (uint16)(enter_index + 1u);
+            if (N.Save_index >= 2u)
+            {
+                max_run_index = (uint16)(N.Save_index - 2u);
+                if (resume_index > max_run_index)
+                {
+                    resume_index = max_run_index;
+                }
+            }
+        }
+    }
+    else if (event_index != 0xFFu)
     {
         return;
     }
 
-    enter_index = Nag_Event_Table[event_index].enter_index;
-    exit_index = Nag_Event_Table[event_index].exit_index;
-
-    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN)
-    {
-        /* 从起转前锁存的实际路径索引恢复，不按录制 enter_index 或 enter_index+1 跳点。 */
-        resume_index = (N.Spin_Task_Started != 0u) ? N.Spin_Resume_RunIndex : N.Run_index;
-    }
-    else if (exit_index > enter_index)
-    {
-        /* 旧双点录制：从 exit 索引接回惯导。 */
-        resume_index = exit_index;
-    }
-    else
-    {
-        /* 单点精确触发：推进到触发点之后，避免再次命中同一 enter_index。 */
-        resume_index = (uint16)(enter_index + 1u);
-        if (N.Save_index >= 2u)
-        {
-            max_run_index = (uint16)(N.Save_index - 2u);
-            if (resume_index > max_run_index)
-            {
-                resume_index = max_run_index;
-            }
-        }
-    }
-
-    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN)
+    if (event_type == NAG_EVENT_TYPE_SPIN)
     {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
         /* 丢弃 Spin 期间融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
@@ -2195,12 +2316,25 @@ void Nag_Notify_Event_Done(void)
 #endif
     }
 
-    N.Event_Consumed[event_index] = 1u;
+    if (event_index != 0xFFu)
+    {
+        N.Event_Consumed[event_index] = 1u;
+    }
+
     N.Run_index = resume_index;
     N.Mileage_All = 0.0f;
     N.Target_Request_Valid = 0;
-    Nag_Element_Stop(N.Event_Active_Type);
+    Nag_Element_Stop(event_type);
     Nag_ClearEventRuntimeState();
+
+    if (chain_exit_stair != 0u)
+    {
+        N.Stair_Saved_SetSpeed = preserved_saved_speed;
+        N.Stair_Saved_Leg_Long = preserved_saved_leg;
+        Nag_ConsumeTableExitStairEvents();
+        Nag_ActivateChainedExitStair();
+    }
+
     Nag_UpdatePreviewAndSpeedTarget();
     N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
 }

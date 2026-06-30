@@ -43,6 +43,7 @@ extern float speed_target_effective;      //真正送入速度环的目标速度
 #ifndef STAIR_JUMP_SPEED_BOOST_AFTER_FIRST
 #define STAIR_JUMP_SPEED_BOOST_AFTER_FIRST  (100.0f)
 #endif
+void stair_jump_reset_boost_phase(void); /* EXIT_STAIR 或台阶序列结束时清零 stair_jump_speed_boost_phase */
 
 void motor_user_speed_cmd_set_from_pc(float cmd);
 void motor_poll_switch2_speed_baseline(void); /* SWITCH2 边沿：任意时刻 yaw 零点重置，成功翻转 LED1 */

@@ -98,6 +98,11 @@ static void stair_jump_on_normal_sequence_done(void)
     }
 }
 
+void stair_jump_reset_boost_phase(void)
+{
+    stair_jump_speed_boost_phase = 0u;
+}
+
 /* 轮速失控保护触发后置 1；拨码须先拨到 OFF 再允许恢复使能，避免覆盖 Motor_Switch=0。 */
 uint8 Motor_Runaway_Latch = 0;
 
@@ -1455,6 +1460,7 @@ void jump_control(void)
         else
         {
             stair_jump_on_normal_sequence_done();
+            Nag_NotifyStairJumpDone();
             jump_stop();
         }
     }

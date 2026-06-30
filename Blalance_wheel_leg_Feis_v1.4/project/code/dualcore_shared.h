@@ -88,6 +88,7 @@ typedef struct
   float nag_exit_turn_pre_accel_dist_cm;
   float nag_enter_cones_target_speed;
   float nag_enter_cones_pre_decel_dist_cm;
+  float nag_enter_stair_pre_decel_dist_cm;
   float spin_rate_max_dps;
   float speed_target_effective;
   uint8 spin_enable;

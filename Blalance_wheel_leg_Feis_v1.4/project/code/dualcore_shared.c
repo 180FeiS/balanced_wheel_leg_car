@@ -78,6 +78,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nag_exit_turn_pre_accel_dist_cm = nag_exit_turn_pre_accel_dist_cm;
   c->nag_enter_cones_target_speed = nag_enter_cones_target_speed;
   c->nag_enter_cones_pre_decel_dist_cm = nag_enter_cones_pre_decel_dist_cm;
+  c->nag_enter_stair_pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
   c->spin_rate_max_dps = spin_rate_max_dps;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;

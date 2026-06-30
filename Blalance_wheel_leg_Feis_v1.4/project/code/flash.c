@@ -33,9 +33,10 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[9].float_type = nag_exit_turn_pre_accel_dist_cm;
     flash_union_buffer[10].float_type = nag_enter_cones_target_speed;
     flash_union_buffer[11].float_type = nag_enter_cones_pre_decel_dist_cm;
-    flash_union_buffer[12].float_type = spin_rate_max_dps;
-    flash_union_buffer[13].uint32_type = (g_menu_input_remote_first != 0u) ? 1u : 0u;
-    flash_union_buffer[14].uint32_type = (g_menu_vofa_enable != 0u) ? 1u : 0u;
+    flash_union_buffer[12].float_type = nag_enter_stair_pre_decel_dist_cm;
+    flash_union_buffer[13].float_type = spin_rate_max_dps;
+    flash_union_buffer[14].uint32_type = (g_menu_input_remote_first != 0u) ? 1u : 0u;
+    flash_union_buffer[15].uint32_type = (g_menu_vofa_enable != 0u) ? 1u : 0u;
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -52,11 +53,11 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V6,
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V7,
                                            Nag_Run_Launch_Config_Word_Count);
 }
 
-static void flash_RunLaunchParamsUnpack(void)
+static void flash_RunLaunchParamsUnpackV7(void)
 {
     run_launch_speed = flash_union_buffer[3].float_type;
     nag_spin_target_speed = flash_union_buffer[4].float_type;
@@ -67,6 +68,24 @@ static void flash_RunLaunchParamsUnpack(void)
     nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
     nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
     nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    nag_enter_stair_pre_decel_dist_cm = flash_union_buffer[12].float_type;
+    spin_set_rate_max_dps(flash_union_buffer[13].float_type);
+    g_menu_input_remote_first = (uint8)(flash_union_buffer[14].uint32_type & 1u);
+    g_menu_vofa_enable = (uint8)(flash_union_buffer[15].uint32_type & 1u);
+}
+
+static void flash_RunLaunchParamsUnpackV6(void)
+{
+    run_launch_speed = flash_union_buffer[3].float_type;
+    nag_spin_target_speed = flash_union_buffer[4].float_type;
+    nag_spin_pre_decel_dist_cm = flash_union_buffer[5].float_type;
+    nag_enter_turn_target_speed = flash_union_buffer[6].float_type;
+    nag_enter_turn_pre_decel_dist_cm = flash_union_buffer[7].float_type;
+    nag_exit_turn_recovery_speed = flash_union_buffer[8].float_type;
+    nag_exit_turn_pre_accel_dist_cm = flash_union_buffer[9].float_type;
+    nag_enter_cones_target_speed = flash_union_buffer[10].float_type;
+    nag_enter_cones_pre_decel_dist_cm = flash_union_buffer[11].float_type;
+    nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
     spin_set_rate_max_dps(flash_union_buffer[12].float_type);
     g_menu_input_remote_first = (uint8)(flash_union_buffer[13].uint32_type & 1u);
     g_menu_vofa_enable = (uint8)(flash_union_buffer[14].uint32_type & 1u);
@@ -282,12 +301,12 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关（页 47 V6）。 */
+/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关（页 47 V7）。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V6;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V7;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -325,11 +344,17 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V6) &&
-        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V6,
+    if ((speed_version == Nag_Run_Launch_Params_Version_V7) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V7,
                                                            Nag_Run_Launch_Config_Word_Count)))
     {
-        flash_RunLaunchParamsUnpack();
+        flash_RunLaunchParamsUnpackV7();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V6) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V6,
+                                                           Nag_Run_Launch_Config_Word_Count_V6)))
+    {
+        flash_RunLaunchParamsUnpackV6();
     }
     else if ((speed_version == Nag_Run_Launch_Params_Version_V5) &&
         (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V5,

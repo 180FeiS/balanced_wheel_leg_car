@@ -465,6 +465,8 @@ static void step_vjump_reset_arm_prereq(void)
 static uint16 step_vjump_prev_bottom_raw;
 /** dualcore_ctrl_to_ui 上一拍的 jump_active，用于上升沿清空视觉跳状态（与 CM7_0 jump_flag 同步）。 */
 static uint8 step_vjump_prev_jump_active;
+/** 上一拍 stair_enter_active；下降沿时复位视觉跳计数，避免下次 ENTER_STAIR 误判 lockout。 */
+static uint8 step_vjump_prev_stair_enter_active;
 /** 已达 VISUAL_JUMP_MAX_COUNT 次成功投跳后锁死，直至逻辑外复位。 */
 static uint8 step_vjump_lockout;
 
@@ -480,6 +482,14 @@ void step_visual_jump_after_step(void)
 #endif
     dualcore_ctrl_to_ui_t dcj;
     dualcore_ctrl_to_ui_pull(&dcj);
+
+    if (step_vjump_prev_stair_enter_active != 0u && dcj.stair_enter_active == 0u)
+    {
+        step_vjump_done_count = 0u;
+        step_vjump_lockout = 0u;
+        step_vjump_reset_arm_prereq();
+    }
+    step_vjump_prev_stair_enter_active = (dcj.stair_enter_active != 0u) ? 1u : 0u;
 
     /* jump_active 上升沿：清空前置状态与 bottom 历史 */
     if (step_vjump_prev_jump_active == 0u && dcj.jump_active != 0u)
