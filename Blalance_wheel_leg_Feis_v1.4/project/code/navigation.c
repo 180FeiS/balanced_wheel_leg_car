@@ -30,6 +30,8 @@ float nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
 float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
 float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
 float nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
+float nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
+float nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
 
 void Nag_LaunchParamApplyDefaults(void)
 {
@@ -42,6 +44,8 @@ void Nag_LaunchParamApplyDefaults(void)
     nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
     nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
     nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
+    nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
+    nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
     spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
@@ -71,6 +75,10 @@ float Nag_LaunchParamGet(uint8 field_index)
         return spin_rate_max_dps;
     case Nag_Launch_Field_Stair_Dec:
         return nag_enter_stair_pre_decel_dist_cm;
+    case Nag_Launch_Field_BridgeIn_Spd:
+        return nag_enter_bridge_target_speed;
+    case Nag_Launch_Field_BridgeIn_Dec:
+        return nag_enter_bridge_pre_decel_dist_cm;
     default:
         return 0.0f;
     }
@@ -113,6 +121,12 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
     case Nag_Launch_Field_Stair_Dec:
         nag_enter_stair_pre_decel_dist_cm = value;
         break;
+    case Nag_Launch_Field_BridgeIn_Spd:
+        nag_enter_bridge_target_speed = value;
+        break;
+    case Nag_Launch_Field_BridgeIn_Dec:
+        nag_enter_bridge_pre_decel_dist_cm = value;
+        break;
     default:
         break;
     }
@@ -129,7 +143,6 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
     {
         case NAG_EVENT_TYPE_SPIN: return (Nag_HeadingHold_Spin_Enable != 0u);
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: return (Nag_HeadingHold_EnterTurn_Enable != 0u);
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return (Nag_HeadingHold_SingleBridge_Enable != 0u);
         case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
         case NAG_EVENT_TYPE_ENTER_STAIR: return (Nag_HeadingHold_EnterStair_Enable != 0u);
         case NAG_EVENT_TYPE_EXIT_STAIR: return (Nag_HeadingHold_ExitStair_Enable != 0u);
@@ -203,6 +216,8 @@ void Nag_EventPrepareEnter(uint8 event_type)
         event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_ENTER_CONES &&
         event_type != NAG_EVENT_TYPE_EXIT_CONES &&
+        event_type != NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE &&
+        event_type != NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE &&
         event_type != NAG_EVENT_TYPE_EXIT_STAIR &&
         event_type != NAG_EVENT_TYPE_SPIN)
     {
@@ -319,11 +334,6 @@ void Nag_Hook_Spin_Stop(void)
     Nag_Spin_RestoreSetSpeed();
 }
 
-bool Nag_Hook_SingleBridge_Start(void) { return false; }
-void Nag_Hook_SingleBridge_Run(void) {}
-bool Nag_Hook_SingleBridge_IsDone(void) { return false; }
-void Nag_Hook_SingleBridge_Stop(void) {}
-
 bool Nag_Hook_Bump_Start(void) { return false; }
 void Nag_Hook_Bump_Run(void) {}
 bool Nag_Hook_Bump_IsDone(void) { return false; }
@@ -341,6 +351,49 @@ bool Nag_Hook_ExitCones_Start(void) { return true; }
 void Nag_Hook_ExitCones_Run(void) {}
 bool Nag_Hook_ExitCones_IsDone(void) { return true; }
 void Nag_Hook_ExitCones_Stop(void) {}
+
+/*
+ * 单边桥进/出：与锥桶相同为惯导路径单点标记；Start 立刻 true，首拍 IsDone 即 true。
+ * 桥进：备份并设置 leg_long=5.5、roll_balance_en=1；桥出：leg_long=3.5、roll_balance_en=0。
+ * 转向全程由 Nag_Run 跟踪 Nav_read[]，区段调速由 Nag_ApplyBridgeZoneSpeed() 处理。
+ */
+bool Nag_Hook_EnterBridge_Start(void)
+{
+    N.Bridge_Saved_Leg_Long = leg_long;
+    N.Bridge_Saved_RollBalance = roll_balance_en;
+    N.Bridge_Zone_Active = 1u;
+    leg_long = Nag_EnterBridge_Leg_Long;
+    roll_balance_en = 1u;
+    return true;
+}
+
+void Nag_Hook_EnterBridge_Run(void) {}
+
+bool Nag_Hook_EnterBridge_IsDone(void) { return true; }
+
+void Nag_Hook_EnterBridge_Stop(void)
+{
+    /* 标记元素首拍即 IsDone，Nag_Notify_Event_Done() 会调 Stop。
+     * 与 EnterCones 相同：正常完成不得恢复腿长/横滚，否则桥区内状态瞬间被撤销。
+     * 仅 Nag_Element_Abort() 在 Bridge_Zone_Active==1 时恢复备份值。
+     */
+}
+
+bool Nag_Hook_ExitBridge_Start(void)
+{
+    leg_long = Nag_ExitBridge_Leg_Long;
+    roll_balance_en = 0u;
+    N.Bridge_Zone_Active = 0u;
+    N.Bridge_Saved_Leg_Long = 0.0f;
+    N.Bridge_Saved_RollBalance = 0u;
+    return true;
+}
+
+void Nag_Hook_ExitBridge_Run(void) {}
+
+bool Nag_Hook_ExitBridge_IsDone(void) { return true; }
+
+void Nag_Hook_ExitBridge_Stop(void) {}
 
 static uint16 Nag_DistanceToPoints(float distance_cm);
 
@@ -565,7 +618,8 @@ bool Nag_Element_Start(uint8 event_type)
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_Start();
         case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_Start();
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_Start();
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_Start();
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_Start();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_Start();
         case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_Start();
         case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_Start();
@@ -583,7 +637,8 @@ void Nag_Element_Run(uint8 event_type)
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Run(); break;
         case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Run(); break;
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Run(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Run(); break;
         case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Run(); break;
         case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Run(); break;
@@ -604,7 +659,8 @@ bool Nag_Element_IsDone(uint8 event_type)
         case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_IsDone();
         case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_IsDone();
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return Nag_Hook_SingleBridge_IsDone();
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_IsDone();
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_IsDone();
         case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_IsDone();
         case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_IsDone();
         case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_IsDone();
@@ -625,7 +681,8 @@ void Nag_Element_Stop(uint8 event_type)
         case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Stop(); break;
         case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Stop(); break;
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: Nag_Hook_SingleBridge_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Stop(); break;
         case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Stop(); break;
         case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Stop(); break;
         case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Stop(); break;
@@ -1011,10 +1068,11 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             *pre_decel_dist_cm = 0.0f;
             *pre_accel_dist_cm = Nag_ExitCones_PreAccel_Dist_cm;
             return true;
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE:
-            *target_speed = Nag_SingleBridge_Target_Speed;
-            *pre_decel_dist_cm = Nag_SingleBridge_PreDecel_Dist_cm;
-            return (*pre_decel_dist_cm > 0.0f);
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE:
+            *target_speed = nag_enter_bridge_target_speed;
+            *pre_decel_dist_cm = nag_enter_bridge_pre_decel_dist_cm;
+            *pre_accel_dist_cm = 0.0f;
+            return true;
         case NAG_EVENT_TYPE_BUMP:
             *target_speed = Nag_Bump_Target_Speed;
             *pre_decel_dist_cm = Nag_Bump_PreDecel_Dist_cm;
@@ -1151,6 +1209,67 @@ static bool Nag_GetActiveTurnaroundZone(uint16 run_index,
     return true;
 }
 
+/* 查找当前 Run_index 所处单边桥区间：最近已过的 ENTER_SINGLE_BRIDGE 与之后第一个 EXIT_SINGLE_BRIDGE 配对。 */
+static bool Nag_GetActiveBridgeZone(uint16 run_index,
+                                    uint16 *enter_index,
+                                    uint16 *exit_index,
+                                    uint8 *exit_event_index)
+{
+    uint8 event_index = 0;
+    uint8 enter_event_index = 0xFFu;
+    uint16 best_enter = 0u;
+
+    if (enter_index == NULL || exit_index == NULL || exit_event_index == NULL)
+    {
+        return false;
+    }
+
+    *enter_index = 0u;
+    *exit_index = 0xFFFFu;
+    *exit_event_index = 0xFFu;
+
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index <= run_index &&
+            Nag_Event_Table[event_index].enter_index >= best_enter)
+        {
+            best_enter = Nag_Event_Table[event_index].enter_index;
+            enter_event_index = event_index;
+        }
+    }
+
+    if (enter_event_index == 0xFFu)
+    {
+        return false;
+    }
+
+    *enter_index = best_enter;
+
+    for (event_index = (uint8)(enter_event_index + 1u); event_index < N.Event_Count; event_index++)
+    {
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE)
+        {
+            continue;
+        }
+
+        if (Nag_Event_Table[event_index].enter_index > best_enter)
+        {
+            *exit_index = Nag_Event_Table[event_index].enter_index;
+            *exit_event_index = event_index;
+            return true;
+        }
+    }
+
+    return true;
+}
+
 /* 查找前方指定类型最近事件；dist_points 为 enter_index - run_index。 */
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points)
 {
@@ -1229,11 +1348,13 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
             continue;
         }
 
-        /* 折返/锥桶标记由区段逻辑处理，不走元素后恢复。 */
+        /* 折返/锥桶/单边桥标记由区段逻辑处理，不走元素后恢复。 */
         if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
-            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_CONES)
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_CONES ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE)
         {
             continue;
         }
@@ -1420,7 +1541,54 @@ static float Nag_ApplyTurnaroundZoneSpeed(float nav_speed)
     return Nag_ClampSpeedCap(nav_speed, turn_target);
 }
 
-/* 非锥桶元素：元素前预减速 + 元素后预加速恢复（进入距离窗口后立即设目标速度）。 */
+/*
+ * 单边桥区段调速（惯导）：桥进前预减速、桥进～桥出区间内维持 Launch 目标速度；
+ * 过 exit_index 后立即恢复 nav_speed（基准速度，无出口 pre_accel）。
+ */
+static float Nag_ApplyBridgeZoneSpeed(float nav_speed)
+{
+    uint16 enter_index = 0;
+    uint16 exit_index = 0;
+    uint8 exit_event_index = 0xFFu;
+    uint16 dist_to_enter = 0;
+    uint16 pre_decel_points = 0u;
+    uint8 enter_evt = 0xFFu;
+    float bridge_target = nag_enter_bridge_target_speed;
+
+    pre_decel_points = Nag_DistanceToPoints(nag_enter_bridge_pre_decel_dist_cm);
+
+    if (!Nag_GetActiveBridgeZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
+    {
+        enter_evt = Nag_FindNextEventOfType(N.Run_index,
+                                            NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE,
+                                            &dist_to_enter);
+        if (enter_evt == 0xFFu || pre_decel_points == 0u || dist_to_enter > pre_decel_points)
+        {
+            return nav_speed;
+        }
+
+        return Nag_ClampSpeedCap(nav_speed, bridge_target);
+    }
+
+    if (N.Run_index < enter_index)
+    {
+        return nav_speed;
+    }
+
+    if (exit_index != 0xFFFFu && N.Run_index >= exit_index)
+    {
+        return nav_speed;
+    }
+
+    if (exit_index == 0xFFFFu)
+    {
+        return Nag_ClampSpeedCap(nav_speed, bridge_target);
+    }
+
+    return Nag_ClampSpeedCap(nav_speed, bridge_target);
+}
+
+/* 非区段标记元素：元素前预减速 + 元素后预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyGenericEventSpeed(float nav_speed)
 {
     uint16 dist_points = 0;
@@ -1453,7 +1621,9 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
     if (Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_CONES ||
-        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_CONES)
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_CONES ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE)
     {
         return adjusted;
     }
@@ -1492,6 +1662,7 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 #else
     float cone_adjusted = 0.0f;
     float turn_adjusted = 0.0f;
+    float bridge_adjusted = 0.0f;
 
     if (nav_speed <= 0.0f || N.Event_Count == 0u)
     {
@@ -1500,7 +1671,8 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 
     cone_adjusted = Nag_ApplyConeZoneSpeed(nav_speed);
     turn_adjusted = Nag_ApplyTurnaroundZoneSpeed(cone_adjusted);
-    return Nag_ApplyGenericEventSpeed(turn_adjusted);
+    bridge_adjusted = Nag_ApplyBridgeZoneSpeed(turn_adjusted);
+    return Nag_ApplyGenericEventSpeed(bridge_adjusted);
 #endif
 }
 
@@ -1749,6 +1921,44 @@ static float GPS_ApplyConeZoneSpeed(float nav_speed)
     return nav_speed;
 }
 
+/* GPS 单边桥区段调速：语义同 Nag_ApplyBridgeZoneSpeed()，按路点 u32yuansu 配对。 */
+static float GPS_ApplyBridgeZoneSpeed(float nav_speed)
+{
+    uint8 i = 0u;
+    float pre_decel_m = nag_enter_bridge_pre_decel_dist_cm * 0.01f;
+    float bridge_target = nag_enter_bridge_target_speed;
+
+    for (i = 0u; i < gps_point_count; i++)
+    {
+        uint8 exit_idx = 0xFFu;
+        float dist_enter_m = 0.0f;
+
+        if (u32yuansu[i] != NAV_ELEM_BRIDGE_IN)
+        {
+            continue;
+        }
+
+        exit_idx = GPS_FindPairedZoneExit(i, NAV_ELEM_BRIDGE_OUT);
+        if (tagert_point >= i && (exit_idx == 0xFFu || tagert_point < exit_idx))
+        {
+            return Nag_ClampSpeedCap(nav_speed, bridge_target);
+        }
+
+        if (exit_idx != 0xFFu && tagert_point >= exit_idx)
+        {
+            continue;
+        }
+
+        dist_enter_m = GPS_NavDistanceToPointM(i);
+        if (pre_decel_m > 0.0f && dist_enter_m <= pre_decel_m)
+        {
+            return Nag_ClampSpeedCap(nav_speed, bridge_target);
+        }
+    }
+
+    return nav_speed;
+}
+
 static float GPS_ApplyGenericEventSpeed(float nav_speed)
 {
     uint8 i = 0u;
@@ -1803,6 +2013,7 @@ float GPS_ApplyEventSpeedAdjustments(float nav_speed)
 #if Nag_EventSpeed_Enable
     float cone_adjusted = 0.0f;
     float turn_adjusted = 0.0f;
+    float bridge_adjusted = 0.0f;
 
     if (nav_heading_mode != NAV_HEADING_MODE_GPS)
     {
@@ -1811,7 +2022,8 @@ float GPS_ApplyEventSpeedAdjustments(float nav_speed)
 
     cone_adjusted = GPS_ApplyConeZoneSpeed(nav_speed);
     turn_adjusted = GPS_ApplyTurnaroundZoneSpeed(cone_adjusted);
-    return GPS_ApplyGenericEventSpeed(turn_adjusted);
+    bridge_adjusted = GPS_ApplyBridgeZoneSpeed(turn_adjusted);
+    return GPS_ApplyGenericEventSpeed(bridge_adjusted);
 #else
     return nav_speed;
 #endif
@@ -1865,6 +2077,8 @@ float Nag_GetControlSpeedTarget(void)
                 case NAG_EVENT_TYPE_EXIT_TURNAROUND:
                 case NAG_EVENT_TYPE_ENTER_CONES:
                 case NAG_EVENT_TYPE_EXIT_CONES:
+                case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE:
+                case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE:
                     nav_speed = GPS_ApplyEventSpeedAdjustments(nav_speed);
                     break;
                 case NAG_EVENT_TYPE_SPIN:
@@ -1940,6 +2154,8 @@ float Nag_GetControlSpeedTarget(void)
             case NAG_EVENT_TYPE_EXIT_TURNAROUND:
             case NAG_EVENT_TYPE_ENTER_CONES:
             case NAG_EVENT_TYPE_EXIT_CONES:
+            case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE:
+            case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE:
                 /* 路径标记瞬时完成，区段调速由 Nag_ApplyEventSpeedAdjustments 按 Run_index 处理。 */
                 nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
                 break;
@@ -2344,6 +2560,16 @@ void Nag_Element_Abort(void)
     if (!N.Event_Active)
     {
         return;
+    }
+
+    /* 桥区中途 Abort：BridgeIn 已生效但尚未 BridgeOut，恢复进入桥前备份。 */
+    if (N.Bridge_Zone_Active != 0u)
+    {
+        leg_long = N.Bridge_Saved_Leg_Long;
+        roll_balance_en = N.Bridge_Saved_RollBalance;
+        N.Bridge_Zone_Active = 0u;
+        N.Bridge_Saved_Leg_Long = 0.0f;
+        N.Bridge_Saved_RollBalance = 0u;
     }
 
     N.Event_State = NAG_EVENT_STATE_ABORT;

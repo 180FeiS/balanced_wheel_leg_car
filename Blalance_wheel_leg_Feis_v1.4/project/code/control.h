@@ -88,7 +88,7 @@ static inline float JumpParamGetStep(uint8 field_index)
     }
     return 0.5f;
 }
-extern float leg_long;                    // 目标腿长；惯导 ENTER_STAIR 期间由 navigation 设为 Nag_EnterStair_Leg_Long(5.5)
+extern float leg_long;                    // 目标腿长；ENTER_STAIR 设为 5.5；BridgeIn 设为 5.5，BridgeOut 恢复 3.5
 extern uint8 speed_flag;                  //速度标志位
 extern float speed_loop_leg_tilt;         //速度环输出，供腿部倾斜角
 
@@ -110,7 +110,7 @@ extern uint16 pwm_1;
 extern int16 LO_S;
 extern int16 RO_S;
 
-extern uint8 roll_balance_en;  // 1开启横滚平衡，0关闭，运行时可改
+extern uint8 roll_balance_en;  // 1开启横滚平衡；BridgeIn 元素进入时 navigation 置 1，BridgeOut 置 0
 
 extern uint8 Motor_Runaway_Latch;  /* 失控保护最高优先级关断；清除方式见 dip_switch_motor_sync_from_hw */
 

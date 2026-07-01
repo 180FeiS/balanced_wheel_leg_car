@@ -72,7 +72,7 @@ typedef struct
   uint8 nav_recording_active; /* Nag_SystemRun_Index==1 && End_f==0 */
   uint8 event_active;
   uint8 event_state;
-  uint8 event_active_type; /* 0=SPIN … 7=ENTER_STAIR 8=EXIT_STAIR … */
+  uint8 event_active_type; /* 0=SPIN … 5=BRIDGE_IN 6=BRIDGE_OUT 7=BUMP 8=ENTER_STAIR 9=EXIT_STAIR … */
   uint8 event_record_type; /* N.Event_Record_Type，录制时 KEY3 循环切换 */
   uint8 nag_vofa_group;
   float mileage_debug_total;
@@ -89,6 +89,8 @@ typedef struct
   float nag_enter_cones_target_speed;
   float nag_enter_cones_pre_decel_dist_cm;
   float nag_enter_stair_pre_decel_dist_cm;
+  float nag_enter_bridge_target_speed;      /* 单边桥进目标速度（Launch/Flash） */
+  float nag_enter_bridge_pre_decel_dist_cm; /* 单边桥进预减速距离 cm */
   float spin_rate_max_dps;
   float speed_target_effective;
   uint8 spin_enable;
@@ -148,23 +150,22 @@ typedef struct
   float gps_nav_gps_first_deg;    /* RMC COG→±180°，≥ GPS_NAV_GPS_FIRST_DISTANCE_M 后锁定；WAIT 段常为 0 */
   float gps_nav_euler_ref_at_first_deg; /* 锁 GPS_first 当帧 IMU yaw（subject2 锚） */
   float gps_nav_dist_from_launch_m; /* 当前距发车锁存点位移（m），屏显 Lm */
-  /* --- 以下仅由 CM7_0 publish，供 CM7_1 走无线 VOFA 复现 main_cm7_0.c:send_nav_debug_to_vofa 第 1~3 组缺失量（与 mileage_debug_total 等并存不重复） --- */
-  float dbg_run_index;        /* N.Run_index → 浮点 */
-  float dbg_prospect_index;   /* Nag_GetDebugProspectIndex() */
-  float dbg_angle_run;        /* N.Angle_Run */
-  float dbg_read_yaw;         /* Nag_GetDebugReadYaw() */
-  float dbg_nag_stop;         /* N.Nag_Stop_f：0/1 */
-  float dbg_final_out;        /* N.Final_Out */
-  float dbg_curve_strength;   /* N.Curve_Strength */
-  float dbg_nav_speed_target; /* Nag_GetControlSpeedTarget()，与 speed_target_effective 同源不同用途时见 navigation */
-  /* VOFA 组 8：差速转向闭环（CM7_0 publish，供 CM7_1 JustFloat） */
+  /* 以下 dbg_* 字段保留结构体布局，当前 VOFA 已不使用 */
+  float dbg_run_index;
+  float dbg_prospect_index;
+  float dbg_angle_run;
+  float dbg_read_yaw;
+  float dbg_nag_stop;
+  float dbg_final_out;
+  float dbg_curve_strength;
+  float dbg_nav_speed_target;
   float dbg_steer_target_yaw_deg;
   float dbg_steer_angle_err;
   float dbg_steer_cmd;
   float dbg_steer_enable;
   float dbg_steer_yaw_request_pending;
   float dbg_steer_yaw_request_deg;
-  /* VOFA 组 10：GPS+惯导融合调试（nav_fusion） */
+  /* VOFA 组 2：GPS+惯导融合调试（nav_fusion） */
   float fusion_x_m;
   float fusion_y_m;
   float fusion_v_mps;

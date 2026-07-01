@@ -33,7 +33,7 @@
 #define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
 #define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
 #define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
-#define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
+#define Nag_Speed_Deadband 10.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 
 /*
@@ -82,7 +82,7 @@
  * 2. 实际比较仍使用 enter_index - Run_index 这类索引差，标定时只需关心物理距离；
  * 3. 元素前预减速、元素后预加速：进入 PreDecel / PreAccel 距离窗口后立即设为目标速度（非线性渐变）；
  * 4. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
- * 5. 调试建议观察 VOFA 组 9：speed_target_effective / car_speed / Run_index / Event_Active_Type（菜单 n 切组）。
+ * 5. 调试建议观察 VOFA 组 1：speed_target_effective / car_speed（菜单 n 切组）。
  */
 #define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
 
@@ -124,9 +124,15 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_ExitCones_Recovery_Speed 0.0f       // 0=恢复到基础导航速度；>0 则恢复到该固定速度
 #define Nag_ExitCones_PreAccel_Dist_cm 20.0f    // 接近锥桶出口前开始恢复/加速的距离
 
-/* 其它元素（暂未接入完整调速链，仍保留距离制预减速接口） */
-#define Nag_SingleBridge_Target_Speed 220.0f
-#define Nag_SingleBridge_PreDecel_Dist_cm 0.0f
+/* 单边桥进/出（ENTER/EXIT_SINGLE_BRIDGE）：与锥桶相同为惯导路径标记；区段调速见 Launch 参数 */
+#define Nag_EnterBridge_Target_Speed_Default 500.0f   // 桥进目标速度（Launch/Flash 可调）
+#define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f // 桥进前预减速距离（cm）
+#define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
+#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出标记：恢复腿长
+#define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
+extern float nag_enter_bridge_target_speed;
+extern float nag_enter_bridge_pre_decel_dist_cm;
+
 #define Nag_Bump_Target_Speed 220.0f
 #define Nag_Bump_PreDecel_Dist_cm 0.0f
 
@@ -152,11 +158,12 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 4u            // v4：JUMP 拆为 ENTER/EXIT_STAIR；旧事件表需重录
+#define Nag_Event_Version 5u            // v5：SINGLE_BRIDGE 拆为 ENTER/EXIT_SINGLE_BRIDGE；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
- * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel。
+ * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel；
+ * v8：v7 + bridge_in speed/decel；v9：v8 + Nag_Vofa_Group @ [18]。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -167,10 +174,14 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V5 5u      /* v5：10 float + input mode */
 #define Nag_Run_Launch_Params_Version_V6 6u      /* v6：v5 + vofa enable */
 #define Nag_Run_Launch_Params_Version_V7 7u      /* v7：v6 + enter_stair pre_decel */
-#define Nag_Run_Launch_Param_Count 11u
+#define Nag_Run_Launch_Params_Version_V8 8u      /* v8：v7 + bridge_in speed/decel */
+#define Nag_Run_Launch_Params_Version_V9 9u      /* v9：v8 + vofa debug group */
+#define Nag_Run_Launch_Param_Count 13u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
-#define Nag_Run_Launch_Config_Word_Count 13u     /* v7：11 float + 2 config word */
+#define Nag_Run_Launch_Config_Word_Count_V7 13u  /* v7：11 float + 2 config word */
+#define Nag_Run_Launch_Config_Word_Count_V8 15u  /* v8：13 float + 2 config word */
+#define Nag_Run_Launch_Config_Word_Count 16u     /* v9：v8 + Nag_Vofa_Group @ [18] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -184,6 +195,8 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Launch_Field_Cone_Dec 8u
 #define Nag_Launch_Field_Spin_Rate 9u
 #define Nag_Launch_Field_Stair_Dec 10u
+#define Nag_Launch_Field_BridgeIn_Spd 11u   /* 单边桥进目标速度 */
+#define Nag_Launch_Field_BridgeIn_Dec 12u   /* 单边桥进预减速距离（cm） */
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -197,7 +210,8 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
                    (field_index == Nag_Launch_Field_Spin_Spd) ||
                    (field_index == Nag_Launch_Field_TurnIn_Spd) ||
                    (field_index == Nag_Launch_Field_TurnOut_Spd) ||
-                   (field_index == Nag_Launch_Field_Cone_Spd));
+                   (field_index == Nag_Launch_Field_Cone_Spd) ||
+                   (field_index == Nag_Launch_Field_BridgeIn_Spd));
 }
 
 static inline uint8 Nag_LaunchParamIsSpinRate(uint8 field_index)
@@ -244,7 +258,6 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
-#define Nag_HeadingHold_SingleBridge_Enable 0u  // 单边桥默认整段保持进入元素时的航向
 #define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
 //********************************************************//
 
@@ -263,12 +276,13 @@ typedef enum
     NAV_ELEM_TURN_OUT = 3,
     NAV_ELEM_CONE_IN = 4,
     NAV_ELEM_CONE_OUT = 5,
-    NAV_ELEM_BRIDGE = 6,
-    NAV_ELEM_BUMP = 7,
-    NAV_ELEM_STAIR_IN = 8,
-    NAV_ELEM_STAIR_OUT = 9,
-    NAV_ELEM_END = 10,
-    NAV_ELEM_COUNT = 11,
+    NAV_ELEM_BRIDGE_IN = 6,
+    NAV_ELEM_BRIDGE_OUT = 7,
+    NAV_ELEM_BUMP = 8,
+    NAV_ELEM_STAIR_IN = 9,
+    NAV_ELEM_STAIR_OUT = 10,
+    NAV_ELEM_END = 11,
+    NAV_ELEM_COUNT = 12,
 } Nav_Unified_Element;
 
 #define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR_OUT
@@ -295,7 +309,8 @@ static inline uint8 Nav_CycleUnifiedElement(uint8 current)
 static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
 {
     return (uint8)((unified == NAV_ELEM_TURN_IN) || (unified == NAV_ELEM_TURN_OUT) ||
-                   (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT));
+                   (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT) ||
+                   (unified == NAV_ELEM_BRIDGE_IN) || (unified == NAV_ELEM_BRIDGE_OUT));
 }
 
 static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
@@ -305,8 +320,7 @@ static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
 
 static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
 {
-    return (uint8)((unified == NAV_ELEM_NORMAL) || (unified == NAV_ELEM_BRIDGE) ||
-                   (unified == NAV_ELEM_BUMP));
+    return (uint8)((unified == NAV_ELEM_NORMAL) || (unified == NAV_ELEM_BUMP));
 }
 
 static inline const char *Nav_GetUnifiedElementName(uint8 unified)
@@ -319,7 +333,8 @@ static inline const char *Nav_GetUnifiedElementName(uint8 unified)
         case NAV_ELEM_TURN_OUT: return "TurnOut";
         case NAV_ELEM_CONE_IN: return "ConeIn";
         case NAV_ELEM_CONE_OUT: return "ConeOut";
-        case NAV_ELEM_BRIDGE: return "Bridge";
+        case NAV_ELEM_BRIDGE_IN: return "BridgeIn";
+        case NAV_ELEM_BRIDGE_OUT: return "BridgeOut";
         case NAV_ELEM_BUMP: return "Bump";
         case NAV_ELEM_STAIR_IN: return "StairIn";
         case NAV_ELEM_STAIR_OUT: return "StairOut";
@@ -335,11 +350,12 @@ typedef enum
        NAG_EVENT_TYPE_EXIT_TURNAROUND = 2,   // 折返出弯标记（沿路惯导，瞬时完成钩子）
        NAG_EVENT_TYPE_ENTER_CONES = 3,       // 进入锥桶标记（沿路惯导，瞬时完成钩子）
        NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_SINGLE_BRIDGE = 5,     // 单边桥元素
-       NAG_EVENT_TYPE_BUMP = 6,              // 减速带/颠簸元素
-       NAG_EVENT_TYPE_ENTER_STAIR = 7,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
-       NAG_EVENT_TYPE_EXIT_STAIR = 8,        // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
-       NAG_EVENT_TYPE_COUNT = 9,             // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE = 5, // 单边桥进：惯导路径标记，leg=5.5，开横滚平衡
+       NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE = 6,  // 单边桥出：惯导路径标记，leg=3.5，关横滚，恢复基准速度
+       NAG_EVENT_TYPE_BUMP = 7,              // 减速带/颠簸元素
+       NAG_EVENT_TYPE_ENTER_STAIR = 8,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
+       NAG_EVENT_TYPE_EXIT_STAIR = 9,        // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
+       NAG_EVENT_TYPE_COUNT = 10,            // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
 /* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
@@ -352,7 +368,8 @@ static inline const char *Nag_GetEventTypeName(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_TURNAROUND: return "TurnOut";
         case NAG_EVENT_TYPE_ENTER_CONES: return "ConeIn";
         case NAG_EVENT_TYPE_EXIT_CONES: return "ConeOut";
-        case NAG_EVENT_TYPE_SINGLE_BRIDGE: return "Bridge";
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return "BridgeIn";
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return "BridgeOut";
         case NAG_EVENT_TYPE_BUMP: return "Bump";
         case NAG_EVENT_TYPE_ENTER_STAIR: return "EnterStair";
         case NAG_EVENT_TYPE_EXIT_STAIR: return "ExitStair";
@@ -430,6 +447,9 @@ typedef struct{
        float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
        uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
        uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
+       float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
+       uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
+       uint8 Bridge_Zone_Active;      // 1=已过 BridgeIn 未过 BridgeOut，Stop 正常完成时不清
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -443,8 +463,8 @@ extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
-/* 0~5：惯导/通用快照；6：GPS 几何与目标航向；7：GPS 距离/阶段/速度；8：转向执行链；9：元素调速调试 */
-#define NAG_VOFA_GROUP_COUNT (11u)
+/* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合 */
+#define NAG_VOFA_GROUP_COUNT (3u)
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,
@@ -500,10 +520,16 @@ void Nag_Hook_Spin_Run(void);
 bool Nag_Hook_Spin_IsDone(void);
 void Nag_Hook_Spin_Stop(void);
 
-bool Nag_Hook_SingleBridge_Start(void);
-void Nag_Hook_SingleBridge_Run(void);
-bool Nag_Hook_SingleBridge_IsDone(void);
-void Nag_Hook_SingleBridge_Stop(void);
+/* 单边桥进/出：惯导路径标记（同锥桶），Start 置真、首拍 IsDone 真；桥进设腿长/横滚，区段调速见 Nag_ApplyBridgeZoneSpeed */
+bool Nag_Hook_EnterBridge_Start(void);
+void Nag_Hook_EnterBridge_Run(void);
+bool Nag_Hook_EnterBridge_IsDone(void);
+void Nag_Hook_EnterBridge_Stop(void);
+
+bool Nag_Hook_ExitBridge_Start(void);
+void Nag_Hook_ExitBridge_Run(void);
+bool Nag_Hook_ExitBridge_IsDone(void);
+void Nag_Hook_ExitBridge_Stop(void);
 
 bool Nag_Hook_Bump_Start(void);
 void Nag_Hook_Bump_Run(void);

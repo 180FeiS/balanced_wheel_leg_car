@@ -43,6 +43,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "control.h"
 #endif
 #include "Menu.h"
+#include "navigation.h"
 #include "control.h"
 
 /* Run：须让 pos 3.1~3.4 的 menuMember 头部一致，否则 HashPeer 切项时画面与真实 pos 不同步；勿在 pos「3」上用子菜单列表。 */
@@ -925,6 +926,7 @@ void GUI_3_3_1(void)
     uint8 field_index = Menu_GetRunConfigFieldIndex();
     uint8 input_remote = 0u;
     uint8 vofa_enable = 0u;
+    uint8 vofa_group = 0u;
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Config");
@@ -934,9 +936,11 @@ void GUI_3_3_1(void)
     dualcore_ctrl_to_ui_pull(&s_ui_dc);
     input_remote = s_ui_dc.menu_input_remote_first;
     vofa_enable = s_ui_dc.menu_vofa_enable;
+    vofa_group = (uint8)(s_ui_dc.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
 #else
     input_remote = g_menu_input_remote_first;
     vofa_enable = g_menu_vofa_enable;
+    vofa_group = (uint8)(Nag_Vofa_Group % NAG_VOFA_GROUP_COUNT);
 #endif
 
     if (field_index == Run_Config_Field_InputMode)
@@ -973,6 +977,28 @@ void GUI_3_3_1(void)
     else
     {
         ips200_show_string(112, ROW_8, "Off");
+    }
+
+    if (field_index == Run_Config_Field_VofaGroup)
+    {
+        ips200_show_string(0, ROW_10, "->");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_10, "  ");
+    }
+    ips200_show_string(16, ROW_10, "VofaGroup:");
+    if (vofa_group == 1u)
+    {
+        ips200_show_string(112, ROW_10, "1:Spd");
+    }
+    else if (vofa_group == 2u)
+    {
+        ips200_show_string(112, ROW_10, "2:Fus");
+    }
+    else
+    {
+        ips200_show_string(112, ROW_10, "0:IMU");
     }
 
     ips200_show_string(8, ROW_15, "K1:nxt K2:chg K4:bk");
@@ -1102,6 +1128,10 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_enter_cones_pre_decel_dist_cm;
     case Nag_Launch_Field_Stair_Dec:
         return s_ui_dc.nag_enter_stair_pre_decel_dist_cm;
+    case Nag_Launch_Field_BridgeIn_Spd:
+        return s_ui_dc.nag_enter_bridge_target_speed;
+    case Nag_Launch_Field_BridgeIn_Dec:
+        return s_ui_dc.nag_enter_bridge_pre_decel_dist_cm;
     case Nag_Launch_Field_Spin_Rate:
         return s_ui_dc.spin_rate_max_dps;
     default:
@@ -1118,18 +1148,20 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
     {
         "BaseSpd", "SpinSpd", "SpinDec",
         "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
-        "ConeSpd", "ConeDec", "SpinRt", "StairDec"
+        "ConeSpd", "ConeDec", "SpinRt", "StairDec",
+        "BrgInSp", "BrgInDc"
     };
     static const int16 rows[Nag_Run_Launch_Param_Count] =
     {
-        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13, ROW_14
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13, ROW_14,
+        ROW_15, ROW_16
     };
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Launch");
-    ips200_draw_line(16, ROW_15, 223, ROW_15, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(16, ROW_17, 223, ROW_17, IPS200_DEFAULT_PENCOLOR);
 
     for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
     {
@@ -1160,7 +1192,7 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
         }
     }
 
-    ips200_show_string(8, ROW_16, "K1:nxt K2:+ K3:- K4:bk");
+    ips200_show_string(8, ROW_18, "K1:nxt K2:+ K3:- K4:bk");
 }
 
 void ACT_3_1_1()

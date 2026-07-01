@@ -76,117 +76,23 @@ static void run_soft_tasks(void)
   
 }
 
-/* 惯导调试输出分组：
- * 通过菜单里的字符 'n' 切换 Nag_Vofa_Group。
- * 建议调试顺序：
- * 0 -> 先确认 yaw 和速度输入是否正常
- * 1 -> 再看录制阶段是否真的在累计路程、写入点位
- * 2 -> 然后看复现阶段是否在推进目标点
- * 3 -> 最后看惯导偏差和实际转向输出是否同向
+/* VOFA 调试输出分组（菜单 'n' 循环 Nag_Vofa_Group）：
+ * 0 -> IMU 姿态 / 零偏
+ * 1 -> 速度目标 speed_target_effective vs 实测 car_speed
+ * 2 -> GPS+惯导融合 fusion_x/y、gps_residual 等
  */
 static void send_nav_debug_to_vofa(void)
 {
   switch (Nag_Vofa_Group % NAG_VOFA_GROUP_COUNT)
   {
     case 0:
-      /* 基础输入组：
-   
-       */
       SendDataStreamToVOFA(4, (float)euler_angle.pitch, (float)euler_angle.roll, (float)euler_angle.yaw, (float)gyro_z_bias_mean);
       break;
     case 1:
-      /* 录制状态组：
-       * Mileage_Debug_Total: 从开始录制到当前累计的总路程
-       * Save_index: 已经写入了多少个 yaw 点
-       * Flash_page_index: 当前正在写哪一页 Flash
-       * End_f: 录制结束标志，便于看是否进入收尾保存
-       */
-      SendDataStreamToVOFA(5,
-                           (float)N.Mileage_Debug_Total,
-                           (float)N.Save_index,
-                           (float)N.Flash_page_index,
-                           (float)N.End_f,
-                          (float)Nag_Vofa_Group);
-      break;
-    case 2:
-      /* 复现状态组：
-       * Run_index: 当前回放推进到的目标点索引
-       * Prospect_index: 当前前瞻点索引；高速时应大于 Run_index
-       * Angle_Run: 当前实际采用的目标 yaw（来自前瞻点）
-       * Nag_GetDebugReadYaw(): 安全读取当前前瞻点对应的 flash yaw
-       * Nag_Stop_f: 到达终点后会置位，可用于停车或切逻辑
-       */
-      SendDataStreamToVOFA(5,
-                           (float)N.Run_index,
-                           (float)Nag_GetDebugProspectIndex(),
-                           (float)N.Angle_Run,
-                           Nag_GetDebugReadYaw(),
-                           (float)N.Nag_Stop_f,
-                          (float)Nag_Vofa_Group);
-      break;
-    case 3:
-      /* 闭环输出组：
-       * Final_Out: 当前 yaw 与目标 yaw 的偏差
-       * Curve_Strength: 根据前方 yaw 变化量估算的弯道强度
-       * nav_speed: 导航最终给速度环的目标速度
-       * event_active: 1 表示当前已切出惯导，由元素状态机接管
-       * event_state: 当前元素状态机状态（IDLE/ENTERED/RUNNING/DONE/ABORT）
-       */
-      SendDataStreamToVOFA(5,
-                           (float)N.Final_Out,
-                           (float)N.Curve_Strength,
-                           (float)Nag_GetControlSpeedTarget(),
-                           (float)N.Event_Active,
-                           (float)N.Event_State,
-                          (float)Nag_Vofa_Group);
-      break;
-    case 4:
-      /* 调速/元素组：
-       * motor_user_speed_cmd: SWITCH2 / V 命令 / qrs 等用户基准速度；旁路调试时可直接设成 1000 做阶跃
-       * speed_target_effective: 真正送给速度环的目标速度，是 PID 调参最该盯住的“目标值”
-       * car_speed: 当前实际车速，用来和 speed_target_effective 对比响应快慢、超调和拖尾
-       * Nag_SystemRun_Index: 导航状态机。正常回放时 2=正在读 flash，3=正式回放运行
-       * 调试顺序建议：
-       *   1. 先把 SWITCH1 拨到 OFF，只看 motor_user_speed_cmd 是否能随 SWITCH2 在 1000/1500 间切换；
-       *   2. 正常模式下若未回放，speed_target_effective 应保持 0；
-       *   3. 若打开速度调试旁路，则不进回放也能直接观察 speed_target_effective 与 car_speed 的阶跃响应；
-       *   4. 建议 VOFA 第 4 组按顺序看：motor_user_speed_cmd / speed_target_effective / car_speed / Nag_SystemRun_Index / group。
-       */
-      SendDataStreamToVOFA(5,
-                           (float)motor_user_speed_cmd,
-                           (float)speed_target_effective,
-                           (float)-car_speed,
-                           (float)N.Nag_SystemRun_Index,
-                           (float)Nag_Vofa_Group);
-      break;
-    case 5:
-      /* 自旋排障组：
-       * spin_enable: 1=自旋任务正在运行
-       * spin_done: 1=自旋完成并退出（会触发元素状态机继续）
-       * spin_target_deg/spin_accum_deg/spin_angle_err: 目标角度、累计角度、剩余误差
-       * spin_rate_target_dps/spin_rate_meas_dps: 自旋内环目标角速度与实测角速度
-       */
-      SendDataStreamToVOFA(2,
-                           (float)spin_enable,
-                           (float)spin_done
-          );
-      break;
-    /* 组 9：元素调速实车调试（菜单 n 切至 group==9；与 vofa.h VOFA_GROUP_EVENT_SPEED_DEBUG 对齐）
-     * ch1 speed_target_effective  速度环实际目标（含元素区段调速、提前加减速）
-     * ch2 car_speed               当前实测车速（取负与组 4 显示习惯一致）
-     * ch3 Run_index               回放推进到的导航点索引
-     * ch4 Event_Active_Type       元素类型：0=SPIN 1=ENTER_TURN 2=EXIT_TURN 3=ENTER_CONES 4=EXIT_CONES …
-     */
-    case 9:
-      SendDataStreamToVOFA(4,
-                           (float)speed_target_effective,
-                           (float)-car_speed,
-                           (float)N.Run_index,
-                           (float)N.Event_Active_Type);
+      SendDataStreamToVOFA(2, (float)speed_target_effective, (float)car_speed);
       break;
 #if NAV_FUSION_ENABLE
-    /* 组 10：融合调试 — 与 vofa.h VOFA_GROUP_FUSION_DEBUG / CM7_1 双核 VOFA 对齐 */
-    case 10:
+    case 2:
     {
       const NavFusionState *fusion_st = NavFusion_GetState();
       if (fusion_st != NULL)

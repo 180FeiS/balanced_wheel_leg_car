@@ -7,7 +7,7 @@
  * 3. GPS 单点：融合 GPS 导航到点误差应小于纯 GPS。
  * 4. 惯导长距离 + 元素停车：NAG_USE_FUSION_MILEAGE 开启后 Run_index 漂移减小。
  *
- * VOFA：菜单 n 切到组 10（VOFA_GROUP_FUSION_DEBUG）观察 fusion_x/y、gps_residual_m 等。
+ * VOFA：菜单 n 切到组 2（VOFA_GROUP_FUSION_DEBUG）观察 fusion_x/y、gps_residual_m 等。
  */
 
 #include "zf_common_headfile.h"

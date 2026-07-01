@@ -177,6 +177,10 @@ void Menu_RunConfigToggleField(uint8 field_index)
     {
         g_menu_vofa_enable = (uint8)(g_menu_vofa_enable ? 0u : 1u);
     }
+    else if (field_index == Run_Config_Field_VofaGroup)
+    {
+        Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % NAG_VOFA_GROUP_COUNT);
+    }
 #else
     (void)field_index;
 #endif

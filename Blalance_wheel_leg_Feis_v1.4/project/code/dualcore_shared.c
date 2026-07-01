@@ -79,6 +79,8 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nag_enter_cones_target_speed = nag_enter_cones_target_speed;
   c->nag_enter_cones_pre_decel_dist_cm = nag_enter_cones_pre_decel_dist_cm;
   c->nag_enter_stair_pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
+  c->nag_enter_bridge_target_speed = nag_enter_bridge_target_speed;
+  c->nag_enter_bridge_pre_decel_dist_cm = nag_enter_bridge_pre_decel_dist_cm;
   c->spin_rate_max_dps = spin_rate_max_dps;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
@@ -140,23 +142,6 @@ void dualcore_ctrl_to_ui_publish(void)
   c->gps_nav_gps_first_deg = gps_nav_gps_first_deg;
   c->gps_nav_euler_ref_at_first_deg = gps_nav_euler_ref_at_first_deg;
   c->gps_nav_dist_from_launch_m = gps_nav_dist_from_launch_m;
-
-  /* VOFA 导航第 2、3 组在 0 核原为 N.* / Nag_* API，CM7_1 无此上下文，与 main_cm7_0.c send_nav_debug_to_vofa 对齐后由 0 核填入。 */
-  c->dbg_run_index = (float)N.Run_index;
-  c->dbg_prospect_index = (float)Nag_GetDebugProspectIndex();
-  c->dbg_angle_run = N.Angle_Run;
-  c->dbg_read_yaw = Nag_GetDebugReadYaw();
-  c->dbg_nag_stop = N.Nag_Stop_f ? 1.0f : 0.0f;
-  c->dbg_final_out = N.Final_Out;
-  c->dbg_curve_strength = N.Curve_Strength;
-  c->dbg_nav_speed_target = Nag_GetControlSpeedTarget();
-
-  c->dbg_steer_target_yaw_deg = steer_target_yaw_deg;
-  c->dbg_steer_angle_err = steer_angle_err;
-  c->dbg_steer_cmd = steer_cmd;
-  c->dbg_steer_enable = (float)steer_enable;
-  c->dbg_steer_yaw_request_pending = (float)steer_yaw_request_pending;
-  c->dbg_steer_yaw_request_deg = (float)steer_yaw_request_deg;
 
 #if NAV_FUSION_ENABLE
   {

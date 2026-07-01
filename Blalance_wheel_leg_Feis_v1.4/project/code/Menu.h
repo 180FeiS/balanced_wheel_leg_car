@@ -39,7 +39,8 @@
 
 #define Run_Config_Field_InputMode 0u
 #define Run_Config_Field_VofaEnable 1u
-#define Run_Config_Field_Count 2u
+#define Run_Config_Field_VofaGroup 2u  /* VOFA 调试组 0=IMU 1=速度 2=融合；Flash V9 可配 */
+#define Run_Config_Field_Count 3u
 
 extern uint8 g_menu_input_remote_first;
 /*

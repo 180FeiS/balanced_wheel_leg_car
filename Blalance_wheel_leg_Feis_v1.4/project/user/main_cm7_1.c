@@ -45,7 +45,7 @@
  * - 无线模块仅在本核初始化(all_init_cm7_1_ui→wireless_uart_init)，故上发集中在此处。
  * - STEP_DEBUG_USE_VOFA==1：台阶调试 6 路(step_debug_send_to_vofa)；==0：双核快照(vofa_send_nav_from_dualcore_snapshot)。
  * - 快照分组由 Nag_Vofa_Group 决定（菜单 n / 上位机切组），共 NAG_VOFA_GROUP_COUNT 组：
- *   0~5 惯导等，6/7 GPS，8 转向，9 元素调速（speed_target_effective/car_speed/Run_index/Event_Active_Type）。
+ *   0=IMU 姿态，1=速度目标/实测，2=GPS+惯导融合（见 vofa.h）。
  * - 导航快照来自 CM7_0 dualcore_ctrl_to_ui_publish；与本轮 step_detect 之间可能差一拍主循环，属正常。
  *-------------------------------------------------------------------------------------------------------------------*/
 static void cm71_vofa_main_loop_tx_dispatch(void)
