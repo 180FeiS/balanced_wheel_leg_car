@@ -20,6 +20,11 @@ uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
 
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+/* 惯导回放：flash 读完置 1；与原点采集均完成后才进入 index=3 */
+static uint8 g_nag_replay_flash_ready = 0u;
+#endif
+
 /* Launch 页可调：无元素速度仍用 control.c 的 run_launch_speed */
 float nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
 float nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
@@ -2383,7 +2388,42 @@ void Nag_Begin_Record(void)
     N.Nag_SystemRun_Index = 1;
 }
 
-/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 后进入 3，才装载 run_launch_speed 并放行速度环。 */
+/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 且（若启用）原点平均完成后进入 3。 */
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+static void Nag_TryEnterReplayRun(void)
+{
+    if (N.Nag_SystemRun_Index != 2u || g_nag_replay_flash_ready == 0u)
+    {
+        return;
+    }
+    if (NavFusion_IsOriginCalibrating() != 0u)
+    {
+        return;
+    }
+    if (NavFusion_IsValid() == 0u)
+    {
+        return;
+    }
+
+    motor_user_speed_cmd = run_launch_speed;
+    N.Target_Speed = fabsf((float)motor_user_speed_cmd);
+    Nag_UpdatePreviewAndSpeedTarget();
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    N.Nag_SystemRun_Index = 3u;
+}
+
+void Nag_CompleteReplayAfterOrigin(void)
+{
+    Nag_TryEnterReplayRun();
+}
+#else
+void Nag_CompleteReplayAfterOrigin(void)
+{
+}
+#endif
+
 void Nag_Begin_Replay(void)
 {
     nav_heading_mode = NAV_HEADING_MODE_INS;
@@ -2409,7 +2449,11 @@ void Nag_Begin_Replay(void)
     steer_task_stop();
     flash_Nag_ResetReadState();
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    g_nag_replay_flash_ready = 0u;
     NavFusion_Reset();
+#if NAV_FUSION_ORIGIN_ENABLE
+    NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+#else
     {
         uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
         if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
@@ -2417,6 +2461,7 @@ void Nag_Begin_Replay(void)
             NavFusion_InitFromGps(gnss.latitude, gnss.longitude, (float)euler_angle.yaw);
         }
     }
+#endif
 #endif
     N.Nag_SystemRun_Index = 2;
 }
@@ -2651,8 +2696,12 @@ void NagFlashRead(){
   N.Curve_Strength = 0;
   if (N.Nag_SystemRun_Index == 2u)
   {
-    /* 发车设定值只在惯导回放真正进入执行态前装载，避免待机/读 flash 阶段改动实际速度基准。 */
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+    /* 原点采集中不赋速；进入 index=3 由 Nag_TryEnterReplayRun 统一处理 */
+    motor_user_speed_cmd = 0.0f;
+#else
     motor_user_speed_cmd = run_launch_speed;
+#endif
   }
   N.Target_Speed = fabsf((float)motor_user_speed_cmd);
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[0] / 100.0f) : (float)Nag_Yaw;
@@ -2662,5 +2711,10 @@ void NagFlashRead(){
   Nag_ClearEventRuntimeState();
   Nag_UpdatePreviewAndSpeedTarget();
   N.Angle_Run = (N.Save_index > 0) ? (float)(Nav_read[N.Prospect_index] / 100.0f) : (float)Nag_Yaw;
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+  g_nag_replay_flash_ready = 1u;
+  Nag_TryEnterReplayRun();
+#else
   N.Nag_SystemRun_Index++;
+#endif
 }

@@ -155,6 +155,9 @@ void dualcore_ctrl_to_ui_publish(void)
       c->fusion_gps_weight = fusion_st->gps_weight;
       c->fusion_gps_used = fusion_st->gps_used;
       c->fusion_valid = fusion_st->valid;
+      c->fusion_origin_calibrating = NavFusion_IsOriginCalibrating();
+      c->fusion_origin_accepted = (float)NavFusion_GetOriginAcceptedCount();
+      c->fusion_origin_rejected = (float)NavFusion_GetOriginRejectedCount();
     }
     else
     {
@@ -165,6 +168,9 @@ void dualcore_ctrl_to_ui_publish(void)
       c->fusion_gps_weight = 0.0f;
       c->fusion_gps_used = 0u;
       c->fusion_valid = 0u;
+      c->fusion_origin_calibrating = 0u;
+      c->fusion_origin_accepted = 0.0f;
+      c->fusion_origin_rejected = 0.0f;
     }
   }
 #else
@@ -175,6 +181,9 @@ void dualcore_ctrl_to_ui_publish(void)
   c->fusion_gps_weight = 0.0f;
   c->fusion_gps_used = 0u;
   c->fusion_valid = 0u;
+  c->fusion_origin_calibrating = 0u;
+  c->fusion_origin_accepted = 0.0f;
+  c->fusion_origin_rejected = 0.0f;
 #endif
 
   c->seq++;

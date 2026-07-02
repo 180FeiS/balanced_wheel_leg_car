@@ -108,8 +108,12 @@ extern uint8 gps_drift_corr_valid; /* 1：本次发车已锁定 delta（需首�
 void GPS_ClearPoints(void);
 void GPS_BeginRecord(void);
 void GPS_EndRecord(void);
-/* KEY3 发车：切 NAV_HEADING_MODE_GPS、装 run_launch_speed、锁存 IMU yaw 与起点经纬；先直行至 GPS_NAV_GPS_FIRST_DISTANCE_M 再用 COG 锁 bias。 */
+/* KEY3 发车：切 NAV_HEADING_MODE_GPS；融合模式下先 50 点原点平均再赋速。 */
 void GPS_ApplyLaunchSpeed(void);
+/* 原点平均完成后调用：锁存 launch 经纬、漂移修正并下发 run_launch_speed */
+void GPS_CompleteLaunchAfterOrigin(void);
+/* 原点采集失败（超时且样本不足）：取消待发车速，退回 IDLE */
+void GPS_OnOriginCalibrationFailed(void);
 /* 5ms 软任务：GPS 模式下先标定偏置再追点，经 steer_request_target_yaw 登记绝对航向（与惯导回放分离）。 */
 void GPS_PointNav_Run(void);
 void GPS_NavForceEndPoint(void);

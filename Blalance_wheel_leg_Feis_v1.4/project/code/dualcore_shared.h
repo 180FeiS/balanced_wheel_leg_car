@@ -173,6 +173,10 @@ typedef struct
   float fusion_gps_weight;
   uint8 fusion_gps_used;
   uint8 fusion_valid;
+  /* 发车原点平均调试：calibrating=采集中；accepted 目标 NAV_FUSION_ORIGIN_SAMPLE_COUNT(50) */
+  uint8 fusion_origin_calibrating;
+  float fusion_origin_accepted;
+  float fusion_origin_rejected;
   /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
   uint8 stair_enter_active;
 } dualcore_ctrl_to_ui_t;

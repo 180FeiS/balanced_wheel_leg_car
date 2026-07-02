@@ -155,6 +155,7 @@ void all_init_cm7_1_ui(void)
 void gnss_module_init(void)
 {
 #if GNSS_MODULE_ENABLE
+  /* TAU1201：库内 gnss_init 已发 UBX 将定位/NMEA 设为 10Hz，见 init.h GNSS_UPDATE_RATE_HZ */
   gnss_init(TAU1201);
 #endif
 }

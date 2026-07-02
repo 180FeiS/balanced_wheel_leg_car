@@ -53,6 +53,9 @@ static uint8 gps_nav_request_valid = 0u;
 static double gps_nav_launch_latitude = 0.0;
 static double gps_nav_launch_longitude = 0.0;
 static uint8 gps_nav_launch_fix_valid = 0u;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+static uint8 gps_nav_origin_pending = 0u;
+#endif
 
 static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
 {
@@ -455,6 +458,14 @@ void GPS_ApplyLaunchSpeed(void)
         Nag_EventForceReset();
     }
     gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
+    gps_nav_launch_fix_valid = 0u;
+    gps_drift_corr_valid = 0u;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    gps_nav_origin_pending = 1u;
+    NavFusion_BeginOriginAverage(gps_nav_launch_imu_yaw);
+    nav_heading_mode = NAV_HEADING_MODE_GPS;
+    motor_user_speed_cmd = 0.0f;
+#elif NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
     {
         uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
         if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
@@ -465,16 +476,77 @@ void GPS_ApplyLaunchSpeed(void)
         }
     }
     GPS_NavTryUpdateDriftCorrection();
-#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
     if (gps_nav_launch_fix_valid != 0u)
     {
         NavFusion_InitFromGps(gps_nav_launch_latitude,
                               gps_nav_launch_longitude,
                               gps_nav_launch_imu_yaw);
     }
-#endif
     nav_heading_mode = NAV_HEADING_MODE_GPS;
     motor_user_speed_cmd = run_launch_speed;
+#else
+    {
+        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+        {
+            gps_nav_launch_latitude = gnss.latitude;
+            gps_nav_launch_longitude = gnss.longitude;
+            gps_nav_launch_fix_valid = 1u;
+        }
+    }
+    GPS_NavTryUpdateDriftCorrection();
+    nav_heading_mode = NAV_HEADING_MODE_GPS;
+    motor_user_speed_cmd = run_launch_speed;
+#endif
+#endif
+}
+
+void GPS_CompleteLaunchAfterOrigin(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (gps_nav_origin_pending == 0u)
+    {
+        return;
+    }
+    if (NavFusion_IsValid() == 0u)
+    {
+        return;
+    }
+    if (NavFusion_GetOriginAvgResult(&gps_nav_launch_latitude, &gps_nav_launch_longitude) == 0u)
+    {
+        return;
+    }
+    gps_nav_launch_fix_valid = 1u;
+    GPS_NavTryUpdateDriftCorrection();
+    gps_nav_origin_pending = 0u;
+    motor_user_speed_cmd = run_launch_speed;
+#else
+    (void)0;
+#endif
+#endif
+}
+
+void GPS_OnOriginCalibrationFailed(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (gps_nav_origin_pending == 0u)
+    {
+        return;
+    }
+    gps_nav_origin_pending = 0u;
+    gps_nav_state = GPS_NAV_STATE_IDLE;
+    gps_nav_launch_fix_valid = 0u;
+    motor_user_speed_cmd = 0.0f;
+    NavFusion_Reset();
+#else
+    (void)0;
+#endif
 #endif
 }
 
@@ -493,6 +565,14 @@ void GPS_PointNav_Run(void)
     {
         return;
     }
+
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (gps_nav_origin_pending != 0u)
+    {
+        motor_user_speed_cmd = 0.0f;
+        return;
+    }
+#endif
 
     if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
     {

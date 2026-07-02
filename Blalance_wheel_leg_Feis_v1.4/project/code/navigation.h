@@ -481,6 +481,8 @@ void Nag_Read();    //偏航角读取总函数
 void Init_Nag();    //偏航角初始化，flash缓冲区初始化，索引初始化
 void Nag_Begin_Record(void); //开始录制前复位运行态
 void Nag_Begin_Replay(void); //开始复现前复位运行态
+/* 原点平均采集完成后调用：flash 已就绪且融合 valid 时进入 index=3 并赋速 */
+void Nag_CompleteReplayAfterOrigin(void);
 void Nag_Request_Stop_Record(void); //录制结束请求
 void Nag_Request_Event_Mark(void); /* 录制：单击在当前 Save_index 保存一条有效元素事件 */
 void Nag_Cycle_Record_Event_Type(void); /* 录制：N.Event_Record_Type 加一模 NAG_EVENT_TYPE_COUNT */

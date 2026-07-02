@@ -102,8 +102,8 @@ static void send_nav_debug_to_vofa(void)
                              fusion_st->y_m,
                              fusion_st->v_mps,
                              fusion_st->gps_residual_m,
-                             fusion_st->gps_weight,
-                             (float)fusion_st->gps_used);
+                             (float)NavFusion_GetOriginAcceptedCount(),
+                             (float)NavFusion_GetOriginRejectedCount());
       }
       break;
     }
@@ -142,14 +142,56 @@ int main(void)
       gnss_flag = 0;
       gnss_data_parse();
 #if NAV_FUSION_ENABLE
+#if NAV_FUSION_ORIGIN_ENABLE
+      if (NavFusion_IsOriginCalibrating() != 0u)
+      {
+        uint8 origin_r = NavFusion_FeedOriginSample(gnss.latitude,
+                                                    gnss.longitude,
+                                                    gnss.state,
+                                                    gnss.satellite_used);
+        if (origin_r == NAV_FUSION_ORIGIN_FEED_DONE)
+        {
+          Nag_CompleteReplayAfterOrigin();
+          GPS_CompleteLaunchAfterOrigin();
+        }
+        else if (origin_r == NAV_FUSION_ORIGIN_FEED_FAILED)
+        {
+          GPS_OnOriginCalibrationFailed();
+        }
+      }
+        else
+        {
+          NavFusion_UpdateGps(gnss.latitude,
+                              gnss.longitude,
+                              gnss.state,
+                              gnss.satellite_used);
+          if (NavFusion_IsValid() != 0u)
+          {
+            Nag_CompleteReplayAfterOrigin();
+            GPS_CompleteLaunchAfterOrigin();
+          }
+        }
+#else
       NavFusion_UpdateGps(gnss.latitude,
                           gnss.longitude,
                           gnss.state,
                           gnss.satellite_used);
 #endif
+#endif
     }
 
     run_soft_tasks();
+#if NAV_FUSION_ENABLE && NAV_FUSION_ORIGIN_ENABLE
+    if (NavFusion_ConsumeOriginFailure() != 0u)
+    {
+      GPS_OnOriginCalibrationFailed();
+    }
+    if (NavFusion_IsValid() != 0u)
+    {
+      Nag_CompleteReplayAfterOrigin();
+      GPS_CompleteLaunchAfterOrigin();
+    }
+#endif
 #if DUALCORE_UI_ON_CM7_1
     /* 先消费 CM7_1 菜单命令，再发布快照；否则 Launch 调速、SaveSpd 保存和导航按键都不会真正落到控制核。 */
     dualcore_ui_cmd_consume_all();
