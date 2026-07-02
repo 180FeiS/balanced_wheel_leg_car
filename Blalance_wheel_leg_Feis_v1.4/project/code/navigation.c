@@ -2418,6 +2418,17 @@ static void Nag_TryEnterReplayRun(void)
     {
         return;
     }
+
+    /* 纯惯导（融合运行时关）：不等待 GPS 原点/北向标定，flash 读完即进入 index=3 */
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        motor_user_speed_cmd = run_launch_speed;
+        N.Target_Speed = fabsf((float)motor_user_speed_cmd);
+        Nag_UpdatePreviewAndSpeedTarget();
+        N.Nag_SystemRun_Index = 3u;
+        return;
+    }
+
     if (NavFusion_IsOriginCalibrating() != 0u)
     {
         return;
@@ -2479,21 +2490,24 @@ void Nag_Begin_Replay(void)
     flash_Nag_ResetReadState();
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
     g_nag_replay_flash_ready = 0u;
-    NavFusion_Reset();
+    if (NavFusion_IsRuntimeEnabled() != 0u)
+    {
+        NavFusion_Reset();
 #if NAV_FUSION_ORIGIN_ENABLE
-    NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+        NavFusion_BeginOriginAverage((float)euler_angle.yaw);
 #if NAV_FUSION_HEADING_CALIB_ENABLE
-    NavFusion_BeginHeadingCalibSession((float)euler_angle.yaw);
+        NavFusion_BeginHeadingCalibSession((float)euler_angle.yaw);
 #endif
 #else
-    {
-        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
-        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
         {
-            NavFusion_InitFromGps(gnss.latitude, gnss.longitude, (float)euler_angle.yaw);
+            uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+            if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+            {
+                NavFusion_InitFromGps(gnss.latitude, gnss.longitude, (float)euler_angle.yaw);
+            }
         }
-    }
 #endif
+    }
 #endif
     N.Nag_SystemRun_Index = 2;
 }
@@ -2729,8 +2743,15 @@ void NagFlashRead(){
   if (N.Nag_SystemRun_Index == 2u)
   {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
-    /* 原点采集中不赋速；进入 index=3 由 Nag_TryEnterReplayRun 统一处理 */
-    motor_user_speed_cmd = 0.0f;
+    /* 融合模式：原点/北向标定完成前不赋速；纯惯导仍用 Launch 速度 */
+    if (NavFusion_IsRuntimeEnabled() != 0u)
+    {
+        motor_user_speed_cmd = 0.0f;
+    }
+    else
+    {
+        motor_user_speed_cmd = run_launch_speed;
+    }
 #else
     motor_user_speed_cmd = run_launch_speed;
 #endif
