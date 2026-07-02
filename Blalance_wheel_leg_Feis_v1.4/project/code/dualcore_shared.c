@@ -92,6 +92,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;
+  c->menu_nav_fusion_enable = g_menu_nav_fusion_enable;
   c->jump_takeoff_p = jump_takeoff_p;
   c->jump_retract_p = jump_retract_p;
   c->jump_prepare_p = jump_prepare_p;
@@ -144,6 +145,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->gps_nav_dist_from_launch_m = gps_nav_dist_from_launch_m;
 
 #if NAV_FUSION_ENABLE
+  if (g_menu_nav_fusion_enable != 0u)
   {
     const NavFusionState *fusion_st = NavFusion_GetState();
     if (fusion_st != NULL)
@@ -172,6 +174,19 @@ void dualcore_ctrl_to_ui_publish(void)
       c->fusion_origin_accepted = 0.0f;
       c->fusion_origin_rejected = 0.0f;
     }
+  }
+  else
+  {
+    c->fusion_x_m = 0.0f;
+    c->fusion_y_m = 0.0f;
+    c->fusion_v_mps = 0.0f;
+    c->fusion_gps_residual_m = 0.0f;
+    c->fusion_gps_weight = 0.0f;
+    c->fusion_gps_used = 0u;
+    c->fusion_valid = 0u;
+    c->fusion_origin_calibrating = 0u;
+    c->fusion_origin_accepted = 0.0f;
+    c->fusion_origin_rejected = 0.0f;
   }
 #else
   c->fusion_x_m = 0.0f;

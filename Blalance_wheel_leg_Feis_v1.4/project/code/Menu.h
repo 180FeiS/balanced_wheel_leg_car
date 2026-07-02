@@ -40,7 +40,8 @@
 #define Run_Config_Field_InputMode 0u
 #define Run_Config_Field_VofaEnable 1u
 #define Run_Config_Field_VofaGroup 2u  /* VOFA 调试组 0=IMU 1=速度 2=融合；Flash V9 可配 */
-#define Run_Config_Field_Count 3u
+#define Run_Config_Field_FusionEnable 3u /* 导航融合开关 0=关 1=开；Flash V10 可配 */
+#define Run_Config_Field_Count 4u
 
 extern uint8 g_menu_input_remote_first;
 /*
@@ -50,6 +51,12 @@ extern uint8 g_menu_input_remote_first;
  * 运行时变量 g_menu_vofa_enable（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
  */
 extern uint8 g_menu_vofa_enable;
+/*
+ * 导航融合开关（Flash 可配，Run→Config 编辑、Run→Save 持久化 V10）。
+ * 0 = 关闭融合，GPS/惯导退回原 GNSS 与 car_speed 积分；1 = 启用 nav_fusion。
+ * 运行时变量 g_menu_nav_fusion_enable（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
+ */
+extern uint8 g_menu_nav_fusion_enable;
 
 /*
  * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。

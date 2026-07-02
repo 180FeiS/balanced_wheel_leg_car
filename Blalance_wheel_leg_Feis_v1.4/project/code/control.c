@@ -205,6 +205,8 @@ uint8 g_remote_local_keys_debug = 0u;
 uint8 g_menu_input_remote_first = 0u;
 /* 0=关，1=开 VOFA 无线调试；Run→Config 编辑，Run→Save 写 Flash 页 47 V6 */
 uint8 g_menu_vofa_enable = 0u;
+/* 0=关，1=开 GPS+惯导融合；Run→Config 编辑，Run→Save 写 Flash 页 47 V10 */
+uint8 g_menu_nav_fusion_enable = 1u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)

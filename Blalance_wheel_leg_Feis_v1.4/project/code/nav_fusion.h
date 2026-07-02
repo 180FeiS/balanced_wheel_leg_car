@@ -14,8 +14,19 @@
  * 实车验证顺序见 nav_fusion.c 文件头注释。
  */
 
-/* 1=编译并运行融合模块；0=完全关闭，行为与改前一致 */
+/* 1=编译并链接融合模块；0=整模块编译为 stub。运行时开关见 g_menu_nav_fusion_enable（Run→Config / Flash V10）。 */
 #define NAV_FUSION_ENABLE 1u
+
+extern uint8 g_menu_nav_fusion_enable;
+
+static inline uint8 NavFusion_IsRuntimeEnabled(void)
+{
+#if NAV_FUSION_ENABLE
+    return (uint8)(g_menu_nav_fusion_enable != 0u);
+#else
+    return 0u;
+#endif
+}
 
 /*
  * 1=发车时用多点 GPS 平均建原点；0=退回单帧 NavFusion_InitFromGps（旧行为）。

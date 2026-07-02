@@ -13,6 +13,7 @@
 
 #include "zf_common_headfile.h"
 #include "nav_fusion.h"
+#include "control.h"
 
 #include <math.h>
 #include <string.h>
@@ -160,9 +161,18 @@ static void NavFusion_TickOriginTimeout(void)
 
 void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m)
 {
-    double origin_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)g_origin_lat);
-    double d_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lat - g_origin_lat));
-    double d_lon_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lon - g_origin_lon));
+    double origin_lat_rad;
+    double d_lat_rad;
+    double d_lon_rad;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+
+    origin_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)g_origin_lat);
+    d_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lat - g_origin_lat));
+    d_lon_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lon - g_origin_lon));
 
     if (x_m != NULL)
     {
@@ -192,6 +202,11 @@ void NavFusion_Reset(void)
 
 uint8 NavFusion_InitFromGps(double lat, double lon, float yaw_deg)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     if (!NavFusion_IsCoordValid(lat, lon))
     {
         return 0u;
@@ -222,6 +237,11 @@ void NavFusion_Predict1ms(float yaw_deg, float speed_src)
     float v_mps;
     float sin_yaw;
     float cos_yaw;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
 
 #if NAV_FUSION_ORIGIN_ENABLE
     NavFusion_TickOriginTimeout();
@@ -257,6 +277,11 @@ void NavFusion_Predict1ms(float yaw_deg, float speed_src)
 
 void NavFusion_ZeroVelocityUpdate(float speed_src)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+
     if (g_fusion.valid == 0u)
     {
         return;
@@ -288,6 +313,11 @@ void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellit
     float residual_y;
     float residual_m;
     float gain;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
 
 #if NAV_FUSION_ORIGIN_ENABLE
     /* 原点采集中：禁止 auto-init 与 GPS 修正，避免 origin 未建立时 fusion 被拉动 */
@@ -345,11 +375,21 @@ void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellit
 
 const NavFusionState *NavFusion_GetState(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return NULL;
+    }
+
     return &g_fusion;
 }
 
 uint8 NavFusion_IsValid(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     if (g_fusion.valid == 0u)
     {
         return 0u;
@@ -367,6 +407,11 @@ void NavFusion_GetPositionLatLon(double *lat_out, double *lon_out)
     double origin_lat_rad;
     double d_lat_rad;
     double d_lon_rad;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
 
     if (lat_out == NULL || lon_out == NULL || g_fusion.valid == 0u)
     {
@@ -387,6 +432,11 @@ float NavFusion_GetMileageStepCm(void)
     float dy;
     float step_m;
 
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return -1.0f;
+    }
+
     if (g_fusion.valid == 0u || g_prev_xy_valid == 0u)
     {
         return -1.0f;
@@ -403,6 +453,11 @@ float NavFusion_GetMileageStepCm(void)
 
 void NavFusion_SyncMileageSnapshot(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+
     if (g_fusion.valid == 0u)
     {
         return;
@@ -417,6 +472,11 @@ void NavFusion_SyncMileageSnapshot(void)
 
 void NavFusion_BeginOriginAverage(float yaw_deg)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+
     NavFusion_Reset();
     g_origin_avg.active = 1u;
     g_origin_avg.yaw_deg = NavFusion_Wrap180(yaw_deg);
@@ -425,21 +485,41 @@ void NavFusion_BeginOriginAverage(float yaw_deg)
 
 uint8 NavFusion_IsOriginCalibrating(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     return g_origin_avg.active;
 }
 
 uint16 NavFusion_GetOriginAcceptedCount(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     return g_origin_avg.accepted;
 }
 
 uint16 NavFusion_GetOriginRejectedCount(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     return g_origin_avg.rejected;
 }
 
 uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     if (g_fusion.valid == 0u || g_origin_avg.accepted == 0u)
     {
         return 0u;
@@ -458,6 +538,11 @@ uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out)
 uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used)
 {
     float dist_m;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+    }
 
     if (g_origin_avg.failed_pulse != 0u)
     {
@@ -508,6 +593,11 @@ uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 
 
 uint8 NavFusion_ConsumeOriginFailure(void)
 {
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+
     if (g_origin_avg.failed_pulse == 0u)
     {
         return 0u;

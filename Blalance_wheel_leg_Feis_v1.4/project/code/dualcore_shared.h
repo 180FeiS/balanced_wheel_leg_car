@@ -100,6 +100,7 @@ typedef struct
   uint8 remote_local_keys_debug; /* 1：g_menu_input_remote_first==1 且遥控拨码=板载调试电平；CM7_1 菜单/拨码路径对齐 0。仅 CM7_0 写入 */
   uint8 menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Run Config 可配，Save 写 Flash */
   uint8 menu_vofa_enable;      /* 0=关 1=开 VOFA 无线调试；Run Config 可配，Save 写 Flash V6 */
+  uint8 menu_nav_fusion_enable; /* 0=关 1=开 GPS+惯导融合；Run Config 可配，Save 写 Flash V10 */
   float jump_takeoff_p;
   float jump_retract_p;
   float jump_prepare_p;

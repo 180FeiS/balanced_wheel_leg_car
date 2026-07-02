@@ -69,6 +69,7 @@
 #if defined(CY_CORE_CM7_0)
 #include "navigation.h"
 #include "flash.h"
+#include "nav_fusion.h"
 #endif
 
 /* 全局变量定义 */
@@ -180,6 +181,14 @@ void Menu_RunConfigToggleField(uint8 field_index)
     else if (field_index == Run_Config_Field_VofaGroup)
     {
         Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % NAG_VOFA_GROUP_COUNT);
+    }
+    else if (field_index == Run_Config_Field_FusionEnable)
+    {
+        g_menu_nav_fusion_enable = (uint8)(g_menu_nav_fusion_enable ? 0u : 1u);
+        if (g_menu_nav_fusion_enable == 0u)
+        {
+            NavFusion_Reset();
+        }
     }
 #else
     (void)field_index;

@@ -211,6 +211,7 @@ extern volatile uint8 remote_lora_steer_snapshot_valid;
 extern uint8 g_remote_local_keys_debug; /* 1：板载调试路径；由 remote_lora_apply 更新，dualcore publish 给 CM7_1 */
 extern uint8 g_menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Flash 可配，见 Menu.h */
 extern uint8 g_menu_vofa_enable;         /* 0=关 1=开 VOFA 无线调试；Flash 可配 V6，见 Menu.h */
+extern uint8 g_menu_nav_fusion_enable;   /* 0=关 1=开导航融合；Flash 可配 V10，见 Menu.h */
 
 uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
 uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */
