@@ -1,5 +1,6 @@
 #include "zf_common_headfile.h"
 #include "my_gps.h"
+#include "nav_fusion.h"
 
 #include <math.h>
 #include <string.h>
@@ -460,44 +461,59 @@ void GPS_ApplyLaunchSpeed(void)
     gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
     gps_nav_launch_fix_valid = 0u;
     gps_drift_corr_valid = 0u;
+    {
+        uint8 defer_speed_for_origin = 0u;
+
 #if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
-    gps_nav_origin_pending = 1u;
-    NavFusion_BeginOriginAverage(gps_nav_launch_imu_yaw);
-    nav_heading_mode = NAV_HEADING_MODE_GPS;
-    motor_user_speed_cmd = 0.0f;
-#elif NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
-    {
-        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
-        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+        if (NavFusion_IsRuntimeEnabled() != 0u)
         {
-            gps_nav_launch_latitude = gnss.latitude;
-            gps_nav_launch_longitude = gnss.longitude;
-            gps_nav_launch_fix_valid = 1u;
+            gps_nav_origin_pending = 1u;
+            NavFusion_BeginOriginAverage(gps_nav_launch_imu_yaw);
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            defer_speed_for_origin = 1u;
         }
-    }
-    GPS_NavTryUpdateDriftCorrection();
-    if (gps_nav_launch_fix_valid != 0u)
-    {
-        NavFusion_InitFromGps(gps_nav_launch_latitude,
-                              gps_nav_launch_longitude,
-                              gps_nav_launch_imu_yaw);
-    }
-    nav_heading_mode = NAV_HEADING_MODE_GPS;
-    motor_user_speed_cmd = run_launch_speed;
-#else
-    {
-        uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
-        if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
-        {
-            gps_nav_launch_latitude = gnss.latitude;
-            gps_nav_launch_longitude = gnss.longitude;
-            gps_nav_launch_fix_valid = 1u;
-        }
-    }
-    GPS_NavTryUpdateDriftCorrection();
-    nav_heading_mode = NAV_HEADING_MODE_GPS;
-    motor_user_speed_cmd = run_launch_speed;
 #endif
+
+        if (defer_speed_for_origin != 0u)
+        {
+            motor_user_speed_cmd = 0.0f;
+        }
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+        else
+        {
+            uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+            if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+            {
+                gps_nav_launch_latitude = gnss.latitude;
+                gps_nav_launch_longitude = gnss.longitude;
+                gps_nav_launch_fix_valid = 1u;
+            }
+            GPS_NavTryUpdateDriftCorrection();
+            if (gps_nav_launch_fix_valid != 0u && NavFusion_IsRuntimeEnabled() != 0u)
+            {
+                NavFusion_InitFromGps(gps_nav_launch_latitude,
+                                      gps_nav_launch_longitude,
+                                      gps_nav_launch_imu_yaw);
+            }
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            motor_user_speed_cmd = run_launch_speed;
+        }
+#else
+        else
+        {
+            uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+            if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+            {
+                gps_nav_launch_latitude = gnss.latitude;
+                gps_nav_launch_longitude = gnss.longitude;
+                gps_nav_launch_fix_valid = 1u;
+            }
+            GPS_NavTryUpdateDriftCorrection();
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            motor_user_speed_cmd = run_launch_speed;
+        }
+#endif
+    }
 #endif
 }
 
@@ -567,7 +583,7 @@ void GPS_PointNav_Run(void)
     }
 
 #if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
-    if (gps_nav_origin_pending != 0u)
+    if (NavFusion_IsRuntimeEnabled() != 0u && gps_nav_origin_pending != 0u)
     {
         motor_user_speed_cmd = 0.0f;
         return;

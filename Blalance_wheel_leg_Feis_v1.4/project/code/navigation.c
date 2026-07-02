@@ -2396,6 +2396,15 @@ static void Nag_TryEnterReplayRun(void)
     {
         return;
     }
+    /* 菜单/Flash 关闭融合时走旧逻辑：不等待原点，直接赋速进入执行态 */
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        motor_user_speed_cmd = run_launch_speed;
+        N.Target_Speed = fabsf((float)motor_user_speed_cmd);
+        Nag_UpdatePreviewAndSpeedTarget();
+        N.Nag_SystemRun_Index = 3u;
+        return;
+    }
     if (NavFusion_IsOriginCalibrating() != 0u)
     {
         return;
@@ -2452,7 +2461,10 @@ void Nag_Begin_Replay(void)
     g_nag_replay_flash_ready = 0u;
     NavFusion_Reset();
 #if NAV_FUSION_ORIGIN_ENABLE
-    NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+    if (NavFusion_IsRuntimeEnabled() != 0u)
+    {
+        NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+    }
 #else
     {
         uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
