@@ -254,8 +254,8 @@ void vofa_send_nav_from_dualcore_snapshot(void)
                          c.fusion_y_m,
                          c.fusion_v_mps,
                          c.fusion_gps_residual_m,
-                         c.fusion_origin_accepted,
-                         c.fusion_origin_rejected);
+                         c.fusion_hold_dist_m,
+                         c.fusion_heading_bias_deg);
     break;
   default:
     break;

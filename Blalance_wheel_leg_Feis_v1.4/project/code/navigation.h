@@ -39,7 +39,8 @@
 /*
  * 惯导回放融合里程辅助（nav_fusion）：
  * 1=Run_index 推进优先用融合位移(cm)，长距离/元素停车后漂移更小；0=纯 car_speed 积分。
- * 录制/回放 KEY 流程不变；发车前建议 GPS 有效且静止 1~2s 以建立融合原点。
+ * 录制/回放 KEY 流程不变；融合模式下先 GPS 原点平均，再锁定发车 yaw 直行 5m 标定北向偏角。
+ * 纯惯导（g_menu_nav_fusion_enable=0 或 NAG_USE_FUSION_MILEAGE=0）不受影响。
  */
 #define NAG_USE_FUSION_MILEAGE 1u
 

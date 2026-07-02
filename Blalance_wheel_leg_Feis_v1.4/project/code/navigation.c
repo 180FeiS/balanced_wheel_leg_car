@@ -2127,6 +2127,18 @@ float Nag_GetControlSpeedTarget(void)
         return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
     }
 
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_HEADING_CALIB_ENABLE
+    /* 融合回放准备态：北向标定直行 5m 期间允许遥控给速，航向由 NavFusion 锁定 */
+    if (NavFusion_IsRuntimeEnabled() != 0u &&
+        NavFusion_IsHeadingCalibrating() != 0u &&
+        N.Nag_SystemRun_Index == 2u &&
+        g_menu_input_remote_first != 0u &&
+        remote_lora_steer_snapshot_valid != 0u)
+    {
+        return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
+    }
+#endif
+
 #if Nag_Debug_Speed_Bypass_Enable
     return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
 #endif
@@ -2385,6 +2397,16 @@ void Nag_Begin_Record(void)
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
     steer_task_stop();
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+    /* 融合惯导录制：先静止 GPS 原点平均，再锁定发车 yaw 直行 5m 标定北向偏角；纯惯导开关关闭时不进入 */
+    if (NavFusion_IsRuntimeEnabled() != 0u)
+    {
+        NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+        NavFusion_BeginHeadingCalibSession((float)euler_angle.yaw);
+#endif
+    }
+#endif
     N.Nag_SystemRun_Index = 1;
 }
 
@@ -2396,19 +2418,17 @@ static void Nag_TryEnterReplayRun(void)
     {
         return;
     }
-    /* 菜单/Flash 关闭融合时走旧逻辑：不等待原点，直接赋速进入执行态 */
-    if (NavFusion_IsRuntimeEnabled() == 0u)
-    {
-        motor_user_speed_cmd = run_launch_speed;
-        N.Target_Speed = fabsf((float)motor_user_speed_cmd);
-        Nag_UpdatePreviewAndSpeedTarget();
-        N.Nag_SystemRun_Index = 3u;
-        return;
-    }
     if (NavFusion_IsOriginCalibrating() != 0u)
     {
         return;
     }
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    if (NavFusion_IsHeadingCalibSessionActive() != 0u &&
+        NavFusion_IsHeadingCalibReady() == 0u)
+    {
+        return;
+    }
+#endif
     if (NavFusion_IsValid() == 0u)
     {
         return;
@@ -2461,10 +2481,10 @@ void Nag_Begin_Replay(void)
     g_nag_replay_flash_ready = 0u;
     NavFusion_Reset();
 #if NAV_FUSION_ORIGIN_ENABLE
-    if (NavFusion_IsRuntimeEnabled() != 0u)
-    {
-        NavFusion_BeginOriginAverage((float)euler_angle.yaw);
-    }
+    NavFusion_BeginOriginAverage((float)euler_angle.yaw);
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    NavFusion_BeginHeadingCalibSession((float)euler_angle.yaw);
+#endif
 #else
     {
         uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));

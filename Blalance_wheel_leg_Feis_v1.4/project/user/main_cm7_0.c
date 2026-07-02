@@ -102,8 +102,8 @@ static void send_nav_debug_to_vofa(void)
                              fusion_st->y_m,
                              fusion_st->v_mps,
                              fusion_st->gps_residual_m,
-                             (float)NavFusion_GetOriginAcceptedCount(),
-                             (float)NavFusion_GetOriginRejectedCount());
+                             NavFusion_GetHoldDistM(),
+                             NavFusion_GetHeadingBiasDeg());
       }
       break;
     }
@@ -159,18 +159,25 @@ int main(void)
           GPS_OnOriginCalibrationFailed();
         }
       }
-        else
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+      else if (NavFusion_IsHeadingAlignPending() != 0u)
+      {
+        uint8 heading_r = NavFusion_FeedHeadingAlignSample((float)gnss.direction,
+                                                           gnss.state,
+                                                           (float)euler_angle.yaw);
+        if (heading_r == NAV_FUSION_HEADING_FEED_DONE)
         {
-          NavFusion_UpdateGps(gnss.latitude,
-                              gnss.longitude,
-                              gnss.state,
-                              gnss.satellite_used);
-          if (NavFusion_IsValid() != 0u)
-          {
-            Nag_CompleteReplayAfterOrigin();
-            GPS_CompleteLaunchAfterOrigin();
-          }
+          Nag_CompleteReplayAfterOrigin();
         }
+      }
+#endif
+      else if (NavFusion_IsGpsPositionUpdateAllowed() != 0u)
+      {
+        NavFusion_UpdateGps(gnss.latitude,
+                            gnss.longitude,
+                            gnss.state,
+                            gnss.satellite_used);
+      }
 #else
       NavFusion_UpdateGps(gnss.latitude,
                           gnss.longitude,
@@ -185,7 +192,35 @@ int main(void)
     if (NavFusion_ConsumeOriginFailure() != 0u)
     {
       GPS_OnOriginCalibrationFailed();
+      if (N.Nag_SystemRun_Index == 1u)
+      {
+        Nag_Request_Stop_Record();
+      }
     }
+#endif
+#if NAV_FUSION_ENABLE && NAV_FUSION_ORIGIN_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+    if (NavFusion_ConsumeOriginDonePulse() != 0u)
+    {
+      buzzer_check(100u);
+      buzzer_check(100u);
+    }
+#endif
+#if NAV_FUSION_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+    if (NavFusion_ConsumeHeadingCalibDonePulse() != 0u)
+    {
+      buzzer_check(100u);
+      Nag_CompleteReplayAfterOrigin();
+    }
+    if (NavFusion_ConsumeHeadingCalibFailure() != 0u)
+    {
+      buzzer_check(500u);
+      if (N.Nag_SystemRun_Index == 1u)
+      {
+        Nag_Request_Stop_Record();
+      }
+    }
+#endif
+#if NAV_FUSION_ENABLE && NAV_FUSION_ORIGIN_ENABLE && !NAV_FUSION_HEADING_CALIB_ENABLE
     if (NavFusion_IsValid() != 0u)
     {
       Nag_CompleteReplayAfterOrigin();

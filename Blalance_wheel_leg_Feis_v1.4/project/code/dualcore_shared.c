@@ -160,6 +160,14 @@ void dualcore_ctrl_to_ui_publish(void)
       c->fusion_origin_calibrating = NavFusion_IsOriginCalibrating();
       c->fusion_origin_accepted = (float)NavFusion_GetOriginAcceptedCount();
       c->fusion_origin_rejected = (float)NavFusion_GetOriginRejectedCount();
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+      c->fusion_heading_bias_deg = NavFusion_GetHeadingBiasDeg();
+      c->fusion_calib_state = NavFusion_GetHeadingCalibState();
+      c->fusion_hold_dist_m = NavFusion_GetHoldDistM();
+      c->fusion_cog_deg = NavFusion_GetHeadingCogDeg();
+      c->fusion_imu_ref_deg = NavFusion_GetHeadingImuRefDeg();
+      c->fusion_calib_failed = (uint8)(NavFusion_GetHeadingCalibState() == NAV_FUSION_CALIB_FAILED);
+#endif
     }
     else
     {
@@ -173,6 +181,14 @@ void dualcore_ctrl_to_ui_publish(void)
       c->fusion_origin_calibrating = 0u;
       c->fusion_origin_accepted = 0.0f;
       c->fusion_origin_rejected = 0.0f;
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+      c->fusion_heading_bias_deg = 0.0f;
+      c->fusion_calib_state = NAV_FUSION_CALIB_IDLE;
+      c->fusion_hold_dist_m = 0.0f;
+      c->fusion_cog_deg = 0.0f;
+      c->fusion_imu_ref_deg = 0.0f;
+      c->fusion_calib_failed = 0u;
+#endif
     }
   }
   else
@@ -187,6 +203,14 @@ void dualcore_ctrl_to_ui_publish(void)
     c->fusion_origin_calibrating = 0u;
     c->fusion_origin_accepted = 0.0f;
     c->fusion_origin_rejected = 0.0f;
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    c->fusion_heading_bias_deg = 0.0f;
+    c->fusion_calib_state = NAV_FUSION_CALIB_IDLE;
+    c->fusion_hold_dist_m = 0.0f;
+    c->fusion_cog_deg = 0.0f;
+    c->fusion_imu_ref_deg = 0.0f;
+    c->fusion_calib_failed = 0u;
+#endif
   }
 #else
   c->fusion_x_m = 0.0f;
@@ -199,6 +223,14 @@ void dualcore_ctrl_to_ui_publish(void)
   c->fusion_origin_calibrating = 0u;
   c->fusion_origin_accepted = 0.0f;
   c->fusion_origin_rejected = 0.0f;
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+  c->fusion_heading_bias_deg = 0.0f;
+  c->fusion_calib_state = NAV_FUSION_CALIB_IDLE;
+  c->fusion_hold_dist_m = 0.0f;
+  c->fusion_cog_deg = 0.0f;
+  c->fusion_imu_ref_deg = 0.0f;
+  c->fusion_calib_failed = 0u;
+#endif
 #endif
 
   c->seq++;

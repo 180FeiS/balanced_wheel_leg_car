@@ -10,6 +10,8 @@
  * 1) GPS 点导航：my_gps.h 中 GPS_NAV_USE_FUSION_POSITION=1，录点/发车流程不变，追点用融合位置。
  * 2) 惯导回放：navigation.h 中 NAG_USE_FUSION_MILEAGE=1，录制/回放 KEY 流程不变，里程用融合位移。
  * 3) 发车前：KEY3 后自动采集 NAV_FUSION_ORIGIN_SAMPLE_COUNT 个有效 GPS 点取平均建原点。
+ * 4) 融合惯导录制/回放：原点完成后锁定发车 yaw 直行 NAV_FUSION_HEADING_CALIB_DISTANCE_M，
+ *    用 RMC COG 标定 IMU 相对正北偏角；前 5m 计入路径，标定完成后旋转到东-北系再恢复 GPS 修正。
  *
  * 实车验证顺序见 nav_fusion.c 文件头注释。
  */
@@ -113,6 +115,37 @@ static inline uint8 NavFusion_IsRuntimeEnabled(void)
 /* 连续有效 GPS 帧数达到此值才允许修正，抑制首帧跳点 */
 #define NAV_FUSION_GPS_GOOD_STREAK 2u
 
+/*
+ * 1=融合惯导录制/回放启用北向角标定（NAG_USE_FUSION_MILEAGE 路径）；
+ * 0=仅保留位置原点/GPS 松耦合，GPS 点导航不受影响。
+ */
+#define NAV_FUSION_HEADING_CALIB_ENABLE 1u
+
+/*
+ * 北向标定直行距离（m）：编码器累计里程达到此值后采样 COG。
+ * 调大：COG 更稳但等待更久；调小：更快标定但低速/短距 COG 易抖。
+ */
+#define NAV_FUSION_HEADING_CALIB_DISTANCE_M 5.0f
+
+/*
+ * 北向标定总超时（ms），自进入 straight_hold 起在 Predict1ms 中累加。
+ * 超时未锁 bias 则标定失败，需重新录制/回放。
+ */
+#define NAV_FUSION_HEADING_CALIB_TIMEOUT_MS 60000u
+
+/* NavFusion_FeedHeadingAlignSample 返回值 */
+#define NAV_FUSION_HEADING_FEED_COLLECTING 0u
+#define NAV_FUSION_HEADING_FEED_DONE       1u
+#define NAV_FUSION_HEADING_FEED_FAILED     2u
+
+/* fusion_calib_state 调试枚举（VOFA/UI） */
+#define NAV_FUSION_CALIB_IDLE           0u
+#define NAV_FUSION_CALIB_ORIGIN         1u
+#define NAV_FUSION_CALIB_STRAIGHT_HOLD  2u
+#define NAV_FUSION_CALIB_HEADING_ALIGN  3u
+#define NAV_FUSION_CALIB_READY          4u
+#define NAV_FUSION_CALIB_FAILED         5u
+
 #define NAV_FUSION_EARTH_RADIUS_M 6371000.0
 #define NAV_FUSION_PI 3.14159265358979323846f
 #define NAV_FUSION_DEG_TO_RAD(x) ((x) * (NAV_FUSION_PI / 180.0f))
@@ -201,6 +234,9 @@ uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out);
 /* 超时失败等：消费一次失败脉冲，返回 1 表示刚失败（主循环无需等 GNSS 帧） */
 uint8 NavFusion_ConsumeOriginFailure(void);
 
+/* 融合录制/回放会话原点采满：消费一次完成脉冲，返回 1 表示刚完成（主循环双短鸣） */
+uint8 NavFusion_ConsumeOriginDonePulse(void);
+
 #else
 
 void NavFusion_BeginOriginAverage(float yaw_deg);
@@ -210,7 +246,46 @@ uint16 NavFusion_GetOriginAcceptedCount(void);
 uint16 NavFusion_GetOriginRejectedCount(void);
 uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out);
 uint8 NavFusion_ConsumeOriginFailure(void);
+uint8 NavFusion_ConsumeOriginDonePulse(void);
 
-#endif
+#endif /* NAV_FUSION_ORIGIN_ENABLE */
+
+#if NAV_FUSION_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg);
+uint8 NavFusion_IsHeadingCalibSessionActive(void);
+uint8 NavFusion_IsHeadingCalibrating(void);
+uint8 NavFusion_IsHeadingAlignPending(void);
+uint8 NavFusion_IsHeadingCalibReady(void);
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg);
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void);
+float NavFusion_GetLaunchYawHoldDeg(void);
+float NavFusion_GetHeadingBiasDeg(void);
+float NavFusion_GetHoldDistM(void);
+float NavFusion_GetHeadingCogDeg(void);
+float NavFusion_GetHeadingImuRefDeg(void);
+uint8 NavFusion_GetHeadingCalibState(void);
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void);
+uint8 NavFusion_ConsumeHeadingCalibFailure(void);
+
+#else
+
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg);
+uint8 NavFusion_IsHeadingCalibSessionActive(void);
+uint8 NavFusion_IsHeadingCalibrating(void);
+uint8 NavFusion_IsHeadingAlignPending(void);
+uint8 NavFusion_IsHeadingCalibReady(void);
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg);
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void);
+float NavFusion_GetLaunchYawHoldDeg(void);
+float NavFusion_GetHeadingBiasDeg(void);
+float NavFusion_GetHoldDistM(void);
+float NavFusion_GetHeadingCogDeg(void);
+float NavFusion_GetHeadingImuRefDeg(void);
+uint8 NavFusion_GetHeadingCalibState(void);
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void);
+uint8 NavFusion_ConsumeHeadingCalibFailure(void);
+
+#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
 
 #endif /* CODE_NAV_FUSION_H_ */

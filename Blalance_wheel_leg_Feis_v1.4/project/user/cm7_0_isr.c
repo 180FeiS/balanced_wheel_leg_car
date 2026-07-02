@@ -82,6 +82,13 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
     {
         steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());
     }
+#if NAV_FUSION_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+    /* 融合惯导北向标定直行 5m：锁定发车瞬间 yaw，禁止遥控改航向 */
+    else if (NavFusion_IsRuntimeEnabled() != 0u && NavFusion_IsHeadingCalibrating() != 0u)
+    {
+        steer_request_target_yaw(NavFusion_GetLaunchYawHoldDeg());
+    }
+#endif
     yaw_hold_poweron_request_if_needed();
     if (steer_yaw_request_pending)
     {

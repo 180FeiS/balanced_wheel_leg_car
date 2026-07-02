@@ -178,6 +178,13 @@ typedef struct
   uint8 fusion_origin_calibrating;
   float fusion_origin_accepted;
   float fusion_origin_rejected;
+  /* 北向角标定调试：state 见 NAV_FUSION_CALIB_*；hold_dist 为编码器累计里程(m) */
+  float fusion_heading_bias_deg;
+  uint8 fusion_calib_state;
+  float fusion_hold_dist_m;
+  float fusion_cog_deg;
+  float fusion_imu_ref_deg;
+  uint8 fusion_calib_failed;
   /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
   uint8 stair_enter_active;
 } dualcore_ctrl_to_ui_t;

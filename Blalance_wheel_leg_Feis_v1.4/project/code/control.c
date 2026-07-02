@@ -216,6 +216,12 @@ uint8 remote_lora_nav_allows_heading_override(void)
     {
         return 0u;
     }
+#if NAV_FUSION_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+    if (NavFusion_IsRuntimeEnabled() != 0u && NavFusion_IsHeadingCalibrating() != 0u)
+    {
+        return 0u;
+    }
+#endif
     if (N.Nag_SystemRun_Index == 3)
     {
         return 0u;

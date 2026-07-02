@@ -41,6 +41,7 @@
 static dualcore_ctrl_to_ui_t s_ui_dc;
 #else
 #include "control.h"
+#include "nav_fusion.h"
 #endif
 #include "Menu.h"
 #include "navigation.h"
@@ -442,6 +443,22 @@ void GUI_2_2_1(void) // 导航调试界面（须从 2.2 按「右」进入）
     ips200_show_string(64, ROW_3, "Nav Debug");
 
     ips200_show_string(0, ROW_5, rec_state_name);
+
+#if defined(CY_CORE_CM7_1)
+    if (nav_recording_active && s_ui_dc.menu_nav_fusion_enable != 0u && s_ui_dc.fusion_origin_calibrating != 0u)
+    {
+        ips200_show_string(120, ROW_5, "Origin:");
+        ips200_show_uint(168, ROW_5, (uint32)s_ui_dc.fusion_origin_accepted, 2);
+        ips200_show_string(184, ROW_5, "/50");
+    }
+#else
+    if (nav_recording_active && g_menu_nav_fusion_enable != 0u && NavFusion_IsOriginCalibrating() != 0u)
+    {
+        ips200_show_string(120, ROW_5, "Origin:");
+        ips200_show_uint(168, ROW_5, (uint32)NavFusion_GetOriginAcceptedCount(), 2);
+        ips200_show_string(184, ROW_5, "/50");
+    }
+#endif
 
     if (event_active)
     {
