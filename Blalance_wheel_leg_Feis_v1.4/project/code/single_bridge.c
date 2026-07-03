@@ -11,6 +11,82 @@ static uint8  s_last_track_valid;
 static uint8  s_last_valid_row_count;
 static uint8  s_last_valid_row_count_raw;
 
+static float  s_last_road_w_avg;
+static uint8  s_last_pin_left;
+static uint8  s_last_pin_right;
+static uint8  s_last_enter_ready;
+static uint8  s_last_exit_ready;
+static uint8  s_enter_debounce;
+static uint8  s_exit_debounce;
+
+static uint8 single_bridge_row_pin_left(int i)
+{
+    int left = (int)Left_Line[i];
+    int tol = SINGLE_BRIDGE_EDGE_PIN_TOL;
+
+    if (i < SINGLE_BRIDGE_DETECT_ROW_START || i > SINGLE_BRIDGE_DETECT_ROW_END)
+    {
+        return 0u;
+    }
+    if (left <= tol)
+    {
+        return 1u;
+    }
+    return 0u;
+}
+
+static uint8 single_bridge_row_pin_right(int i)
+{
+    int right = (int)Right_Line[i];
+    int tol = SINGLE_BRIDGE_EDGE_PIN_TOL;
+    int w = (int)IMAGE_COMPRESS_W;
+
+    if (i < SINGLE_BRIDGE_DETECT_ROW_START || i > SINGLE_BRIDGE_DETECT_ROW_END)
+    {
+        return 0u;
+    }
+    if (right >= (w - 1 - tol))
+    {
+        return 1u;
+    }
+    return 0u;
+}
+
+static uint8 single_bridge_row_width_ok(int i, int *width_out)
+{
+    int left = (int)Left_Line[i];
+    int right = (int)Right_Line[i];
+    int tol = SINGLE_BRIDGE_EDGE_PIN_TOL;
+    int w = (int)IMAGE_COMPRESS_W;
+    uint8 left_ok;
+    uint8 right_ok;
+
+    if (i < SINGLE_BRIDGE_DETECT_ROW_START || i > SINGLE_BRIDGE_DETECT_ROW_END)
+    {
+        return 0u;
+    }
+
+    left_ok = (uint8)(left > tol && left < (w - 1 - tol));
+    right_ok = (uint8)(right > tol && right < (w - 1 - tol));
+
+    if (left_ok && right_ok)
+    {
+        *width_out = right - left;
+        return 1u;
+    }
+    if (left_ok && single_bridge_row_pin_right(i))
+    {
+        *width_out = (w - 1) - left;
+        return 1u;
+    }
+    if (right_ok && single_bridge_row_pin_left(i))
+    {
+        *width_out = right;
+        return 1u;
+    }
+    return 0u;
+}
+
 static int single_bridge_map_x(int j, int disp_x, int disp_w)
 {
     return disp_x + (j * disp_w) / (int)IMAGE_COMPRESS_W;
@@ -157,6 +233,180 @@ uint8 single_bridge_get_valid_row_count(void)
     return s_last_valid_row_count;
 }
 
+float single_bridge_get_road_w_avg(void)
+{
+    return s_last_road_w_avg;
+}
+
+uint8 single_bridge_get_pin_left(void)
+{
+    return s_last_pin_left;
+}
+
+uint8 single_bridge_get_pin_right(void)
+{
+    return s_last_pin_right;
+}
+
+uint8 single_bridge_get_enter_ready(void)
+{
+    return s_last_enter_ready;
+}
+
+uint8 single_bridge_get_exit_ready(void)
+{
+    return s_last_exit_ready;
+}
+
+int single_bridge_get_width_max(void)
+{
+    return SINGLE_BRIDGE_WIDTH_MAX_DEFAULT;
+}
+
+void single_bridge_detect_update(single_bridge_detect_t *out, uint8 on_bridge)
+{
+    int   i;
+    int   width = 0;
+    int   width_sum = 0;
+    int   width_count = 0;
+    int   pin_left_rows = 0;
+    int   pin_right_rows = 0;
+    uint8 enter_ready = 0u;
+    uint8 exit_ready = 0u;
+    uint8 enter_confirmed = 0u;
+    uint8 exit_confirmed = 0u;
+    uint8 both_valid_rows = 0u;
+
+    for (i = SINGLE_BRIDGE_DETECT_ROW_START; i <= SINGLE_BRIDGE_DETECT_ROW_END; i++)
+    {
+        if (single_bridge_row_pin_left(i))
+        {
+            pin_left_rows++;
+        }
+        if (single_bridge_row_pin_right(i))
+        {
+            pin_right_rows++;
+        }
+        if (single_bridge_row_width_ok(i, &width))
+        {
+            width_sum += width;
+            width_count++;
+        }
+        if (single_bridge_left_valid(i, (int)Left_Line[i]) &&
+            single_bridge_right_valid(i, (int)Right_Line[i]) &&
+            !single_bridge_row_pin_left(i) &&
+            !single_bridge_row_pin_right(i))
+        {
+            both_valid_rows++;
+        }
+    }
+
+    if (width_count > 0)
+    {
+        s_last_road_w_avg = (float)width_sum / (float)width_count;
+    }
+    else
+    {
+        s_last_road_w_avg = (float)IMAGE_COMPRESS_W;
+    }
+
+    s_last_pin_left = (uint8)(pin_left_rows >= (int)SINGLE_BRIDGE_MIN_PIN_ROWS);
+    s_last_pin_right = (uint8)(pin_right_rows >= (int)SINGLE_BRIDGE_MIN_PIN_ROWS);
+
+    if (s_last_pin_right && !s_last_pin_left)
+    {
+        /* 右贴边 → 左桥 */
+    }
+    else if (s_last_pin_left && !s_last_pin_right)
+    {
+        /* 左贴边 → 右桥 */
+    }
+
+    if (!on_bridge)
+    {
+        if (s_last_road_w_avg < (float)SINGLE_BRIDGE_WIDTH_MAX_DEFAULT &&
+            (s_last_pin_left || s_last_pin_right))
+        {
+            enter_ready = 1u;
+        }
+        if (enter_ready)
+        {
+            if (s_enter_debounce < 255u)
+            {
+                s_enter_debounce++;
+            }
+        }
+        else
+        {
+            s_enter_debounce = 0u;
+        }
+        s_exit_debounce = 0u;
+
+        if (s_enter_debounce >= SINGLE_BRIDGE_ENTER_DEBOUNCE)
+        {
+            enter_confirmed = 1u;
+            s_enter_debounce = 0u;
+        }
+    }
+    else
+    {
+        if (s_last_road_w_avg > (float)SINGLE_BRIDGE_WIDTH_EXIT_MIN_DEFAULT &&
+            both_valid_rows >= (int)SINGLE_BRIDGE_MIN_PIN_ROWS)
+        {
+            exit_ready = 1u;
+        }
+        if (exit_ready)
+        {
+            if (s_exit_debounce < 255u)
+            {
+                s_exit_debounce++;
+            }
+        }
+        else
+        {
+            s_exit_debounce = 0u;
+        }
+        s_enter_debounce = 0u;
+
+        if (s_exit_debounce >= SINGLE_BRIDGE_EXIT_DEBOUNCE)
+        {
+            exit_confirmed = 1u;
+            s_exit_debounce = 0u;
+        }
+    }
+
+    s_last_enter_ready = enter_ready;
+    s_last_exit_ready = exit_ready;
+
+    if (out != NULL)
+    {
+        out->road_w_avg = s_last_road_w_avg;
+        out->pin_left = s_last_pin_left;
+        out->pin_right = s_last_pin_right;
+        out->side = SINGLE_BRIDGE_SIDE_UNKNOWN;
+        if (s_last_pin_right && !s_last_pin_left)
+        {
+            out->side = SINGLE_BRIDGE_SIDE_LEFT;
+        }
+        else if (s_last_pin_left && !s_last_pin_right)
+        {
+            out->side = SINGLE_BRIDGE_SIDE_RIGHT;
+        }
+        out->enter_ready = enter_ready;
+        out->exit_ready = exit_ready;
+        out->enter_confirmed = enter_confirmed;
+        out->exit_confirmed = exit_confirmed;
+        out->enter_count = s_enter_debounce;
+        out->exit_count = s_exit_debounce;
+    }
+}
+
+void single_bridge_detect_reset(void)
+{
+    s_enter_debounce = 0u;
+    s_exit_debounce = 0u;
+}
+
 void single_bridge_gray_diff_track(int bw_threshold, single_bridge_track_t *out)
 {
     int th = bw_threshold;
@@ -282,7 +532,11 @@ void single_bridge_draw_track_overlay(int disp_x, int disp_y,
 
 void single_bridge_debug_show(int disp_x, int disp_y, int bw_threshold)
 {
-    single_bridge_gray_diff_track(bw_threshold, NULL);
+    single_bridge_track_t track;
+    single_bridge_detect_t detect;
+
+    single_bridge_gray_diff_track(bw_threshold, &track);
+    single_bridge_detect_update(&detect, 0u);
 
     ips200_show_gray_image(disp_x, disp_y, image_two_value[0],
                            IMAGE_COMPRESS_W, IMAGE_COMPRESS_H,

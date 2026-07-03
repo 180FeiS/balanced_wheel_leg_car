@@ -52,6 +52,11 @@ void buzzer_init(void);                     //蜂鸣器初始化
 
 void buzzer_check(uint32 buzzer_time);      //蜂鸣器检测
 
+#define BRIDGE_BEEP_MS  100u
+
+void buzzer_beep_request(uint32 ms);
+void buzzer_beep_poll(void);
+
 void my_camera_init(void);                  //摄像头初始化
 
 void camera_init_ips200(void);              //屏幕和摄像头初始化

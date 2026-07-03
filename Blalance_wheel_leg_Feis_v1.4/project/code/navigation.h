@@ -453,7 +453,12 @@ typedef struct{
        uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
        float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
        uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
-       uint8 Bridge_Zone_Active;      // 1=已过 BridgeIn 未过 BridgeOut，Stop 正常完成时不清
+       uint8 Bridge_Zone_Active;      // 1=视觉/兜底确认进桥未出桥
+       uint8 Bridge_Detect_Arm;       // 1=预区或桥上，CM7_1 跑 detect
+       uint8 Bridge_Heading_Lock;     // 1=桥上锁 IMU 航向
+       uint8 Bridge_Expected;         // 1=已过 BridgeIn 路点，等待视觉确认
+       uint8 Bridge_Exit_Beep_Done;   // 本段桥已响出桥蜂鸣
+       float Bridge_Locked_Yaw;       // 进桥确认瞬间 IMU yaw
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -476,6 +481,9 @@ typedef enum {
 } NavHeadingMode;
 extern uint8 nav_heading_mode;
 void Nag_Run(); //偏航角控制总函数
+uint8 Nag_BridgeDetectShouldArm(void);
+void Nag_BridgeDetectUpdate(void);
+void Nag_BridgeTimeoutTick1ms(void);
 void Run_Nag_GPS();//偏航角读取
 
 void NagFlashRead();   //Flash读取目标点数组

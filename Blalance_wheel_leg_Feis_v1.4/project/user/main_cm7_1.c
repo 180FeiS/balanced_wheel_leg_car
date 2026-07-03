@@ -88,22 +88,35 @@ int main(void)
             step_detect();
             step_visual_jump_after_step();
         }
-        /* 单边桥视觉：仅惯导 BridgeIn～BridgeOut；与台阶/菜单 AE 互斥 */
-        else if (!MenuIsImageSectionPage() && (ctrl.bridge_zone_active != 0u))
+        /* 单边桥视觉：预区 arm 或桥上 detect；与台阶/菜单 AE 互斥 */
+        else if (!MenuIsImageSectionPage() && (ctrl.bridge_detect_arm != 0u))
         {
             static uint32 bridge_frame_seq;
             single_bridge_track_t track;
+            single_bridge_detect_t detect;
 
             if (mt9v03x_finish_flag != 0u)
             {
                 mt9v03x_finish_flag = 0u;
                 single_bridge_gray_diff_track(hd_threshold, &track);
+                single_bridge_detect_update(&detect, ctrl.bridge_zone_active);
                 bridge_frame_seq++;
-                dualcore_bridge_vision_publish(track.center_err, track.track_valid, bridge_frame_seq);
+                dualcore_bridge_vision_publish_detect(track.center_err,
+                                                        track.track_valid,
+                                                        detect.road_w_avg,
+                                                        detect.pin_left,
+                                                        detect.pin_right,
+                                                        detect.enter_ready,
+                                                        detect.exit_ready,
+                                                        detect.enter_confirmed,
+                                                        detect.exit_confirmed,
+                                                        (uint8)detect.side,
+                                                        bridge_frame_seq);
             }
         }
         else if (!MenuIsImageSectionPage())
         {
+            single_bridge_detect_reset();
             dualcore_bridge_vision_publish_inactive();
         }
         image_ae_session_poll();

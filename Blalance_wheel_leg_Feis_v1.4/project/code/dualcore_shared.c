@@ -90,6 +90,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->stair_enter_active = (uint8)((N.Event_Active != 0u) &&
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
   c->bridge_zone_active = N.Bridge_Zone_Active;
+  c->bridge_detect_arm = Nag_BridgeDetectShouldArm();
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;
@@ -254,6 +255,35 @@ void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, 
     {
       *vision_seq_out = g_dualcore_blob.vision.seq;
     }
+  }
+}
+
+void dualcore_bridge_vision_pull_snapshot(dualcore_bridge_vision_snapshot_t *out)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+  static uint32 s_last_bridge_frame_seq;
+
+  if (out == NULL)
+  {
+    return;
+  }
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  out->center_err = v->bridge_center_err;
+  out->track_valid = v->bridge_track_valid;
+  out->road_w_avg = v->bridge_road_w_avg;
+  out->pin_left = v->bridge_pin_left;
+  out->pin_right = v->bridge_pin_right;
+  out->enter_ready = v->bridge_enter_ready;
+  out->exit_ready = v->bridge_exit_ready;
+  out->detect_enter = v->bridge_detect_enter;
+  out->detect_exit = v->bridge_detect_exit;
+  out->detect_side = v->bridge_detect_side;
+  out->fresh = (uint8)((v->bridge_frame_seq != s_last_bridge_frame_seq) ? 1u : 0u);
+  if (out->fresh != 0u)
+  {
+    s_last_bridge_frame_seq = v->bridge_frame_seq;
   }
 }
 
@@ -504,7 +534,13 @@ void dualcore_vision_publish_after_step(uint32 frame_seq)
   dualcore_shared_dcache_clean(v, sizeof(*v));
 }
 
-void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 frame_seq)
+void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
+                                           float road_w_avg,
+                                           uint8 pin_left, uint8 pin_right,
+                                           uint8 enter_ready, uint8 exit_ready,
+                                           uint8 detect_enter, uint8 detect_exit,
+                                           uint8 detect_side,
+                                           uint32 frame_seq)
 {
   dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
 
@@ -513,11 +549,26 @@ void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 
   v->bridge_center_err = center_err;
   v->bridge_track_valid = track_valid;
   v->bridge_frame_fresh = 1u;
+  v->bridge_road_w_avg = road_w_avg;
+  v->bridge_pin_left = pin_left;
+  v->bridge_pin_right = pin_right;
+  v->bridge_enter_ready = enter_ready;
+  v->bridge_exit_ready = exit_ready;
+  v->bridge_detect_enter = detect_enter;
+  v->bridge_detect_exit = detect_exit;
+  v->bridge_detect_side = detect_side;
   v->bridge_frame_seq = frame_seq;
   v->seq++;
   __DSB();
 
   dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 frame_seq)
+{
+  dualcore_bridge_vision_publish_detect(center_err, track_valid, 0.0f,
+                                      0u, 0u, 0u, 0u, 0u, 0u, 0u,
+                                      frame_seq);
 }
 
 void dualcore_bridge_vision_publish_inactive(void)
@@ -530,6 +581,14 @@ void dualcore_bridge_vision_publish_inactive(void)
   v->bridge_center_err = 0.0f;
   v->bridge_track_valid = 0u;
   v->bridge_frame_fresh = 0u;
+  v->bridge_road_w_avg = 0.0f;
+  v->bridge_pin_left = 0u;
+  v->bridge_pin_right = 0u;
+  v->bridge_enter_ready = 0u;
+  v->bridge_exit_ready = 0u;
+  v->bridge_detect_enter = 0u;
+  v->bridge_detect_exit = 0u;
+  v->bridge_detect_side = 0u;
   s_inactive_seq++;
   v->bridge_frame_seq = s_inactive_seq;
   v->seq++;

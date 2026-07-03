@@ -189,7 +189,24 @@ typedef struct
   uint8 stair_enter_active;
   /* 1=惯导 BridgeIn～BridgeOut；CM7_1 仅此时跑 single_bridge 并 publish 视觉误差 */
   uint8 bridge_zone_active;
+  /* 1=桥预区或桥上：CM7_1 跑寻边+detect */
+  uint8 bridge_detect_arm;
 } dualcore_ctrl_to_ui_t;
+
+typedef struct
+{
+  float center_err;
+  uint8 track_valid;
+  uint8 fresh;
+  float road_w_avg;
+  uint8 pin_left;
+  uint8 pin_right;
+  uint8 enter_ready;
+  uint8 exit_ready;
+  uint8 detect_enter;
+  uint8 detect_exit;
+  uint8 detect_side;
+} dualcore_bridge_vision_snapshot_t;
 
 typedef struct
 {
@@ -200,7 +217,14 @@ typedef struct
   float bridge_center_err;
   uint8 bridge_track_valid;
   uint8 bridge_frame_fresh;
-  uint8 bridge_vision_pad;
+  uint8 bridge_detect_enter;
+  uint8 bridge_detect_exit;
+  float bridge_road_w_avg;
+  uint8 bridge_pin_left;
+  uint8 bridge_pin_right;
+  uint8 bridge_enter_ready;
+  uint8 bridge_exit_ready;
+  uint8 bridge_detect_side;
   uint32 bridge_frame_seq;
 } dualcore_vision_to_ctrl_t;
 
@@ -253,6 +277,7 @@ void dualcore_shared_dcache_invalidate(const void *addr, uint32 size);
 void dualcore_ctrl_to_ui_publish(void);
 void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, uint32 *vision_seq_out);
 void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
+void dualcore_bridge_vision_pull_snapshot(dualcore_bridge_vision_snapshot_t *out);
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */
 void dualcore_ui_cmd_consume_all(void);
 void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
@@ -264,6 +289,13 @@ uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f3
 /* frame_seq 递增发布台阶快照；jump_active 或 !stair_enter_active 时 step 写无效零帧 */
 void dualcore_vision_publish_after_step(uint32 frame_seq);
 void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 frame_seq);
+void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
+                                           float road_w_avg,
+                                           uint8 pin_left, uint8 pin_right,
+                                           uint8 enter_ready, uint8 exit_ready,
+                                           uint8 detect_enter, uint8 detect_exit,
+                                           uint8 detect_side,
+                                           uint32 frame_seq);
 void dualcore_bridge_vision_publish_inactive(void);
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif

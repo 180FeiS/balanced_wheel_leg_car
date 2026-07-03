@@ -1184,22 +1184,7 @@ void pid_ctrl_Run(void)
             g_bridge_cam_steer_active = 0u;
         }
         g_bridge_prev_zone_active = N.Bridge_Zone_Active;
-
-        if (!spin_enable &&
-            (N.Bridge_Zone_Active != 0u) &&
-            (bridge_track_valid != 0u))
-        {
-            if (g_bridge_cam_steer_active == 0u)
-            {
-                steer_task_stop();
-                g_bridge_cam_steer_active = 1u;
-            }
-            steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
-            set_steer_cmd(bridge_image_steer_ppd(bridge_center_err));
-        }
-        else
-        {
-            g_bridge_cam_steer_active = 0u;
+        g_bridge_cam_steer_active = 0u;
 
         if (!spin_enable &&
                  (remote_lora_steer_snapshot_valid != 0u) &&
@@ -1272,7 +1257,6 @@ void pid_ctrl_Run(void)
             {
                 steer_cmd = 0.0f;
             }
-        }
         }
     }
 

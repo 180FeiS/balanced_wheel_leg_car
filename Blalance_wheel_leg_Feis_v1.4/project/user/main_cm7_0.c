@@ -232,6 +232,7 @@ int main(void)
     dualcore_ui_cmd_consume_all();
     /* 验证用：左摇杆速度 + 左杆键翻转 Motor_Switch；正式策略可迁到 control/navigation */
     remote_lora_apply_validate_motor();
+    Nag_BridgeDetectUpdate();
     dualcore_ctrl_to_ui_publish();
 #endif
 

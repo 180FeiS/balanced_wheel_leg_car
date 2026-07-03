@@ -133,6 +133,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
 -------------------------------------------------------------------------------------------------------------------*/
 void all_init_cm7_0_control(void)
 {
+  buzzer_init();
   all_init(0, 0, 0,
            1, 1, 1, 1, 1, 1,
            1, 1, 0);
@@ -184,6 +185,39 @@ void buzzer_check(uint32 buzzer_time)
   gpio_set_level(BUZZER_PIN, GPIO_HIGH);
   system_delay_ms(buzzer_time);
   gpio_set_level(BUZZER_PIN, GPIO_LOW);
+}
+
+static uint16 s_buzzer_remain_ms;
+
+void buzzer_beep_request(uint32 ms)
+{
+  if (ms == 0u)
+  {
+    ms = BRIDGE_BEEP_MS;
+  }
+  if (ms > 0xFFFFu)
+  {
+    ms = 0xFFFFu;
+  }
+  s_buzzer_remain_ms = (uint16)ms;
+  gpio_set_level(BUZZER_PIN, GPIO_HIGH);
+}
+
+void buzzer_beep_poll(void)
+{
+  if (s_buzzer_remain_ms == 0u)
+  {
+    return;
+  }
+  if (s_buzzer_remain_ms <= 5u)
+  {
+    s_buzzer_remain_ms = 0u;
+    gpio_set_level(BUZZER_PIN, GPIO_LOW);
+  }
+  else
+  {
+    s_buzzer_remain_ms = (uint16)(s_buzzer_remain_ms - 5u);
+  }
 }
 
 /*-------------------------------------------------------------------------------------------------------------------

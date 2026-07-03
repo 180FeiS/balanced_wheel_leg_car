@@ -112,6 +112,7 @@ void pit0_ch1_isr() // 定时器通道 1 周期中断服务函数
 {
     pit_isr_flag_clear(PIT_CH1);// 5ms 横滚/俯仰腿控制（与俯仰角5ms同频）
     leg_control();
+    buzzer_beep_poll();
     /* 导航函数可能走到 Flash/慢路径，因此这里只挂任务，真正执行放到主循环。 */
     task_pending_push(&task_5ms_nav_pending);
 }
