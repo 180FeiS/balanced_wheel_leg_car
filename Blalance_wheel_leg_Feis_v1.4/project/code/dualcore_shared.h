@@ -187,6 +187,8 @@ typedef struct
   uint8 fusion_calib_failed;
   /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
   uint8 stair_enter_active;
+  /* 1=惯导 BridgeIn～BridgeOut；CM7_1 仅此时跑 single_bridge 并 publish 视觉误差 */
+  uint8 bridge_zone_active;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct
@@ -195,6 +197,11 @@ typedef struct
   /* jump_active==1 或 stair_enter_active==0 时 publish 写全 0 无效帧，勿作控车/决策 */
   step_info_t step;
   uint32 frame_seq;
+  float bridge_center_err;
+  uint8 bridge_track_valid;
+  uint8 bridge_frame_fresh;
+  uint8 bridge_vision_pad;
+  uint32 bridge_frame_seq;
 } dualcore_vision_to_ctrl_t;
 
 typedef struct
@@ -245,6 +252,7 @@ void dualcore_shared_dcache_invalidate(const void *addr, uint32 size);
 #if defined(CY_CORE_CM7_0)
 void dualcore_ctrl_to_ui_publish(void);
 void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, uint32 *vision_seq_out);
+void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */
 void dualcore_ui_cmd_consume_all(void);
 void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
@@ -255,6 +263,8 @@ void dualcore_ctrl_to_ui_pull(dualcore_ctrl_to_ui_t *out);
 uint8 dualcore_ui_cmd_push(dualcore_ui_cmd_op_t op, uint32 arg_u32, float arg_f32);
 /* frame_seq 递增发布台阶快照；jump_active 或 !stair_enter_active 时 step 写无效零帧 */
 void dualcore_vision_publish_after_step(uint32 frame_seq);
+void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 frame_seq);
+void dualcore_bridge_vision_publish_inactive(void);
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif
 

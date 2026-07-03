@@ -39,6 +39,7 @@
 #include "image.h"
 #include "Menu.h"
 #include "dualcore_shared.h"
+#include "single_bridge.h"
 
 /*-------------------------------------------------------------------------------------------------------------------
  * CM7_1 主循环每圈最多发一帧 VOFA（JustFloat 经 wireless_uart）。
@@ -86,6 +87,24 @@ int main(void)
         {
             step_detect();
             step_visual_jump_after_step();
+        }
+        /* 单边桥视觉：仅惯导 BridgeIn～BridgeOut；与台阶/菜单 AE 互斥 */
+        else if (!MenuIsImageSectionPage() && (ctrl.bridge_zone_active != 0u))
+        {
+            static uint32 bridge_frame_seq;
+            single_bridge_track_t track;
+
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                single_bridge_gray_diff_track(hd_threshold, &track);
+                bridge_frame_seq++;
+                dualcore_bridge_vision_publish(track.center_err, track.track_valid, bridge_frame_seq);
+            }
+        }
+        else if (!MenuIsImageSectionPage())
+        {
+            dualcore_bridge_vision_publish_inactive();
         }
         image_ae_session_poll();
         selectMenu();

@@ -262,6 +262,41 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_RATE_SETTLE_DPS        6.0f   // 接近目标时，实测角速度也要足够小才允许结束
 #define STEER_RATE_TARGET_MAX_DPS   200.0f   // 外环生成的目标角速度上限，限制普通转向的灵敏度
 #define STEER_CMD_MAX              1500.0f   // 最终差速限幅，防止普通转向输出过猛影响平衡
+
+#define BRIDGE_STEER_KP            0.015f
+#define BRIDGE_STEER_KPP           0.00008f
+#define BRIDGE_STEER_KD            0.4f
+#define BRIDGE_GYRO_SUPPRESS_K     0.25f
+
+static float bridge_image_steer_last_err = 0.0f;
+static uint8 g_bridge_vision_track_valid = 0u;
+static uint8 g_bridge_prev_zone_active = 0u;
+static uint8 g_bridge_cam_steer_active = 0u;
+
+static float bridge_image_steer_ppd(float center_err)
+{
+    float kp1;
+    float kp2;
+    float kd;
+    float out;
+
+    kp1 = center_err * BRIDGE_STEER_KP;
+    kp2 = center_err * fabsf(center_err) * BRIDGE_STEER_KPP;
+    kd = (center_err - bridge_image_steer_last_err) * BRIDGE_STEER_KD;
+    bridge_image_steer_last_err = center_err;
+    out = kp1 + kp2 + kd - imu_data.gyro_z * DEG_TO_RAD * BRIDGE_GYRO_SUPPRESS_K;
+    return clip(out, -STEER_CMD_MAX, STEER_CMD_MAX);
+}
+
+void bridge_image_steer_reset(void)
+{
+    bridge_image_steer_last_err = 0.0f;
+}
+
+uint8 control_bridge_vision_track_valid(void)
+{
+    return g_bridge_vision_track_valid;
+}
 #define STEER_SETTLE_COUNT_MAX      20u     // 连续满足收敛条件若干次再结束，避免边界抖动误判
 
 /* 自旋任务参数与调试变量 */
@@ -1135,76 +1170,109 @@ void pid_ctrl_Run(void)
         spin_cmd = 0.0f;
     }
 
-    if (!spin_enable &&
-        (remote_lora_steer_snapshot_valid != 0u) &&
-        (remote_lora_nav_allows_heading_override() != 0u))
     {
-        /* LORA 右杆横向 right_x：开环角速度，remote_lora_steer_rate_cmd_dps 经限幅后作 turn_gyro 目标，松杆为 0，不拉固定航向 */
-        if (steer_enable != 0u)
+        float bridge_center_err = 0.0f;
+        uint8 bridge_track_valid = 0u;
+        uint8 bridge_fresh = 0u;
+
+        dualcore_bridge_vision_pull(&bridge_center_err, &bridge_track_valid, &bridge_fresh);
+        g_bridge_vision_track_valid = bridge_track_valid;
+
+        if ((N.Bridge_Zone_Active == 0u) && (g_bridge_prev_zone_active != 0u))
         {
-            steer_task_stop(); /* 仅退出航向闭环时清一次，避免每拍 reset turn_gyro */
+            bridge_image_steer_reset();
+            g_bridge_cam_steer_active = 0u;
         }
+        g_bridge_prev_zone_active = N.Bridge_Zone_Active;
 
-        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
-        steer_rate_target_dps = clip(
-            remote_lora_steer_rate_cmd_dps,
-            -STEER_RATE_TARGET_MAX_DPS,
-            STEER_RATE_TARGET_MAX_DPS);
-
-        pid_set_target(&turn_gyro, steer_rate_target_dps);
-        pid_get_observation(&turn_gyro, steer_rate_meas_dps);
-        pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
-        pid_run(&turn_gyro);
-        set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
-    }
-    else if (!spin_enable && steer_enable)
-    {
-        static uint8 steer_settle_count = 0;
-        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
-        steer_rate_target_dps = 0.0f;
-
-        /* 普通转向用“目标航向 - 当前航向”的归一化误差做外环输入。 */
-        steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
-
-        /* 外环：航向误差 -> 目标角速度。 */
-        pid_set_target(&turn_angle, 0.0f);
-        pid_get_observation(&turn_angle, -steer_angle_err);
-        pid_set_dt(&turn_angle, dt_pid_turn_angle);
-        pid_run(&turn_angle);
-        steer_rate_target_dps = clip(turn_angle.out, -STEER_RATE_TARGET_MAX_DPS, STEER_RATE_TARGET_MAX_DPS);
-
-        /* 内环：目标角速度 -> 左右轮差速输出。 */
-        pid_set_target(&turn_gyro, steer_rate_target_dps);
-        pid_get_observation(&turn_gyro, steer_rate_meas_dps);
-        pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
-        pid_run(&turn_gyro);
-        set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
-
-        /* 角度和角速度都进入收敛窗口后，再连续确认若干个周期再结束，
-         * 可以避免刚到目标附近时因为摆头/噪声导致“到位-没到位”反复抖动。
-         */
-        if (ABS(steer_angle_err) <= STEER_ANGLE_SETTLE_DEG &&
-            ABS(steer_rate_meas_dps) <= STEER_RATE_SETTLE_DPS)
+        if (!spin_enable &&
+            (N.Bridge_Zone_Active != 0u) &&
+            (bridge_track_valid != 0u))
         {
-            if (++steer_settle_count >= STEER_SETTLE_COUNT_MAX)
+            if (g_bridge_cam_steer_active == 0u)
             {
-                steer_finish(1);
-                steer_settle_count = 0;
+                steer_task_stop();
+                g_bridge_cam_steer_active = 1u;
             }
+            steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+            set_steer_cmd(bridge_image_steer_ppd(bridge_center_err));
         }
         else
         {
-            steer_settle_count = 0;
-        }
-    }
-    else if (!spin_enable)
-    {
-        steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
-        steer_rate_target_dps = 0.0f;
-        steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
-        if (!steer_enable)
+            g_bridge_cam_steer_active = 0u;
+
+        if (!spin_enable &&
+                 (remote_lora_steer_snapshot_valid != 0u) &&
+                 (remote_lora_nav_allows_heading_override() != 0u))
         {
-            steer_cmd = 0.0f;
+            /* LORA 右杆横向 right_x：开环角速度，remote_lora_steer_rate_cmd_dps 经限幅后作 turn_gyro 目标，松杆为 0，不拉固定航向 */
+            if (steer_enable != 0u)
+            {
+                steer_task_stop(); /* 仅退出航向闭环时清一次，避免每拍 reset turn_gyro */
+            }
+
+            steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+            steer_rate_target_dps = clip(
+                remote_lora_steer_rate_cmd_dps,
+                -STEER_RATE_TARGET_MAX_DPS,
+                STEER_RATE_TARGET_MAX_DPS);
+
+            pid_set_target(&turn_gyro, steer_rate_target_dps);
+            pid_get_observation(&turn_gyro, steer_rate_meas_dps);
+            pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
+            pid_run(&turn_gyro);
+            set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
+        }
+        else if (!spin_enable && steer_enable)
+        {
+            static uint8 steer_settle_count = 0;
+            steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+            steer_rate_target_dps = 0.0f;
+
+            /* 普通转向用“目标航向 - 当前航向”的归一化误差做外环输入。 */
+            steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
+
+            /* 外环：航向误差 -> 目标角速度。 */
+            pid_set_target(&turn_angle, 0.0f);
+            pid_get_observation(&turn_angle, -steer_angle_err);
+            pid_set_dt(&turn_angle, dt_pid_turn_angle);
+            pid_run(&turn_angle);
+            steer_rate_target_dps = clip(turn_angle.out, -STEER_RATE_TARGET_MAX_DPS, STEER_RATE_TARGET_MAX_DPS);
+
+            /* 内环：目标角速度 -> 左右轮差速输出。 */
+            pid_set_target(&turn_gyro, steer_rate_target_dps);
+            pid_get_observation(&turn_gyro, steer_rate_meas_dps);
+            pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
+            pid_run(&turn_gyro);
+            set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
+
+            /* 角度和角速度都进入收敛窗口后，再连续确认若干个周期再结束，
+             * 可以避免刚到目标附近时因为摆头/噪声导致“到位-没到位”反复抖动。
+             */
+            if (ABS(steer_angle_err) <= STEER_ANGLE_SETTLE_DEG &&
+                ABS(steer_rate_meas_dps) <= STEER_RATE_SETTLE_DPS)
+            {
+                if (++steer_settle_count >= STEER_SETTLE_COUNT_MAX)
+                {
+                    steer_finish(1);
+                    steer_settle_count = 0;
+                }
+            }
+            else
+            {
+                steer_settle_count = 0;
+            }
+        }
+        else if (!spin_enable)
+        {
+            steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
+            steer_rate_target_dps = 0.0f;
+            steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
+            if (!steer_enable)
+            {
+                steer_cmd = 0.0f;
+            }
+        }
         }
     }
 

@@ -554,6 +554,15 @@ float Err_Sum(void)
     return err;
 }
 
+uint8 image_get_err_weight(int row)
+{
+    if (row < 0 || row >= (int)IMAGE_COMPRESS_H)
+    {
+        return 0u;
+    }
+    return image_err_weight[row];
+}
+
 float Err_bx_Sum(void)
 {
     int   i;

@@ -89,6 +89,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
   c->stair_enter_active = (uint8)((N.Event_Active != 0u) &&
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
+  c->bridge_zone_active = N.Bridge_Zone_Active;
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;
@@ -252,6 +253,31 @@ void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, 
     if (vision_seq_out != NULL)
     {
       *vision_seq_out = g_dualcore_blob.vision.seq;
+    }
+  }
+}
+
+void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *fresh)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+  static uint32 s_last_bridge_frame_seq;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  if (center_err != NULL)
+  {
+    *center_err = v->bridge_center_err;
+  }
+  if (track_valid != NULL)
+  {
+    *track_valid = v->bridge_track_valid;
+  }
+  if (fresh != NULL)
+  {
+    *fresh = (uint8)((v->bridge_frame_seq != s_last_bridge_frame_seq) ? 1u : 0u);
+    if (*fresh != 0u)
+    {
+      s_last_bridge_frame_seq = v->bridge_frame_seq;
     }
   }
 }
@@ -472,6 +498,40 @@ void dualcore_vision_publish_after_step(uint32 frame_seq)
     v->step = step_data;
   }
   v->frame_seq = frame_seq;
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_bridge_vision_publish(float center_err, uint8 track_valid, uint32 frame_seq)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  v->bridge_center_err = center_err;
+  v->bridge_track_valid = track_valid;
+  v->bridge_frame_fresh = 1u;
+  v->bridge_frame_seq = frame_seq;
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_bridge_vision_publish_inactive(void)
+{
+  static uint32 s_inactive_seq;
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  v->bridge_center_err = 0.0f;
+  v->bridge_track_valid = 0u;
+  v->bridge_frame_fresh = 0u;
+  s_inactive_seq++;
+  v->bridge_frame_seq = s_inactive_seq;
   v->seq++;
   __DSB();
 

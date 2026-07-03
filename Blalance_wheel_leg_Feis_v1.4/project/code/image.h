@@ -85,6 +85,8 @@ void    Longest_White_Column        (void);
 
 float   Err_Sum                     (void);
 float   Err_bx_Sum                  (void);
+/** 行加权表，row 越界返回 0 */
+uint8   image_get_err_weight        (int row);
 
 /** Flash 页 49：上电读 / AE 收敛后写 */
 void    image_camera_exposure_flash_read(void);

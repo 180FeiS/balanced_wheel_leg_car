@@ -359,8 +359,9 @@ void Nag_Hook_ExitCones_Stop(void) {}
 
 /*
  * 单边桥进/出：与锥桶相同为惯导路径单点标记；Start 立刻 true，首拍 IsDone 即 true。
- * 桥进：备份并设置 leg_long=5.5、roll_balance_en=1；桥出：leg_long=3.5、roll_balance_en=0。
- * 转向全程由 Nag_Run 跟踪 Nav_read[]，区段调速由 Nag_ApplyBridgeZoneSpeed() 处理。
+ * 桥进：备份并设置 leg_long=5.5、roll_balance_en=1，Bridge_Zone_Active=1，启用 single_bridge 中线循迹。
+ * 桥出：leg_long=3.5、roll_balance_en=0，Bridge_Zone_Active=0，关闭图像导航，恢复纯 Nag_Run 惯导 yaw。
+ * 区段调速由 Nag_ApplyBridgeZoneSpeed() 处理。
  */
 bool Nag_Hook_EnterBridge_Start(void)
 {
@@ -2278,6 +2279,13 @@ void Nag_Run()
 
     yaw_err = (float)ange_deviation1(N.Angle_Run, euler_angle.yaw);
     N.Final_Out = yaw_err;
+
+    /* 桥区内中线有效时由 control.c 图像 PPD 转向，此处不再登记惯导 yaw */
+    if (N.Bridge_Zone_Active != 0u && control_bridge_vision_track_valid() != 0u)
+    {
+        return;
+    }
+
     if (!N.Target_Request_Valid ||
         fabsf((float)ange_deviation1(N.Angle_Run, N.Requested_Target_Yaw)) > 0.01f)
     {

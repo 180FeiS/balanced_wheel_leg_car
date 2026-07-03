@@ -181,6 +181,12 @@ void steer_task_start(float delta_deg);                     // 启动相对转�
 
 void steer_task_stop(void);                                 // 停止普通转向任务并清空本次转向输出
 
+/** 桥区内 CM7_1 视觉 track_valid 快照，供 Nag_Run 判断是否暂停惯导 yaw */
+uint8 control_bridge_vision_track_valid(void);
+
+/** BridgeOut 或区段结束时复位图像 PPD 状态 */
+void bridge_image_steer_reset(void);
+
 void pid_ctrl_Run(void);                                    //PID控制平衡和行驶
 
 void leg_control(void);                                     //控制腿高
