@@ -17,6 +17,7 @@
 #include "dualcore_shared.h"
 
 #define BRIDGE_VISION_ENTER_TIMEOUT_MS  1500u
+#define NAG_STAIR_PAIRED_ENTER_INVALID    0xFFFFu
 
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points);
 static uint16 Nag_DistanceToPoints(float distance_cm);
@@ -960,6 +961,7 @@ static void Nag_ClearEventRuntimeState(void)
     N.Stair_Lookback_Yaw = 0.0f;
     N.Stair_Jump_Completed_Count = 0u;
     N.Stair_Chain_To_Exit = 0u;
+    N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
 }
 
 void Nag_EventForceReset(void)
@@ -1184,6 +1186,123 @@ static uint16 Nag_DistanceToPoints(float distance_cm)
     }
     return points;
 }
+
+/*
+ * 双点录制：找 Ein 之后最近的 EXIT_STAIR 标记索引 Eout（不依赖 Event_Consumed）。
+ */
+static uint16 Nag_FindPairedExitStairMarker(uint16 enter_stair_marker)
+{
+    uint8 event_index = 0u;
+    uint16 best_marker = NAG_STAIR_PAIRED_ENTER_INVALID;
+
+    if (enter_stair_marker == NAG_STAIR_PAIRED_ENTER_INVALID)
+    {
+        return NAG_STAIR_PAIRED_ENTER_INVALID;
+    }
+
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        uint16 exit_marker;
+
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_STAIR)
+        {
+            continue;
+        }
+
+        exit_marker = Nag_Event_Table[event_index].enter_index;
+        if (exit_marker > enter_stair_marker &&
+            exit_marker < best_marker)
+        {
+            best_marker = exit_marker;
+        }
+    }
+
+    return best_marker;
+}
+
+/* EXIT_STAIR 完成后：从 Eout+1 接回；链式 EXIT 用锁存的 Ein 查表；无 EXIT 标记则 fallback Ein+1。 */
+static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_index)
+{
+    uint16 exit_marker;
+    uint16 resume_index;
+    uint16 max_run_index;
+
+    if (event_index != 0xFFu)
+    {
+        resume_index = (uint16)(event_enter_index + 1u);
+    }
+    else if (N.Stair_Paired_Enter_Index != NAG_STAIR_PAIRED_ENTER_INVALID)
+    {
+        exit_marker = Nag_FindPairedExitStairMarker(N.Stair_Paired_Enter_Index);
+        if (exit_marker != NAG_STAIR_PAIRED_ENTER_INVALID)
+        {
+            resume_index = (uint16)(exit_marker + 1u);
+        }
+        else
+        {
+            resume_index = (uint16)(N.Stair_Paired_Enter_Index + 1u);
+        }
+    }
+    else
+    {
+        resume_index = N.Run_index;
+    }
+
+    if (N.Save_index >= 2u)
+    {
+        max_run_index = (uint16)(N.Save_index - 2u);
+        if (resume_index > max_run_index)
+        {
+            resume_index = max_run_index;
+        }
+    }
+
+    return resume_index;
+}
+
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_HEADING_CALIB_ENABLE
+/*
+ * 融合回放：录制时 index=1 会把北向标定直行段写入 flash，回放标定在 index=2 不推进 Run_index。
+ * 进入 index=3 前按标定距离预跳索引，与录制路径起点对齐；纯惯导/未标定不调用。
+ */
+static void Nag_SkipReplayRunIndexForFusionHeadingCalib(void)
+{
+    uint16 skip_points;
+    uint16 max_run_index;
+
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    if (NavFusion_IsHeadingCalibSessionActive() == 0u ||
+        NavFusion_IsHeadingCalibReady() == 0u)
+    {
+        return;
+    }
+    if (N.Save_index < 2u)
+    {
+        return;
+    }
+
+    skip_points = Nag_DistanceToPoints(NAV_FUSION_HEADING_CALIB_DISTANCE_M * 100.0f);
+    if (skip_points == 0u)
+    {
+        return;
+    }
+
+    max_run_index = (uint16)(N.Save_index - 2u);
+    if (skip_points > max_run_index)
+    {
+        N.Run_index = max_run_index;
+    }
+    else
+    {
+        N.Run_index = skip_points;
+    }
+    N.Mileage_All = 0.0f;
+}
+#endif
 
 /* 事件调速配置：target_speed=元素目标速度；pre_decel/pre_accel 为 cm，0 表示关闭。 */
 bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
@@ -2272,7 +2391,7 @@ float Nag_GetControlSpeedTarget(void)
         return 0.0f;
     }
 
-    /* 惯导录制 + 遥控在线：速度环直接使用遥控映射的 motor_user_speed_cmd；掉线立即停车 */
+    /* 惯导录制 + 遥控在线：速度遥控映射的 环直接使用motor_user_speed_cmd；掉线立即停车 */
     if (g_menu_input_remote_first != 0u &&
         nav_heading_mode == NAV_HEADING_MODE_INS &&
         N.Nag_SystemRun_Index == 1u && N.End_f == 0u &&
@@ -2282,14 +2401,12 @@ float Nag_GetControlSpeedTarget(void)
     }
 
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_HEADING_CALIB_ENABLE
-    /* 融合回放准备态：北向标定直行 5m 期间允许遥控给速，航向由 NavFusion 锁定 */
+    /* 融合回放准备态：北向标定直行 5m 期间用 Launch 速度，航向由 NavFusion 锁定；纯惯导不进入 */
     if (NavFusion_IsRuntimeEnabled() != 0u &&
         NavFusion_IsHeadingCalibrating() != 0u &&
-        N.Nag_SystemRun_Index == 2u &&
-        g_menu_input_remote_first != 0u &&
-        remote_lora_steer_snapshot_valid != 0u)
+        N.Nag_SystemRun_Index == 2u)
     {
-        return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
+        return fabsf(run_launch_speed);
     }
 #endif
 
@@ -2509,14 +2626,13 @@ void Run_Nag_GPS()
 
     if (N.Event_Active)
     {
-        if (!Nag_Spin_ShouldTrackInsYaw() &&
-            N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR)
+        if (!Nag_Spin_ShouldTrackInsYaw())
         {
-            /* 非 Spin 等待态、非 EXIT_STAIR：ENTER_STAIR 等冻结 Run_index。 */
+            /* 非 Spin 等待态：ENTER/EXIT_STAIR 等冻结 Run_index。 */
             N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
             return;
         }
-        /* Spin 等待期 / EXIT_STAIR：仍按里程推进 Run_index。 */
+        /* Spin 等待期：仍按里程推进 Run_index。 */
     }
 
     N.Mileage_All += Nag_GetMileageStep();
@@ -2549,6 +2665,7 @@ void Run_Nag_GPS()
 void Init_Nag()
 {
     memset(&N, 0, sizeof(N));
+    N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
     memset(Nag_Event_Table, 0, sizeof(Nag_Event_Table));
     N.Flash_page_index=Nag_Start_Page;
     N.Event_Active_Index = 0xFFu;
@@ -2603,6 +2720,10 @@ static void Nag_TryEnterReplayRun(void)
     if (NavFusion_IsHeadingCalibSessionActive() != 0u &&
         NavFusion_IsHeadingCalibReady() == 0u)
     {
+        /* 融合回放：北向标定直行 5m 期间用 Launch 速度，标定完成后再进 index=3 */
+        motor_user_speed_cmd = run_launch_speed;
+        N.Target_Speed = fabsf((float)motor_user_speed_cmd);
+        Nag_UpdatePreviewAndSpeedTarget();
         return;
     }
 #endif
@@ -2616,6 +2737,10 @@ static void Nag_TryEnterReplayRun(void)
     Nag_UpdatePreviewAndSpeedTarget();
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
     NavFusion_SyncMileageSnapshot();
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    Nag_SkipReplayRunIndexForFusionHeadingCalib();
+#endif
+    Nag_UpdatePreviewAndSpeedTarget();
 #endif
     N.Nag_SystemRun_Index = 3u;
 }
@@ -2743,9 +2868,22 @@ void Nag_Notify_Event_Done(void)
         N.Stair_Chain_To_Exit = 1u;
     }
 
-    if (event_type == NAG_EVENT_TYPE_EXIT_STAIR && event_index == 0xFFu)
+    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR &&
+        event_index != 0xFFu && event_index < N.Event_Count)
     {
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        N.Stair_Paired_Enter_Index = enter_index;
+        /* 链式切 EXIT 前保持 Ein，不推到 Ein+1。 */
         resume_index = N.Run_index;
+    }
+    else if (event_type == NAG_EVENT_TYPE_EXIT_STAIR)
+    {
+        if (event_index != 0xFFu && event_index < N.Event_Count)
+        {
+            enter_index = Nag_Event_Table[event_index].enter_index;
+        }
+        resume_index = Nag_ComputeStairResumeIndex(event_index, enter_index);
+        N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
     }
     else if (event_index != 0xFFu && event_index < N.Event_Count)
     {
@@ -2781,10 +2919,11 @@ void Nag_Notify_Event_Done(void)
         return;
     }
 
-    if (event_type == NAG_EVENT_TYPE_SPIN)
+    if (event_type == NAG_EVENT_TYPE_SPIN ||
+        event_type == NAG_EVENT_TYPE_EXIT_STAIR)
     {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
-        /* 丢弃 Spin 期间融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
+        /* 丢弃元素期融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
         NavFusion_SyncMileageSnapshot();
 #endif
     }

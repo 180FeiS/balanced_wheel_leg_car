@@ -137,6 +137,13 @@ extern float nag_enter_bridge_pre_decel_dist_cm;
 #define Nag_Bump_Target_Speed 220.0f
 #define Nag_Bump_PreDecel_Dist_cm 0.0f
 
+/*
+ * 台阶双点录制（惯导回放）：
+ * 1) KEY4 切 EnterStair，上台阶前打点（Ein）；
+ * 2) 三级跳稳定后 KEY4 切 ExitStair 打点（Eout）；
+ * 3) 回放：ENTER~EXIT 间 flash 路径不推进 Run_index；EXIT 完成后从 Eout+1 接回惯导。
+ * 见 Nag_FindPairedExitStairMarker / Nag_ComputeStairResumeIndex（navigation.c）。
+ */
 /* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 前回溯 yaw 均值；见 Nag_Hook_EnterStair_* */
 #define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
 #define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
@@ -451,6 +458,7 @@ typedef struct{
        float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
        uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
        uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
+       uint16 Stair_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Ein；0xFFFF=无效 */
        float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
        uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
        uint8 Bridge_Zone_Active;      // 1=视觉/兜底确认进桥未出桥
