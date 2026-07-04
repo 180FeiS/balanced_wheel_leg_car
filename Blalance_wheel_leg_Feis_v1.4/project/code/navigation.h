@@ -45,7 +45,7 @@
 #define Nag_OdoSlip_Enable 1u
 
 /* 轮距（cm）：左右驱动轮滚动中心线间距；宽胎以轮中面测量，外八/内八明显时用圆弧实车微调 */
-#define Nag_Wheel_Track_Cm 16.0f
+#define Nag_Wheel_Track_Cm 17.3f
 
 /*
  * 左右反推中心速度一致性阈值（cm/s）。
