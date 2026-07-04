@@ -91,6 +91,15 @@ void dualcore_ctrl_to_ui_publish(void)
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
   c->bridge_zone_active = N.Bridge_Zone_Active;
   c->bridge_detect_arm = Nag_BridgeDetectShouldArm();
+  c->odo_wheel_left_cmps = N.Odo_Wheel_Left_Cmps;
+  c->odo_wheel_right_cmps = N.Odo_Wheel_Right_Cmps;
+  c->odo_gyro_z_dps = N.Odo_Gyro_Z_Dps;
+  c->odo_vc_from_l_cmps = N.Odo_Vc_From_L_Cmps;
+  c->odo_vc_from_r_cmps = N.Odo_Vc_From_R_Cmps;
+  c->odo_corr_speed_cmps = N.Odo_Corrected_Speed_Cmps;
+  c->odo_slip_state = (float)N.Odo_Slip_State;
+  c->odo_protected_step_cm = N.Odo_Protected_Step_Cm;
+  c->odo_rollback_applied_cm = N.Odo_Rollback_Applied_Cm;
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;

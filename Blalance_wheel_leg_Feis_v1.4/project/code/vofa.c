@@ -231,7 +231,7 @@ void SendDataToVofa()
  * 函数简介     双核模式下在 CM7_1 将姿态/速度/融合调试帧发到 VOFA（无线 JustFloat）
  * 前置条件     CM7_0 主循环已周期性调用 dualcore_ctrl_to_ui_publish()；本核 all_init_cm7_1_ui 已 wireless_uart_init
  * 分组说明     nag_vofa_group % NAG_VOFA_GROUP_COUNT；菜单 n / DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT 循环切组。
- *              0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合（详见 vofa.h）。
+ *              0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑（详见 vofa.h）。
  * 调用关系     SendDataStreamToVOFA 内部仍写 vofa_justfloat_frame_tail 作为帧尾
  *-------------------------------------------------------------------------------------------------------------------*/
 void vofa_send_nav_from_dualcore_snapshot(void)
@@ -256,6 +256,15 @@ void vofa_send_nav_from_dualcore_snapshot(void)
                          c.fusion_gps_residual_m,
                          c.fusion_hold_dist_m,
                          c.fusion_heading_bias_deg);
+    break;
+  case VOFA_GROUP_ODO_SLIP_DEBUG:
+    SendDataStreamToVOFA(6,
+                         c.odo_wheel_left_cmps,
+                         c.odo_wheel_right_cmps,
+                         c.odo_gyro_z_dps,
+                         c.odo_vc_from_l_cmps,
+                         c.odo_vc_from_r_cmps,
+                         c.odo_corr_speed_cmps);
     break;
   default:
     break;

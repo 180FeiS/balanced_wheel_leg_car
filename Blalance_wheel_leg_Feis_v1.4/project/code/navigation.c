@@ -15,6 +15,8 @@
 #include "my_gps.h"
 #include "init.h"
 #include "dualcore_shared.h"
+#include "ekf.h"
+#include "small_driver_uart_control.h"
 
 #define BRIDGE_VISION_ENTER_TIMEOUT_MS  1500u
 #define NAG_STAIR_PAIRED_ENTER_INVALID    0xFFFFu
@@ -1981,6 +1983,313 @@ static void Nag_TryEnterEvent(void)
     }
 }
 
+#if Nag_OdoSlip_Enable
+
+/*
+ * 编码器速度 -> 前向线速度（cm/s）。
+ * 符号与 speed 环一致：左轮取 -receive_left，右轮取 +receive_right。
+ */
+static float Nag_OdoEncToCmps(float enc_speed)
+{
+    return enc_speed * Nag_Speed_To_Mileage_Scale;
+}
+
+static float Nag_OdoCmpsToStep(float speed_cmps)
+{
+    return fabsf(speed_cmps) * Nag_Sample_Dt;
+}
+
+static void Nag_OdoSlip_PushHistory(float raw_step_cm, float prot_step_cm)
+{
+    N.Odo_History_Raw[N.Odo_History_Idx] = raw_step_cm;
+    N.Odo_History_Prot[N.Odo_History_Idx] = prot_step_cm;
+    N.Odo_History_Idx = (uint8)((N.Odo_History_Idx + 1u) % Nag_OdoSlip_History_Len);
+}
+
+static float Nag_OdoSlip_SumHistoryExcess(void)
+{
+    uint8 i = 0u;
+    float excess = 0.0f;
+    float delta = 0.0f;
+
+    for (i = 0u; i < Nag_OdoSlip_History_Len; i++)
+    {
+        delta = N.Odo_History_Raw[i] - N.Odo_History_Prot[i];
+        if (delta > 0.0f)
+        {
+            excess += delta;
+        }
+    }
+    return excess;
+}
+
+static float Nag_OdoSlip_ClampSlew(float target_cmps, float reference_cmps)
+{
+    float delta = target_cmps - reference_cmps;
+
+    if (delta > Nag_OdoSlip_Instant_Slew_Max_Cmps)
+    {
+        return reference_cmps + Nag_OdoSlip_Instant_Slew_Max_Cmps;
+    }
+    if (delta < -Nag_OdoSlip_Instant_Slew_Max_Cmps)
+    {
+        return reference_cmps - Nag_OdoSlip_Instant_Slew_Max_Cmps;
+    }
+    return target_cmps;
+}
+
+/*
+ * 第一层：瞬时保护。不一致时优先信更稳定的一侧，并对步长做 slew 限幅。
+ */
+static float Nag_OdoSlip_InstantProtectSpeed(float vc_l, float vc_r, uint8 *suspect_left, uint8 *suspect_right)
+{
+    float diff = 0.0f;
+    float err_l = 0.0f;
+    float err_r = 0.0f;
+    float v_corr = 0.0f;
+    float trust_ref = N.Odo_Last_Trust_Speed_Cmps;
+
+    if (suspect_left != NULL)
+    {
+        *suspect_left = 0u;
+    }
+    if (suspect_right != NULL)
+    {
+        *suspect_right = 0u;
+    }
+
+    diff = fabsf(vc_l - vc_r);
+    if (diff < Nag_OdoSlip_Consistency_Th_Cmps)
+    {
+        v_corr = 0.5f * (vc_l + vc_r);
+        N.Odo_Last_Trust_Speed_Cmps = v_corr;
+        return v_corr;
+    }
+
+    err_l = fabsf(vc_l - trust_ref);
+    err_r = fabsf(vc_r - trust_ref);
+
+    if (err_l + 20.0f < err_r)
+    {
+        if (suspect_left != NULL)
+        {
+            *suspect_left = 1u;
+        }
+        v_corr = vc_r;
+    }
+    else if (err_r + 20.0f < err_l)
+    {
+        if (suspect_right != NULL)
+        {
+            *suspect_right = 1u;
+        }
+        v_corr = vc_l;
+    }
+    else
+    {
+        v_corr = (fabsf(vc_l) < fabsf(vc_r)) ? vc_l : vc_r;
+        if (suspect_left != NULL && suspect_right != NULL)
+        {
+            *suspect_left = 1u;
+            *suspect_right = 1u;
+        }
+    }
+
+    v_corr = Nag_OdoSlip_ClampSlew(v_corr, trust_ref);
+    return v_corr;
+}
+
+/*
+ * 第二层：状态确认。连续若干 ms 异常后进入左/右/双侧打滑态。
+ */
+static void Nag_OdoSlip_UpdateState(uint8 suspect_left, uint8 suspect_right, float vc_l, float vc_r)
+{
+    uint8 prev_state = N.Odo_Slip_State;
+    uint8 target_state = NAG_ODO_SLIP_NORMAL;
+
+    if (suspect_left != 0u && suspect_right == 0u)
+    {
+        target_state = NAG_ODO_SLIP_LEFT;
+    }
+    else if (suspect_right != 0u && suspect_left == 0u)
+    {
+        target_state = NAG_ODO_SLIP_RIGHT;
+    }
+    else if (suspect_left != 0u && suspect_right != 0u)
+    {
+        target_state = NAG_ODO_SLIP_BOTH;
+    }
+
+    if (target_state == NAG_ODO_SLIP_NORMAL)
+    {
+        N.Odo_Slip_Enter_Count = 0u;
+        if (N.Odo_Slip_State != NAG_ODO_SLIP_NORMAL)
+        {
+            if (++N.Odo_Slip_Exit_Count >= Nag_OdoSlip_Exit_Count)
+            {
+                N.Odo_Slip_State = NAG_ODO_SLIP_NORMAL;
+                N.Odo_Slip_Exit_Count = 0u;
+            }
+        }
+        else
+        {
+            N.Odo_Slip_Exit_Count = 0u;
+        }
+        return;
+    }
+
+    N.Odo_Slip_Exit_Count = 0u;
+    if (N.Odo_Slip_State == target_state)
+    {
+        N.Odo_Slip_Enter_Count = Nag_OdoSlip_Enter_Count;
+        return;
+    }
+
+    if (++N.Odo_Slip_Enter_Count >= Nag_OdoSlip_Enter_Count)
+    {
+        if (prev_state == NAG_ODO_SLIP_NORMAL)
+        {
+            /* 第三层：刚确认打滑，对短窗内多推进的里程排队补扣 */
+            N.Odo_Rollback_Pending_Cm += Nag_OdoSlip_SumHistoryExcess();
+        }
+        N.Odo_Slip_State = target_state;
+        N.Odo_Slip_Enter_Count = Nag_OdoSlip_Enter_Count;
+    }
+
+    (void)vc_l;
+    (void)vc_r;
+}
+
+static float Nag_OdoSlip_StateSpeed(float instant_cmps)
+{
+    switch (N.Odo_Slip_State)
+    {
+        case NAG_ODO_SLIP_LEFT:
+            return N.Odo_Vc_From_R_Cmps;
+        case NAG_ODO_SLIP_RIGHT:
+            return N.Odo_Vc_From_L_Cmps;
+        case NAG_ODO_SLIP_BOTH:
+            return Nag_OdoSlip_ClampSlew(instant_cmps, N.Odo_Last_Trust_Speed_Cmps);
+        default:
+            return instant_cmps;
+    }
+}
+
+/*
+ * 里程纠偏主入口：更新检测态并返回本拍应积分的步长（cm）。
+ */
+static float Nag_GetCorrectedMileageStepCm(float raw_speed_enc)
+{
+    float w_radps = 0.0f;
+    float half_track_cm = 0.5f * Nag_Wheel_Track_Cm;
+    float vc_l = 0.0f;
+    float vc_r = 0.0f;
+    float raw_step = 0.0f;
+    float prot_step = 0.0f;
+    float final_step = 0.0f;
+    float instant_cmps = 0.0f;
+    float state_cmps = 0.0f;
+    uint8 suspect_left = 0u;
+    uint8 suspect_right = 0u;
+
+    N.Odo_Wheel_Left_Cmps = Nag_OdoEncToCmps((float)(-motor_value.receive_left_speed_data));
+    N.Odo_Wheel_Right_Cmps = Nag_OdoEncToCmps((float)motor_value.receive_right_speed_data);
+    N.Odo_Gyro_Z_Dps = imu_data.gyro_z * 57.2957795f;
+
+    w_radps = imu_data.gyro_z;
+    vc_l = N.Odo_Wheel_Left_Cmps + w_radps * half_track_cm;
+    vc_r = N.Odo_Wheel_Right_Cmps - w_radps * half_track_cm;
+    N.Odo_Vc_From_L_Cmps = vc_l;
+    N.Odo_Vc_From_R_Cmps = vc_r;
+
+    if (fabsf(raw_speed_enc) < Nag_Speed_Deadband)
+    {
+        N.Odo_Corrected_Speed_Cmps = 0.0f;
+        N.Odo_Raw_Step_Cm = 0.0f;
+        N.Odo_Protected_Step_Cm = 0.0f;
+        Nag_OdoSlip_PushHistory(0.0f, 0.0f);
+        Nag_OdoSlip_UpdateState(0u, 0u, vc_l, vc_r);
+        return 0.0f;
+    }
+
+    raw_step = Nag_OdoCmpsToStep(Nag_OdoEncToCmps(raw_speed_enc));
+    instant_cmps = Nag_OdoSlip_InstantProtectSpeed(vc_l, vc_r, &suspect_left, &suspect_right);
+    Nag_OdoSlip_UpdateState(suspect_left, suspect_right, vc_l, vc_r);
+    state_cmps = Nag_OdoSlip_StateSpeed(instant_cmps);
+    N.Odo_Corrected_Speed_Cmps = state_cmps;
+
+    prot_step = Nag_OdoCmpsToStep(instant_cmps);
+    final_step = Nag_OdoCmpsToStep(state_cmps);
+    if (final_step > raw_step)
+    {
+        final_step = raw_step;
+    }
+
+    N.Odo_Raw_Step_Cm = raw_step;
+    N.Odo_Protected_Step_Cm = final_step;
+    Nag_OdoSlip_PushHistory(raw_step, final_step);
+    return final_step;
+}
+
+void Nag_OdoSlip_ResetState(void)
+{
+    memset(N.Odo_History_Raw, 0, sizeof(N.Odo_History_Raw));
+    memset(N.Odo_History_Prot, 0, sizeof(N.Odo_History_Prot));
+    N.Odo_Wheel_Left_Cmps = 0.0f;
+    N.Odo_Wheel_Right_Cmps = 0.0f;
+    N.Odo_Gyro_Z_Dps = 0.0f;
+    N.Odo_Vc_From_L_Cmps = 0.0f;
+    N.Odo_Vc_From_R_Cmps = 0.0f;
+    N.Odo_Corrected_Speed_Cmps = 0.0f;
+    N.Odo_Raw_Step_Cm = 0.0f;
+    N.Odo_Protected_Step_Cm = 0.0f;
+    N.Odo_Last_Trust_Speed_Cmps = 0.0f;
+    N.Odo_Rollback_Pending_Cm = 0.0f;
+    N.Odo_Rollback_Applied_Cm = 0.0f;
+    N.Odo_Slip_State = NAG_ODO_SLIP_NORMAL;
+    N.Odo_Slip_Enter_Count = 0u;
+    N.Odo_Slip_Exit_Count = 0u;
+    N.Odo_History_Idx = 0u;
+}
+
+void Nag_OdoSlip_ApplyPendingRollback(void)
+{
+    float apply_cm = 0.0f;
+
+    if (N.Odo_Rollback_Pending_Cm <= 0.001f)
+    {
+        return;
+    }
+
+    apply_cm = N.Odo_Rollback_Pending_Cm;
+    if (apply_cm > Nag_OdoSlip_Rollback_Max_Cm)
+    {
+        apply_cm = Nag_OdoSlip_Rollback_Max_Cm;
+    }
+
+    N.Mileage_All -= apply_cm;
+    N.Odo_Rollback_Applied_Cm += apply_cm;
+    N.Odo_Rollback_Pending_Cm -= apply_cm;
+
+    while (N.Mileage_All < 0.0f && N.Run_index > 0u)
+    {
+        N.Run_index--;
+        N.Mileage_All += Nag_Set_mileage;
+    }
+}
+
+#endif /* Nag_OdoSlip_Enable */
+
+#if !Nag_OdoSlip_Enable
+void Nag_OdoSlip_ResetState(void)
+{
+}
+
+void Nag_OdoSlip_ApplyPendingRollback(void)
+{
+}
+#endif
+
 static float Nag_GetMileageStep(void)
 {
     float speed_forward = (float)Nag_Speed_Source;
@@ -2014,6 +2323,14 @@ static float Nag_GetMileageStep(void)
         N.Mileage_Step = 0.0f;
         return 0.0f;
     }
+
+#if Nag_OdoSlip_Enable
+    {
+        float corrected_step_cm = Nag_GetCorrectedMileageStepCm(speed_forward);
+        N.Mileage_Step = corrected_step_cm;
+        return corrected_step_cm;
+    }
+#endif
 
     N.Mileage_Step = fabsf(speed_forward) * Nag_Speed_To_Mileage_Scale * Nag_Sample_Dt;
     return N.Mileage_Step;
@@ -2587,6 +2904,9 @@ void Run_Nag_Save()
 {
     N.Mileage_All += Nag_GetMileageStep();
     N.Mileage_Debug_Total += N.Mileage_Step;
+#if Nag_OdoSlip_Enable
+    Nag_OdoSlip_ApplyPendingRollback();
+#endif
 
     while(N.Mileage_All >= Nag_Set_mileage)    //当里程超过设定值时
     {
@@ -2637,6 +2957,9 @@ void Run_Nag_GPS()
 
     N.Mileage_All += Nag_GetMileageStep();
     N.Mileage_Debug_Total += N.Mileage_Step;
+#if Nag_OdoSlip_Enable
+    Nag_OdoSlip_ApplyPendingRollback();
+#endif
     max_run_index = (uint16)(N.Save_index - 2);
     while(N.Mileage_All >= Nag_Set_mileage)
     {
@@ -2672,6 +2995,9 @@ void Init_Nag()
     N.Event_Record_Type = NAG_EVENT_TYPE_SPIN;
     flash_Nag_ResetReadState();
     flash_buffer_clear();
+#if Nag_OdoSlip_Enable
+    Nag_OdoSlip_ResetState();
+#endif
 }
 
 void Nag_Begin_Record(void)
@@ -2935,6 +3261,9 @@ void Nag_Notify_Event_Done(void)
 
     N.Run_index = resume_index;
     N.Mileage_All = 0.0f;
+#if Nag_OdoSlip_Enable
+    Nag_OdoSlip_ResetState();
+#endif
     N.Target_Request_Valid = 0;
     Nag_Element_Stop(event_type);
     Nag_ClearEventRuntimeState();
@@ -3050,6 +3379,9 @@ void NagFlashRead(){
   N.Mileage_All = 0;
   N.Mileage_Step = 0;
   N.Mileage_Debug_Total = 0;
+#if Nag_OdoSlip_Enable
+  Nag_OdoSlip_ResetState();
+#endif
   N.Run_index = 0;
   N.Prospect_index = 0;
   N.Nag_Stop_f = 0;

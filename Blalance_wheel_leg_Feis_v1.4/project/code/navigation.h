@@ -37,6 +37,36 @@
 #define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 
 /*
+ * 纯惯导里程纠偏（打滑/单轮空转）：
+ * 1. 仅在 Nag_GetMileageStep() 走 car_speed 积分路径时启用；融合位移有效时不介入；
+ * 2. 策略：瞬时保护 -> 状态确认 -> 回溯纠偏；不处理台阶开环跳跃腾空；
+ * 3. 判据：左右轮速度 + gyro_z 重建中心速度一致性；轮距为左右驱动轮中心横向间距（cm）。
+ */
+#define Nag_OdoSlip_Enable 1u
+
+/* 轮距（cm）：左右驱动轮滚动中心线间距；宽胎以轮中面测量，外八/内八明显时用圆弧实车微调 */
+#define Nag_Wheel_Track_Cm 16.0f
+
+/*
+ * 左右反推中心速度一致性阈值（cm/s）。
+ * 调大：更少触发保护/打滑，但短时空转可能漏检；调小：更敏感，正常弯道易误报。
+ */
+#define Nag_OdoSlip_Consistency_Th_Cmps 50.0f
+
+/* 单拍瞬时保护：候选中心速度相对上一拍可信速度的最大允许跳变（cm/s） */
+#define Nag_OdoSlip_Instant_Slew_Max_Cmps 120.0f
+
+/* 进入/退出打滑态连续计数（1ms/次）；调大进入更稳、退出更慢 */
+#define Nag_OdoSlip_Enter_Count 10u
+#define Nag_OdoSlip_Exit_Count 25u
+
+/* 短历史窗口（ms），用于确认后回溯扣账 */
+#define Nag_OdoSlip_History_Len 30u
+
+/* 单次回溯补扣上限（cm），防止异常数据一次拉回过多 Run_index */
+#define Nag_OdoSlip_Rollback_Max_Cm 15.0f
+
+/*
  * 惯导回放融合里程辅助（nav_fusion）：
  * 1=Run_index 推进优先用融合位移(cm)，长距离/元素停车后漂移更小；0=纯 car_speed 积分。
  * 录制/回放 KEY 流程不变；融合模式下先 GPS 原点平均，再锁定发车 yaw 直行 5m 标定北向偏角。
@@ -83,7 +113,7 @@
  * 2. 实际比较仍使用 enter_index - Run_index 这类索引差，标定时只需关心物理距离；
  * 3. 元素前预减速、元素后预加速：进入 PreDecel / PreAccel 距离窗口后立即设为目标速度（非线性渐变）；
  * 4. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
- * 5. 调试建议观察 VOFA 组 1：speed_target_effective / car_speed（菜单 n 切组）。
+ * 5. 调试建议观察 VOFA 组 1：speed_target_effective / car_speed；组 3：里程纠偏/打滑（菜单 n 切组）。
  */
 #define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
 
@@ -472,16 +502,46 @@ typedef struct{
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
        uint8 HeadingHold_Event_Allowed; //1表示当前元素类型配置允许启用航向保持
        float HeadingHold_Target_Yaw; //当前锁定的绝对航向目标，默认取进入元素瞬间的 euler_angle.yaw
+       /* 里程纠偏：瞬时保护 + 打滑确认 + 回溯扣账（详见 Nag_OdoSlip_* 宏） */
+       float Odo_Wheel_Left_Cmps;    //左轮前向线速度（cm/s），供 VOFA/调试
+       float Odo_Wheel_Right_Cmps;   //右轮前向线速度（cm/s）
+       float Odo_Gyro_Z_Dps;         //IMU Z 轴角速度（deg/s）
+       float Odo_Vc_From_L_Cmps;     //由左轮+gyro_z 反推的中心速度
+       float Odo_Vc_From_R_Cmps;     //由右轮+gyro_z 反推的中心速度
+       float Odo_Corrected_Speed_Cmps; //本拍纠偏后中心速度
+       float Odo_Raw_Step_Cm;        //未保护的本拍原始步长
+       float Odo_Protected_Step_Cm;  //瞬时保护后的本拍步长
+       float Odo_Last_Trust_Speed_Cmps; //最近可信中心速度
+       float Odo_Rollback_Pending_Cm;   //待补扣里程（cm）
+       float Odo_Rollback_Applied_Cm;   //累计已补扣（cm），调试用
+       float Odo_History_Raw[Nag_OdoSlip_History_Len];  //短窗原始步长
+       float Odo_History_Prot[Nag_OdoSlip_History_Len]; //短窗保护步长
+       uint8 Odo_Slip_State;         //Nag_OdoSlip_State 枚举值
+       uint8 Odo_Slip_Enter_Count;     //进入打滑计数
+       uint8 Odo_Slip_Exit_Count;      //退出打滑计数
+       uint8 Odo_History_Idx;          //历史环写指针
        //临时未使用参数
        int Prev_mile[Nag_Prev]; //前包
 }Nag;
+
+/* 里程纠偏打滑状态 */
+typedef enum
+{
+       NAG_ODO_SLIP_NORMAL = 0u,
+       NAG_ODO_SLIP_LEFT = 1u,   /* 左轮疑似空转，优先信右轮重建速度 */
+       NAG_ODO_SLIP_RIGHT = 2u,  /* 右轮疑似空转，优先信左轮重建速度 */
+       NAG_ODO_SLIP_BOTH = 3u,   /* 双侧不可信，保守限速/冻结 */
+} Nag_OdoSlip_State;
 
 extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
-/* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合 */
-#define NAG_VOFA_GROUP_COUNT (3u)
+/* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑 */
+#define NAG_VOFA_GROUP_COUNT (4u)
+
+void Nag_OdoSlip_ResetState(void); /* 清零里程纠偏运行时态；Init_Nag/回放开始时调用 */
+void Nag_OdoSlip_ApplyPendingRollback(void); /* 将待补扣里程写回 Mileage_All/Run_index */
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,

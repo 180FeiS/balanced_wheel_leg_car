@@ -191,6 +191,24 @@ typedef struct
   uint8 bridge_zone_active;
   /* 1=桥预区或桥上：CM7_1 跑寻边+detect */
   uint8 bridge_detect_arm;
+  /*
+   * VOFA 组 3 — 里程纠偏/打滑（navigation.c Nag_OdoSlip_*）：
+   * ch1 odo_wheel_left_cmps   左轮前向 cm/s
+   * ch2 odo_wheel_right_cmps  右轮前向 cm/s
+   * ch3 odo_gyro_z_dps        IMU Z 角速度 deg/s
+   * ch4 odo_vc_from_l_cmps    左轮+gyro 反推中心速度
+   * ch5 odo_vc_from_r_cmps    右轮+gyro 反推中心速度
+   * ch6 odo_corr_speed_cmps   本拍纠偏后中心速度；slip_state 见 odo_slip_state
+   */
+  float odo_wheel_left_cmps;
+  float odo_wheel_right_cmps;
+  float odo_gyro_z_dps;
+  float odo_vc_from_l_cmps;
+  float odo_vc_from_r_cmps;
+  float odo_corr_speed_cmps;
+  float odo_slip_state;          /* Nag_OdoSlip_State 枚举值，0=正常 */
+  float odo_protected_step_cm;   /* 本拍纠偏后里程步长 */
+  float odo_rollback_applied_cm; /* 累计回溯补扣 cm */
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

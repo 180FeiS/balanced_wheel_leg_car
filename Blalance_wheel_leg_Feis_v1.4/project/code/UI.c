@@ -1016,6 +1016,10 @@ void GUI_3_3_1(void)
     {
         ips200_show_string(112, ROW_10, "2:Fus");
     }
+    else if (vofa_group == 3u)
+    {
+        ips200_show_string(112, ROW_10, "3:Odo");
+    }
     else
     {
         ips200_show_string(112, ROW_10, "0:IMU");

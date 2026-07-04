@@ -67,7 +67,7 @@ void step_reset_distance_tracking(void);
  *  5) 蓝→白能检、白→蓝不能：多为过曝/弱对比而非梯度方向(abs 已对称)；略降 STEP_EDGE_GRAD_SOFT_THRESH 或 STEP_EDGE_GRAD_THRESH
  *
  * 使用：将 STEP_DEBUG_USE_VOFA 置 1，main_cm7_1 主循环只发台阶 6 路；置 0 则发 vofa_send_nav_from_dualcore_snapshot()。
- *       导航 VOFA 时 STEP_DEBUG_USE_VOFA=0，菜单 / 上位机「n」循环 nag_vofa_group：0=IMU 1=速度 2=融合（见 vofa.h）。
+ *       导航 VOFA 时 STEP_DEBUG_USE_VOFA=0，菜单 / 上位机「n」循环 nag_vofa_group：0=IMU 1=速度 2=融合 3=里程纠偏（见 vofa.h）。
  */
 #ifndef STEP_DEBUG_USE_VOFA
 #define STEP_DEBUG_USE_VOFA 0 /* 1=主循环发台阶 6 路；0=保持原导航 VOFA */

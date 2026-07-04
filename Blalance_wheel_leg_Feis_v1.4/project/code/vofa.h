@@ -34,7 +34,19 @@ void vofa_send_nav_from_dualcore_snapshot(void);
  *   （CM7_1 组 2 扩展）ch5/ch6 可换为 fusion_origin_accepted / fusion_origin_rejected
  */
 #define VOFA_GROUP_FUSION_DEBUG (2u)
+
+/*
+ * VOFA 组 3 — 里程纠偏/打滑（菜单 n / Config 切组至 3）：
+ *   ch1 odo_wheel_left_cmps   左轮前向速度 cm/s
+ *   ch2 odo_wheel_right_cmps  右轮前向速度 cm/s
+ *   ch3 odo_gyro_z_dps        IMU Z 轴角速度 deg/s
+ *   ch4 odo_vc_from_l_cmps    左轮+gyro 反推中心速度 cm/s
+ *   ch5 odo_vc_from_r_cmps    右轮+gyro 反推中心速度 cm/s
+ *   ch6 odo_corr_speed_cmps   纠偏后中心速度 cm/s（打滑态见 dualcore odo_slip_state：0正常 1左 2右 3双侧）
+ * 调试：直行/弯道看 ch4≈ch5；单轮空转时一侧偏离、ch6 应低于 car_speed 对应步长。
+ */
+#define VOFA_GROUP_ODO_SLIP_DEBUG (3u)
 #endif
 
 #endif
-
+
