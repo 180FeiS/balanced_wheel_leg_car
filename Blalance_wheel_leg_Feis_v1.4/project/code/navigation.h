@@ -45,13 +45,13 @@
 #define Nag_OdoSlip_Enable 1u
 
 /* 轮距（cm）：左右驱动轮滚动中心线间距；宽胎以轮中面测量，外八/内八明显时用圆弧实车微调 */
-#define Nag_Wheel_Track_Cm 17.3f
+#define Nag_Wheel_Track_Cm 16.0f
 
 /*
  * 左右反推中心速度一致性阈值（cm/s）。
  * 调大：更少触发保护/打滑，但短时空转可能漏检；调小：更敏感，正常弯道易误报。
  */
-#define Nag_OdoSlip_Consistency_Th_Cmps 50.0f
+#define Nag_OdoSlip_Consistency_Th_Cmps 60.0f
 
 /* 单拍瞬时保护：候选中心速度相对上一拍可信速度的最大允许跳变（cm/s） */
 #define Nag_OdoSlip_Instant_Slew_Max_Cmps 120.0f
@@ -61,10 +61,10 @@
 #define Nag_OdoSlip_Exit_Count 25u
 
 /* 短历史窗口（ms），用于确认后回溯扣账 */
-#define Nag_OdoSlip_History_Len 30u
+#define Nag_OdoSlip_History_Len 20u
 
 /* 单次回溯补扣上限（cm），防止异常数据一次拉回过多 Run_index */
-#define Nag_OdoSlip_Rollback_Max_Cm 15.0f
+#define Nag_OdoSlip_Rollback_Max_Cm 8.0f
 
 /*
  * 惯导回放融合里程辅助（nav_fusion）：
