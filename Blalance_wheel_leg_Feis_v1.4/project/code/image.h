@@ -103,4 +103,85 @@ uint8   image_ae_session_consume_done_and_save(void);
 /** 阻塞版（调试用）；菜单路径请用 session API */
 void    image_camera_auto_exposure  (void);
 
+/*--------------------------------------------------------------------------------------------------------------------
+ * 上半 ROI 最大白连通域引导（室外验证：朝远处白色目标区修正 yaw，进入后可切 single_bridge 中线）
+ *-------------------------------------------------------------------------------------------------------------------*/
+
+/** 1=启用白连通域检测与 yaw 引导；验证期常开，正式比赛改 0 */
+#ifndef IMAGE_WHITE_BLOB_ENABLE
+#define IMAGE_WHITE_BLOB_ENABLE         1u
+#endif
+
+/** 连通域扫描行范围 [START, END)：近底留 10 行给车体/畸变 */
+#define IMAGE_WHITE_BLOB_ROI_ROW_START    0
+#define IMAGE_WHITE_BLOB_DETECT_ROW_END   ((int)IMAGE_COMPRESS_H - 10)
+
+/** 左右忽略列数，避开镜头暗角 */
+#define IMAGE_WHITE_BLOB_COL_MARGIN       8
+
+/** 最小白块像素数，低于此 track_valid=0 */
+#define IMAGE_WHITE_BLOB_MIN_AREA         60
+
+/** 大津阈值偏移；室外光强时可微调（负值更严、正值更松） */
+#define IMAGE_WHITE_BLOB_THRESH_OFFSET    (-5)
+
+/** 白块→中线：最大连通域最靠下行 >= 该值（压缩图行，约 2/3 幅高） */
+#define IMAGE_WHITE_BLOB_SWITCH_ROW_MIN   (((int)IMAGE_COMPRESS_H * 2) / 3)
+
+/** 白块→中线：面积需明显大于远处小目标，低于 MIN_AREA 的误检 */
+#define IMAGE_WHITE_BLOB_SWITCH_AREA_MIN  200
+
+/** 白块→中线：上述条件连续满足的帧数，防抖 */
+#define IMAGE_WHITE_BLOB_SWITCH_DEBOUNCE    4u
+
+/** 横向误差 → 每帧相对 yaw 增量（deg），方向反了可改符号；中线模式复用 */
+#define IMAGE_WHITE_BLOB_YAW_KP           0.06f
+
+/** 单帧 yaw 修正上限（deg），防止猛打方向 */
+#define IMAGE_WHITE_BLOB_YAW_MAX_DELTA    2.5f
+
+/** yaw 死区（deg），抑制抖动 */
+#define IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG 0.3f
+
+/** dualcore vision_guidance_mode 取值：白块目标引导 */
+#define IMAGE_VISION_MODE_BLOB            1u
+/** dualcore vision_guidance_mode 取值：左右中寻线 */
+#define IMAGE_VISION_MODE_MIDLINE         2u
+
+typedef struct
+{
+    float center_err;   /**< 图像中心 - 白块质心 x；正=目标在右，需向右修正 yaw */
+    int   cx;           /**< 最大白连通域质心列（压缩图坐标） */
+    int   cy;           /**< 最大白连通域质心行 */
+    int   area;         /**< 最大白连通域像素数 */
+    int   bottom_row;   /**< 最大白连通域最靠下行，用于判定是否进入中下部 */
+    int   top_row;      /**< 最大白连通域最靠上行 */
+    int   bbox_w;       /**< 包围盒宽度（列） */
+    int   bbox_h;       /**< 包围盒高度（行） */
+    uint8 track_valid;  /**< 1=area>=MIN_AREA 且检测成功 */
+} image_white_blob_result_t;
+
+/** CM7_1：压缩→二值化→全幅可用区最大白连通域；需先有新帧 mt9v03x_image */
+void image_white_blob_detect(image_white_blob_result_t *out);
+
+#if IMAGE_WHITE_BLOB_ENABLE
+/**
+ * CM7_1 主循环：白块/中线状态机（每帧调用一次，调用方须已置 mt9v03x_finish_flag=0）。
+ * bw_threshold：中线模式传给 single_bridge_gray_diff_track 的差比和阈值。
+ */
+void image_vision_guidance_process_frame(int bw_threshold);
+
+/** 离开视觉路径或进 Image 菜单 AE 时复位为白块模式 */
+void image_vision_guidance_reset(void);
+
+/** CM7_0 主循环：按 dualcore vision_guidance_mode 选择 blob 或中线 yaw 修正 */
+void image_vision_guidance_apply_yaw(void);
+
+/** CM7_0：仅白块通道 steer_request_relative_yaw（由 apply_yaw 内部调用） */
+void image_white_blob_apply_yaw(void);
+
+/** CM7_0：仅中线通道 steer_request_relative_yaw（由 apply_yaw 内部调用） */
+void image_midline_apply_yaw(void);
+#endif
+
 #endif /* PROJECT_CODE_IMAGE_H_ */

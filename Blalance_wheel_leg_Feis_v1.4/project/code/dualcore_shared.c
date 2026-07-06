@@ -321,6 +321,39 @@ void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *f
   }
 }
 
+void dualcore_white_blob_pull(float *center_err, uint8 *track_valid, uint8 *fresh)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+  static uint32 s_last_blob_frame_seq;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  if (center_err != NULL)
+  {
+    *center_err = v->blob_center_err;
+  }
+  if (track_valid != NULL)
+  {
+    *track_valid = v->blob_track_valid;
+  }
+  if (fresh != NULL)
+  {
+    *fresh = (uint8)((v->blob_frame_seq != s_last_blob_frame_seq) ? 1u : 0u);
+    if (*fresh != 0u)
+    {
+      s_last_blob_frame_seq = v->blob_frame_seq;
+    }
+  }
+}
+
+uint8 dualcore_vision_guidance_pull_mode(void)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+  return v->vision_guidance_mode;
+}
+
 static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
 {
   switch ((dualcore_ui_cmd_op_t)s->op)
@@ -567,6 +600,7 @@ void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
   v->bridge_detect_exit = detect_exit;
   v->bridge_detect_side = detect_side;
   v->bridge_frame_seq = frame_seq;
+  v->vision_guidance_mode = 2u; /* IMAGE_VISION_MODE_MIDLINE */
   v->seq++;
   __DSB();
 
@@ -600,6 +634,50 @@ void dualcore_bridge_vision_publish_inactive(void)
   v->bridge_detect_side = 0u;
   s_inactive_seq++;
   v->bridge_frame_seq = s_inactive_seq;
+  if (v->vision_guidance_mode == 2u)
+  {
+    v->vision_guidance_mode = 0u;
+  }
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_white_blob_publish(float center_err, uint8 track_valid, uint32 frame_seq)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  /* 白块模式：仅 blob 通道有效，vision_guidance_mode=1 供 CM7_0 选 apply 路径 */
+  v->blob_center_err = center_err;
+  v->blob_track_valid = track_valid;
+  v->blob_frame_fresh = 1u;
+  v->blob_frame_seq = frame_seq;
+  v->vision_guidance_mode = 1u; /* IMAGE_VISION_MODE_BLOB */
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_white_blob_publish_inactive(void)
+{
+  static uint32 s_inactive_seq;
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  v->blob_center_err = 0.0f;
+  v->blob_track_valid = 0u;
+  v->blob_frame_fresh = 0u;
+  s_inactive_seq++;
+  v->blob_frame_seq = s_inactive_seq;
+  if (v->vision_guidance_mode == 1u)
+  {
+    v->vision_guidance_mode = 0u;
+  }
   v->seq++;
   __DSB();
 

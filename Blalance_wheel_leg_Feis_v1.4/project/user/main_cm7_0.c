@@ -1,5 +1,6 @@
 #include "zf_common_headfile.h"
 #include "my_gps.h"
+#include "image.h"
 
 // 外部全局PWM参数变量
 extern int16 pwm_ph1;
@@ -234,6 +235,10 @@ int main(void)
     remote_lora_apply_validate_motor();
     Nag_BridgeDetectUpdate();
     dualcore_ctrl_to_ui_publish();
+#if IMAGE_WHITE_BLOB_ENABLE
+    /* 按 dualcore vision_guidance_mode 选择白块或中线 yaw 修正（主循环验证） */
+    image_vision_guidance_apply_yaw();
+#endif
 #endif
 
 #if LEG_DEBUG_MODE && !DUALCORE_UI_ON_CM7_1

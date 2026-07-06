@@ -87,8 +87,27 @@ int main(void)
         {
             step_detect();
             step_visual_jump_after_step();
+#if IMAGE_WHITE_BLOB_ENABLE
+            image_vision_guidance_reset();
+#endif
         }
-        /* 单边桥视觉：预区 arm 或桥上 detect；与台阶/菜单 AE 互斥 */
+#if IMAGE_WHITE_BLOB_ENABLE
+        /*
+         * 室外验证视觉状态机（台阶之后、惯导 bridge_detect_arm 之前）：
+         * - WHITE_BLOB：上半区最大白连通域 → dualcore blob 通道
+         * - MIDLINE：single_bridge 左右中寻线 → dualcore bridge 通道
+         * 切换/回退逻辑见 image_vision_guidance_process_frame()。
+         */
+        else if (!MenuIsImageSectionPage())
+        {
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                image_vision_guidance_process_frame(hd_threshold);
+            }
+        }
+#endif
+        /* 单边桥视觉：预区 arm 或桥上 detect；IMAGE_WHITE_BLOB_ENABLE=0 时启用 */
         else if (!MenuIsImageSectionPage() && (ctrl.bridge_detect_arm != 0u))
         {
             static uint32 bridge_frame_seq;
@@ -118,6 +137,10 @@ int main(void)
         {
             single_bridge_detect_reset();
             dualcore_bridge_vision_publish_inactive();
+#if IMAGE_WHITE_BLOB_ENABLE
+            dualcore_white_blob_publish_inactive();
+            image_vision_guidance_reset();
+#endif
         }
         image_ae_session_poll();
         selectMenu();

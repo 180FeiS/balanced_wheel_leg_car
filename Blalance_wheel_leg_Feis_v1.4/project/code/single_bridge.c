@@ -207,6 +207,7 @@ float single_bridge_center_error(int prospect_start)
 
 uint8 single_bridge_track_valid(uint8 min_rows)
 {
+    /* valid_row_count 与 end_line 共同决定中线是否可用于控车/切换判定 */
     if (s_last_valid_row_count_raw < min_rows)
     {
         return 0u;
@@ -417,6 +418,7 @@ void single_bridge_gray_diff_track(int bw_threshold, single_bridge_track_t *out)
     }
     hd_threshold = th;
 
+    /* 灰度差比和寻左右边 → 中线 → center_err；供中线模式与 Debug 页 */
     image_photo_compress(mt9v03x_image[0]);
     hd_whitemax(th);
     single_bridge_compute_midline();

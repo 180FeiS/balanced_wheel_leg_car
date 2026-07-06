@@ -9,8 +9,11 @@
 /** 压缩图近底前瞻起始行（IMAGE_COMPRESS_H==60 时约图像下方） */
 #define SINGLE_BRIDGE_PROSPECT_START_DEFAULT 50
 
-/** 参与加权的中线最少有效行数，低于此 track_valid=0 */
+/** 参与加权的中线最少有效行数，低于此 track_valid=0；亦用于中线失效回退白块 */
 #define SINGLE_BRIDGE_MIN_VALID_ROWS        6u
+
+/** 中线 track_valid 连续失效达到该帧数后，主循环状态机退回白块模式（见 image.c） */
+#define SINGLE_BRIDGE_LOST_FALLBACK_DEBOUNCE  4u
 
 /** Mid_Line[] 无效行标记 */
 #define SINGLE_BRIDGE_MID_INVALID           (-1)

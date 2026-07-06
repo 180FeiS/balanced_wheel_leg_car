@@ -844,3 +844,465 @@ void image_camera_auto_exposure(void)
     }
     (void)image_ae_session_consume_done_and_save();
 }
+
+/*--------------------------------------------------------------------------------------------------------------------
+ * 上半 ROI 最大白连通域引导 + 白块/中线主循环状态机（CM7_1 检测，CM7_0 主循环 apply_yaw）
+ *-------------------------------------------------------------------------------------------------------------------*/
+
+#if defined(CY_CORE_CM7_1)
+
+#include "single_bridge.h"
+#include "dualcore_shared.h"
+
+/** BFS 队列容量：全幅可用区约 50×78 像素，留余量 */
+#define IMAGE_WHITE_BLOB_Q_MAX  (4096)
+
+static uint8 s_blob_visited[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W];
+
+static uint8 s_vision_mode = IMAGE_VISION_MODE_BLOB;
+static uint8 s_switch_debounce = 0u;
+static uint8 s_midline_lost_debounce = 0u;
+
+static uint8 image_white_blob_in_roi(int row, int col, int row_end, int col_lo, int col_hi)
+{
+    if (row < IMAGE_WHITE_BLOB_ROI_ROW_START || row >= row_end)
+    {
+        return 0u;
+    }
+    if (col < col_lo || col >= col_hi)
+    {
+        return 0u;
+    }
+    return (uint8)(image_two_value[row][col] == IMG_WHITE);
+}
+
+/**
+ * 4 邻域 flood-fill：统计面积、质心、包围盒（bottom_row 用于白块→中线切换）。
+ */
+static void image_white_blob_measure_component(int seed_r, int seed_c,
+                                               int row_end, int col_lo, int col_hi,
+                                               int *area_out, int *sum_x_out, int *sum_y_out,
+                                               int *top_row_out, int *bottom_row_out,
+                                               int *bbox_w_out, int *bbox_h_out)
+{
+    static int16 q_r[IMAGE_WHITE_BLOB_Q_MAX];
+    static int16 q_c[IMAGE_WHITE_BLOB_Q_MAX];
+    int head = 0;
+    int tail = 0;
+    int area = 0;
+    int32 sum_x = 0;
+    int32 sum_y = 0;
+    int min_r = seed_r;
+    int max_r = seed_r;
+    int min_c = seed_c;
+    int max_c = seed_c;
+
+    q_r[tail] = (int16)seed_r;
+    q_c[tail] = (int16)seed_c;
+    tail++;
+    s_blob_visited[seed_r][seed_c] = 1u;
+
+    while (head < tail)
+    {
+        int r = (int)q_r[head];
+        int c = (int)q_c[head];
+        head++;
+
+        area++;
+        sum_x += c;
+        sum_y += r;
+        if (r < min_r)
+        {
+            min_r = r;
+        }
+        if (r > max_r)
+        {
+            max_r = r;
+        }
+        if (c < min_c)
+        {
+            min_c = c;
+        }
+        if (c > max_c)
+        {
+            max_c = c;
+        }
+
+        if (r > IMAGE_WHITE_BLOB_ROI_ROW_START &&
+            image_white_blob_in_roi(r - 1, c, row_end, col_lo, col_hi) &&
+            s_blob_visited[r - 1][c] == 0u)
+        {
+            if (tail < IMAGE_WHITE_BLOB_Q_MAX)
+            {
+                s_blob_visited[r - 1][c] = 1u;
+                q_r[tail] = (int16)(r - 1);
+                q_c[tail] = (int16)c;
+                tail++;
+            }
+        }
+        if (r + 1 < row_end &&
+            image_white_blob_in_roi(r + 1, c, row_end, col_lo, col_hi) &&
+            s_blob_visited[r + 1][c] == 0u)
+        {
+            if (tail < IMAGE_WHITE_BLOB_Q_MAX)
+            {
+                s_blob_visited[r + 1][c] = 1u;
+                q_r[tail] = (int16)(r + 1);
+                q_c[tail] = (int16)c;
+                tail++;
+            }
+        }
+        if (c > col_lo &&
+            image_white_blob_in_roi(r, c - 1, row_end, col_lo, col_hi) &&
+            s_blob_visited[r][c - 1] == 0u)
+        {
+            if (tail < IMAGE_WHITE_BLOB_Q_MAX)
+            {
+                s_blob_visited[r][c - 1] = 1u;
+                q_r[tail] = (int16)r;
+                q_c[tail] = (int16)(c - 1);
+                tail++;
+            }
+        }
+        if (c + 1 < col_hi &&
+            image_white_blob_in_roi(r, c + 1, row_end, col_lo, col_hi) &&
+            s_blob_visited[r][c + 1] == 0u)
+        {
+            if (tail < IMAGE_WHITE_BLOB_Q_MAX)
+            {
+                s_blob_visited[r][c + 1] = 1u;
+                q_r[tail] = (int16)r;
+                q_c[tail] = (int16)(c + 1);
+                tail++;
+            }
+        }
+    }
+
+    *area_out = area;
+    *sum_x_out = (int)sum_x;
+    *sum_y_out = (int)sum_y;
+    *top_row_out = min_r;
+    *bottom_row_out = max_r;
+    *bbox_w_out = max_c - min_c + 1;
+    *bbox_h_out = max_r - min_r + 1;
+}
+
+void image_white_blob_detect(image_white_blob_result_t *out)
+{
+    int row;
+    int col;
+    int row_end = IMAGE_WHITE_BLOB_DETECT_ROW_END;
+    int col_lo = IMAGE_WHITE_BLOB_COL_MARGIN;
+    int col_hi = (int)IMAGE_COMPRESS_W - IMAGE_WHITE_BLOB_COL_MARGIN;
+    int best_area = 0;
+    int best_sum_x = 0;
+    int best_sum_y = 0;
+    int best_top = 0;
+    int best_bottom = 0;
+    int best_bbox_w = 0;
+    int best_bbox_h = 0;
+    int best_cx = (int)IMAGE_COMPRESS_W / 2;
+    int best_cy = row_end / 2;
+    uint8 track_valid = 0u;
+    float center_err = 0.0f;
+    int th;
+
+    if (row_end > (int)IMAGE_COMPRESS_H)
+    {
+        row_end = (int)IMAGE_COMPRESS_H;
+    }
+    if (col_hi <= col_lo)
+    {
+        col_lo = 0;
+        col_hi = (int)IMAGE_COMPRESS_W;
+    }
+
+    image_photo_compress(mt9v03x_image[0]);
+    Threshold = (int)image_otsu_on_process_buf();
+    th = Threshold + IMAGE_WHITE_BLOB_THRESH_OFFSET;
+    if (th < 0)
+    {
+        th = 0;
+    }
+    if (th > 255)
+    {
+        th = 255;
+    }
+    image_binarization_inplace(th);
+
+    for (row = IMAGE_WHITE_BLOB_ROI_ROW_START; row < row_end; row++)
+    {
+        for (col = 0; col < (int)IMAGE_COMPRESS_W; col++)
+        {
+            s_blob_visited[row][col] = 0u;
+        }
+    }
+
+    for (row = IMAGE_WHITE_BLOB_ROI_ROW_START; row < row_end; row++)
+    {
+        for (col = col_lo; col < col_hi; col++)
+        {
+            int area;
+            int sum_x;
+            int sum_y;
+            int top_r;
+            int bottom_r;
+            int bbox_w;
+            int bbox_h;
+
+            if (s_blob_visited[row][col] != 0u)
+            {
+                continue;
+            }
+            if (image_two_value[row][col] != IMG_WHITE)
+            {
+                continue;
+            }
+
+            image_white_blob_measure_component(row, col, row_end, col_lo, col_hi,
+                                               &area, &sum_x, &sum_y,
+                                               &top_r, &bottom_r, &bbox_w, &bbox_h);
+            if (area > best_area)
+            {
+                best_area = area;
+                best_sum_x = sum_x;
+                best_sum_y = sum_y;
+                best_top = top_r;
+                best_bottom = bottom_r;
+                best_bbox_w = bbox_w;
+                best_bbox_h = bbox_h;
+            }
+        }
+    }
+
+    if (best_area >= IMAGE_WHITE_BLOB_MIN_AREA)
+    {
+        track_valid = 1u;
+        best_cx = best_sum_x / best_area;
+        best_cy = best_sum_y / best_area;
+        center_err = (float)(((int)IMAGE_COMPRESS_W / 2) - best_cx);
+    }
+
+    Cammer_Err = center_err;
+
+    if (out != NULL)
+    {
+        out->center_err = center_err;
+        out->cx = best_cx;
+        out->cy = best_cy;
+        out->area = best_area;
+        out->top_row = best_top;
+        out->bottom_row = best_bottom;
+        out->bbox_w = best_bbox_w;
+        out->bbox_h = best_bbox_h;
+        out->track_valid = track_valid;
+    }
+}
+
+/** 白块下探到中下部且面积足够大，满足切换中线模式条件（单帧） */
+static uint8 image_white_blob_ready_for_midline(const image_white_blob_result_t *blob)
+{
+    if (blob == NULL || blob->track_valid == 0u)
+    {
+        return 0u;
+    }
+    if (blob->bottom_row < IMAGE_WHITE_BLOB_SWITCH_ROW_MIN)
+    {
+        return 0u;
+    }
+    if (blob->area < IMAGE_WHITE_BLOB_SWITCH_AREA_MIN)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+
+static void image_vision_guidance_publish_blob(const image_white_blob_result_t *blob, uint32 *seq)
+{
+    (*seq)++;
+    dualcore_white_blob_publish(blob->center_err, blob->track_valid, *seq);
+    dualcore_bridge_vision_publish_inactive();
+}
+
+static void image_vision_guidance_publish_midline(const single_bridge_track_t *track, uint32 *seq)
+{
+    (*seq)++;
+    dualcore_bridge_vision_publish(track->center_err, track->track_valid, *seq);
+    dualcore_white_blob_publish_inactive();
+}
+
+void image_vision_guidance_reset(void)
+{
+    s_vision_mode = IMAGE_VISION_MODE_BLOB;
+    s_switch_debounce = 0u;
+    s_midline_lost_debounce = 0u;
+}
+
+void image_vision_guidance_process_frame(int bw_threshold)
+{
+    static uint32 s_blob_frame_seq;
+    static uint32 s_midline_frame_seq;
+    image_white_blob_result_t blob;
+    single_bridge_track_t track;
+    int th = bw_threshold;
+
+    if (th <= 0)
+    {
+        th = SINGLE_BRIDGE_DIFF_TH_DEFAULT;
+    }
+
+    if (s_vision_mode == IMAGE_VISION_MODE_BLOB)
+    {
+        image_white_blob_detect(&blob);
+
+        if (image_white_blob_ready_for_midline(&blob))
+        {
+            if (s_switch_debounce < 255u)
+            {
+                s_switch_debounce++;
+            }
+        }
+        else
+        {
+            s_switch_debounce = 0u;
+        }
+
+        if (s_switch_debounce >= IMAGE_WHITE_BLOB_SWITCH_DEBOUNCE)
+        {
+            s_vision_mode = IMAGE_VISION_MODE_MIDLINE;
+            s_switch_debounce = 0u;
+            s_midline_lost_debounce = 0u;
+
+            single_bridge_gray_diff_track(th, &track);
+            if (track.track_valid == 0u)
+            {
+                s_vision_mode = IMAGE_VISION_MODE_BLOB;
+                image_vision_guidance_publish_blob(&blob, &s_blob_frame_seq);
+            }
+            else
+            {
+                image_vision_guidance_publish_midline(&track, &s_midline_frame_seq);
+            }
+        }
+        else
+        {
+            image_vision_guidance_publish_blob(&blob, &s_blob_frame_seq);
+        }
+    }
+    else
+    {
+        single_bridge_gray_diff_track(th, &track);
+
+        if (track.track_valid == 0u)
+        {
+            if (s_midline_lost_debounce < 255u)
+            {
+                s_midline_lost_debounce++;
+            }
+        }
+        else
+        {
+            s_midline_lost_debounce = 0u;
+        }
+
+        if (s_midline_lost_debounce >= SINGLE_BRIDGE_LOST_FALLBACK_DEBOUNCE)
+        {
+            s_vision_mode = IMAGE_VISION_MODE_BLOB;
+            s_midline_lost_debounce = 0u;
+            s_switch_debounce = 0u;
+            image_white_blob_detect(&blob);
+            image_vision_guidance_publish_blob(&blob, &s_blob_frame_seq);
+        }
+        else
+        {
+            image_vision_guidance_publish_midline(&track, &s_midline_frame_seq);
+        }
+    }
+}
+
+#endif /* CY_CORE_CM7_1 */
+
+#if defined(CY_CORE_CM7_0) && IMAGE_WHITE_BLOB_ENABLE
+
+#include "control.h"
+#include "navigation.h"
+#include "dualcore_shared.h"
+#include <math.h>
+
+static float image_vision_guidance_clipf(float v, float lo, float hi)
+{
+    if (v < lo)
+    {
+        return lo;
+    }
+    if (v > hi)
+    {
+        return hi;
+    }
+    return v;
+}
+
+/** 主循环 yaw 修正公共路径：center_err 来自 blob 或 bridge 通道 */
+static void image_vision_guidance_apply_yaw_from_err(float center_err, uint8 track_valid, uint8 fresh)
+{
+    float delta_yaw_deg;
+
+    if (fresh == 0u || track_valid == 0u)
+    {
+        return;
+    }
+    if (spin_enable != 0u || Motor_Runaway_Latch != 0u)
+    {
+        return;
+    }
+    /* 惯导回放执行态由 Nag 发 steer_request，避免与视觉引导抢航向 */
+    if (N.Nag_SystemRun_Index == 3u)
+    {
+        return;
+    }
+
+    delta_yaw_deg = center_err * IMAGE_WHITE_BLOB_YAW_KP;
+    delta_yaw_deg = image_vision_guidance_clipf(delta_yaw_deg,
+                                                -IMAGE_WHITE_BLOB_YAW_MAX_DELTA,
+                                                IMAGE_WHITE_BLOB_YAW_MAX_DELTA);
+    if (fabsf(delta_yaw_deg) >= IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG)
+    {
+        steer_request_relative_yaw(delta_yaw_deg);
+    }
+}
+
+void image_white_blob_apply_yaw(void)
+{
+    float center_err = 0.0f;
+    uint8 track_valid = 0u;
+    uint8 fresh = 0u;
+
+    dualcore_white_blob_pull(&center_err, &track_valid, &fresh);
+    image_vision_guidance_apply_yaw_from_err(center_err, track_valid, fresh);
+}
+
+void image_midline_apply_yaw(void)
+{
+    float center_err = 0.0f;
+    uint8 track_valid = 0u;
+    uint8 fresh = 0u;
+
+    dualcore_bridge_vision_pull(&center_err, &track_valid, &fresh);
+    image_vision_guidance_apply_yaw_from_err(center_err, track_valid, fresh);
+}
+
+void image_vision_guidance_apply_yaw(void)
+{
+    uint8 mode = dualcore_vision_guidance_pull_mode();
+
+    if (mode == IMAGE_VISION_MODE_BLOB)
+    {
+        image_white_blob_apply_yaw();
+    }
+    else if (mode == IMAGE_VISION_MODE_MIDLINE)
+    {
+        image_midline_apply_yaw();
+    }
+}
+
+#endif /* CY_CORE_CM7_0 && IMAGE_WHITE_BLOB_ENABLE */

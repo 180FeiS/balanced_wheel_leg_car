@@ -1529,47 +1529,47 @@ void ACT_2_1_1_1()
 void GUI_2_1_2_1(void) // µ¥±ßÇÅ¼ì²â
 {
     GUI_Display_Level2_Common2();
-    ips200_show_string(56, ROW_3, "Single Bridge");
+    ips200_show_string(48, ROW_2, "Single Bridge");
+    ips200_show_string(0, ROW_3, "L:red R:grn C:blu");
 
 #if defined(CY_CORE_CM7_1)
-    ips200_show_string(0, ROW_7, "Bridge");
-    ips200_show_string(0, ROW_8, "DiffTrack");
-
     single_bridge_debug_show(0, ROW_10, hd_threshold);
 
-    ips200_show_string(0, ROW_6, "Th:");
-    ips200_show_int(24, ROW_6, hd_threshold, 3);
-    ips200_show_string(64, ROW_6, "End:");
-    ips200_show_int(96, ROW_6, end_line, 3);
-    ips200_show_string(0, ROW_9, "Err:");
-    ips200_show_float(32, ROW_9, Cammer_Err, 4, 1);
+    ips200_show_string(0, ROW_4, "Pin:");
+    if (single_bridge_get_pin_left() != 0u)
+    {
+        ips200_show_string(32, ROW_4, "L");
+    }
+    if (single_bridge_get_pin_right() != 0u)
+    {
+        ips200_show_string(48, ROW_4, "R");
+    }
+    ips200_show_string(64, ROW_4, "Det:");
+    if (single_bridge_get_enter_ready() != 0u)
+    {
+        ips200_show_string(96, ROW_4, "In");
+    }
+    if (single_bridge_get_exit_ready() != 0u)
+    {
+        ips200_show_string(112, ROW_4, "Out");
+    }
+
     ips200_show_string(0, ROW_5, "Vld:");
     ips200_show_int(32, ROW_5, (int32)single_bridge_get_track_valid(), 1);
     ips200_show_string(48, ROW_5, "N:");
     ips200_show_int(64, ROW_5, (int32)single_bridge_get_valid_row_count(), 2);
-    ips200_show_string(0, ROW_4, "Wavg:");
-    ips200_show_float(40, ROW_4, single_bridge_get_road_w_avg(), 3, 0);
-    ips200_show_string(88, ROW_4, "Wm:");
-    ips200_show_int(112, ROW_4, single_bridge_get_width_max(), 2);
-    ips200_show_string(0, ROW_3, "Pin:");
-    if (single_bridge_get_pin_left() != 0u)
-    {
-        ips200_show_string(32, ROW_3, "L");
-    }
-    if (single_bridge_get_pin_right() != 0u)
-    {
-        ips200_show_string(48, ROW_3, "R");
-    }
-    ips200_show_string(64, ROW_3, "Det:");
-    if (single_bridge_get_enter_ready() != 0u)
-    {
-        ips200_show_string(96, ROW_3, "In");
-    }
-    if (single_bridge_get_exit_ready() != 0u)
-    {
-        ips200_show_string(112, ROW_3, "Out");
-    }
-    ips200_show_string(0, ROW_2, "L:red R:grn C:blu");
+    ips200_show_string(0, ROW_6, "Wavg:");
+    ips200_show_int(40, ROW_6, (int32)single_bridge_get_road_w_avg(), 3);
+    ips200_show_string(88, ROW_6, "Wm:");
+    ips200_show_int(112, ROW_6, single_bridge_get_width_max(), 2);
+
+    ips200_show_string(0, ROW_7, "Th:");
+    ips200_show_int(24, ROW_7, hd_threshold, 3);
+    ips200_show_string(64, ROW_7, "End:");
+    ips200_show_int(96, ROW_7, end_line, 3);
+
+    ips200_show_string(0, ROW_8, "Err:");
+    ips200_show_float(32, ROW_8, Cammer_Err, 4, 1);
 #else
     ips200_show_string(0, ROW_7, "Bridge");
     ips200_show_string(0, ROW_8, "UI on M7_1");

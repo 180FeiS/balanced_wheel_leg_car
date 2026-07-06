@@ -244,6 +244,13 @@ typedef struct
   uint8 bridge_exit_ready;
   uint8 bridge_detect_side;
   uint32 bridge_frame_seq;
+  /* 白连通域引导（image_white_blob_detect / image_white_blob_apply_yaw） */
+  float blob_center_err;
+  uint8 blob_track_valid;
+  uint8 blob_frame_fresh;
+  uint32 blob_frame_seq;
+  /** 0=无效；1=白块引导 IMAGE_VISION_MODE_BLOB；2=中线 IMAGE_VISION_MODE_MIDLINE */
+  uint8 vision_guidance_mode;
 } dualcore_vision_to_ctrl_t;
 
 typedef struct
@@ -296,6 +303,9 @@ void dualcore_ctrl_to_ui_publish(void);
 void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, uint32 *vision_seq_out);
 void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
 void dualcore_bridge_vision_pull_snapshot(dualcore_bridge_vision_snapshot_t *out);
+void dualcore_white_blob_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
+/** 读取 CM7_1 当前主导视觉模式（见 IMAGE_VISION_MODE_*） */
+uint8 dualcore_vision_guidance_pull_mode(void);
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */
 void dualcore_ui_cmd_consume_all(void);
 void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
@@ -315,6 +325,8 @@ void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
                                            uint8 detect_side,
                                            uint32 frame_seq);
 void dualcore_bridge_vision_publish_inactive(void);
+void dualcore_white_blob_publish(float center_err, uint8 track_valid, uint32 frame_seq);
+void dualcore_white_blob_publish_inactive(void);
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif
 

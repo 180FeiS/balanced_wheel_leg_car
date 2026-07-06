@@ -61,10 +61,10 @@
 #define Nag_OdoSlip_Exit_Count 25u
 
 /* 短历史窗口（ms），用于确认后回溯扣账 */
-#define Nag_OdoSlip_History_Len 20u
+#define Nag_OdoSlip_History_Len 15u
 
 /* 单次回溯补扣上限（cm），防止异常数据一次拉回过多 Run_index */
-#define Nag_OdoSlip_Rollback_Max_Cm 8.0f
+#define Nag_OdoSlip_Rollback_Max_Cm 6.0f
 
 /*
  * 惯导回放融合里程辅助（nav_fusion）：
