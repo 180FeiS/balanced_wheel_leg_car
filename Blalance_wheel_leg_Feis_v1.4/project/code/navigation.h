@@ -33,7 +33,7 @@
 #define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
 #define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
 #define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
-#define Nag_Speed_Deadband 10.0f           //速度死区，抑制静止噪声
+#define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 
 /*
