@@ -1,6 +1,3 @@
-/*
- * 人机交互软件 — 按键扫描 ISR 摘录（软著 06）
- */
 #include "zf_common_headfile.h"
 void pit0_ch2_isr(void)
 {

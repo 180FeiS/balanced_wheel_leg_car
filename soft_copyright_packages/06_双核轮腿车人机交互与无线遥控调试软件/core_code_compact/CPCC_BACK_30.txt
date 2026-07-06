@@ -1,442 +1,3 @@
-#include "zf_common_headfile.h"
-#include "image.h"
-#if defined(CY_CORE_CM7_1)
-#include "single_bridge.h"
-#endif
-#include "my_gps.h"
-#if defined(CY_CORE_CM7_1)
-#include "dualcore_shared.h"
-static dualcore_ctrl_to_ui_t s_ui_dc;
-#else
-#include "control.h"
-#include "nav_fusion.h"
-#endif
-#include "Menu.h"
-#include "navigation.h"
-#include "control.h"
-static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
-void ui_pull_ctrl_snapshot(void)
-{
-#if defined(CY_CORE_CM7_1)
-    dualcore_ctrl_to_ui_pull(&s_ui_dc);
-#else
-#endif
-}
-typedef enum {
-    DISPLAY_MODE_IPS200,
-    DISPLAY_MODE_SERIAL
-} DisplayMode;
-DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200;
-float FPS = 0;
-static void GUI_Display_FPS(void)__attribute__((unused));
-static void GUI_Display_Image_Sidebar()__attribute__((unused));
-static void GUI_Display_Image_Below(void)__attribute__((unused));
-static void GUI_SetAngleLoop()__attribute__((unused));
-static void GUI_SetDirLoop()__attribute__((unused));
-static void GUI_Display_Level1_Common1(void)__attribute__((unused));
-static void GUI_Display_Level2_Common1(void)__attribute__((unused));
-static void GUI_Display_Level2_Common2(void)__attribute__((unused));
-static void GUI_Display_Level2_Common3(void)__attribute__((unused));
-static void GUI_Display_Level3_Common1(void)__attribute__((unused));
-static void GUI_Display_Level3_Common2(void)__attribute__((unused));
-static void GUI_Display_Level3_ImageDetect(uint8 current_idx)__attribute__((unused));
-static void GUI_Display_Level3_Common3(void)__attribute__((unused));
-static void GUI_Display_Level3_Common4(void)__attribute__((unused));
-static void GUI_Display_Level3_Common5(void)__attribute__((unused));
-static void GUI_Display_FPS(void)
-{
-    ips200_show_string(184,ROW_1,"FPS:");
-    ips200_show_int(208,ROW_1,(uint16_t)FPS,3);
-}
-static void GUI_Display_Level1_Common1(void)
-{
-    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-    ips200_show_string(0,ROW_1,"Meun ");
-    GUI_Display_FPS();
-}
-void GUI_1(void)
-{
-    GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");
-    ips200_show_string(80,ROW_10," Debug");
-    ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_7,"-->");
-    ips200_show_string(136,ROW_7,"<--");
-}
-void ACT_1()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = 0x00;
-    ReadPos[2] = 0x00;
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_2(void)
-{
-    GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");
-    ips200_show_string(80,ROW_10," Debug");
-    ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_10,"-->");
-    ips200_show_string(136,ROW_10,"<--");
-}
-void ACT_2()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = 0x00;
-    ReadPos[2] = 0x00;
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_3(void)
-{
-    GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");
-    ips200_show_string(80,ROW_10," Debug");
-    ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_13,"-->");
-    ips200_show_string(136,ROW_13,"<--");
-}
-void ACT_3()
-{
-    ReadPos[0] = '3';
-    ReadPos[1] = 0x00;
-    ReadPos[2] = 0x00;
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-static void GUI_Display_Level2_Common1(void)
-{
-    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-    ips200_show_string(0,ROW_1,"Test ");
-    GUI_Display_FPS();
-}
-void GUI_1_1(void)
-{
-    GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");
-    ips200_show_string(80,ROW_8,"Encode");
-    ips200_show_string(80,ROW_10,"Image");
-    ips200_show_string(80,ROW_12,"Gyro");
-    ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_6,"-->");
-    ips200_show_string(136,ROW_6,"<--");
-}
-void ACT_1_1()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '1';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_1_2(void)
-{
-    GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");
-    ips200_show_string(80,ROW_8,"Encode");
-    ips200_show_string(80,ROW_10,"Image");
-    ips200_show_string(80,ROW_12,"Gyro");
-    ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_8,"-->");
-    ips200_show_string(136,ROW_8,"<--");
-}
-void ACT_1_2()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '2';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_1_3(void)
-{
-    GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");
-    ips200_show_string(80,ROW_8,"Encode");
-    ips200_show_string(80,ROW_10,"Image");
-    ips200_show_string(80,ROW_12,"Gyro");
-    ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_10,"-->");
-    ips200_show_string(136,ROW_10,"<--");
-}
-void ACT_1_3()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '3';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_1_4(void)
-{
-    GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");
-    ips200_show_string(80,ROW_8,"Encode");
-    ips200_show_string(80,ROW_10,"Image");
-    ips200_show_string(80,ROW_12,"Gyro");
-    ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_12,"-->");
-    ips200_show_string(136,ROW_12,"<--");
-}
-void ACT_1_4()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '4';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_1_5(void)
-{
-    GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");
-    ips200_show_string(80,ROW_8,"Encode");
-    ips200_show_string(80,ROW_10,"Image");
-    ips200_show_string(80,ROW_12,"Gyro");
-    ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_14,"-->");
-    ips200_show_string(136,ROW_14,"<--");
-}
-void ACT_1_5()
-{
-    ReadPos[0] = '1';
-    ReadPos[1] = '.';
-    ReadPos[2] = '5';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-static void GUI_Display_Level2_Common2(void)
-{
-    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-    ips200_show_string(0,ROW_1,"Debug");
-    GUI_Display_FPS();
-}
-void GUI_2_1(void)
-{
-    GUI_Display_Level2_Common2();
-    ips200_show_string(80, ROW_6, " Image  ");
-    ips200_show_string(80, ROW_8, " NavDbg ");
-    ips200_show_string(80, ROW_10, " GPS    ");
-    ips200_show_string(80, ROW_12, " Speed  ");
-    ips200_show_string(80, ROW_14, "W_Flash");
-    ips200_show_string(80, ROW_16, "C_Flash ");
-    ips200_show_string(48, ROW_6, "-->");
-    ips200_show_string(152, ROW_6, "<--");
-}
-void ACT_2_1()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '1';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_2_2(void)
-{
-    GUI_Display_Level2_Common2();
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    ips200_show_string(48,ROW_8,"-->");
-    ips200_show_string(152,ROW_8,"<--");
-}
-void ACT_2_2()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '2';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_2_2_1(void)
-{
-    uint8 nav_recording_active = 0;
-    uint8 event_active = 0;
-    uint8 event_record_type = 0;
-    uint8 event_active_type = 0;
-    uint8 end_f = 0;
-    uint8 nag_system_run_index = 0;
-    uint8 event_count = 0;
-    uint8 display_type = 0;
-    const char *type_name = "Unknown";
-    const char *rec_state_name = "Rec:Idle";
-    GUI_Display_Level2_Common2();
-#if defined(CY_CORE_CM7_1)
-    dualcore_ctrl_to_ui_pull(&s_ui_dc);
-    nav_recording_active = s_ui_dc.nav_recording_active;
-    event_active = s_ui_dc.event_active;
-    event_record_type = s_ui_dc.event_record_type;
-    event_active_type = s_ui_dc.event_active_type;
-    end_f = s_ui_dc.end_f;
-    nag_system_run_index = s_ui_dc.nag_system_run_index;
-#else
-    nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0u));
-    event_active = N.Event_Active;
-    event_record_type = N.Event_Record_Type;
-    event_active_type = N.Event_Active_Type;
-    end_f = (uint8)(N.End_f ? 1u : 0u);
-    nag_system_run_index = N.Nag_SystemRun_Index;
-    event_count = N.Event_Count;
-#endif
-    if (nav_recording_active)
-    {
-        rec_state_name = "Rec:Recording";
-    }
-    else if (nag_system_run_index == 1u && end_f)
-    {
-        rec_state_name = "Rec:Saving";
-    }
-    else if (event_active)
-    {
-        rec_state_name = "Run:Event";
-    }
-    else if (nag_system_run_index >= 2u)
-    {
-        rec_state_name = "Run:Replay";
-    }
-    display_type = event_active ? event_active_type : event_record_type;
-    type_name = Nag_GetEventTypeName(display_type);
-    ips200_show_string(64, ROW_3, "Nav Debug");
-    ips200_show_string(0, ROW_5, rec_state_name);
-#if defined(CY_CORE_CM7_1)
-    if (nav_recording_active && s_ui_dc.menu_nav_fusion_enable != 0u && s_ui_dc.fusion_origin_calibrating != 0u)
-    {
-        ips200_show_string(120, ROW_5, "Origin:");
-        ips200_show_uint(168, ROW_5, (uint32)s_ui_dc.fusion_origin_accepted, 2);
-        ips200_show_string(184, ROW_5, "/50");
-    }
-#else
-    if (nav_recording_active && g_menu_nav_fusion_enable != 0u && NavFusion_IsOriginCalibrating() != 0u)
-    {
-        ips200_show_string(120, ROW_5, "Origin:");
-        ips200_show_uint(168, ROW_5, (uint32)NavFusion_GetOriginAcceptedCount(), 2);
-        ips200_show_string(184, ROW_5, "/50");
-    }
-#endif
-    if (event_active)
-    {
-        ips200_show_string(0, ROW_6, "ActEv:");
-    }
-    else
-    {
-        ips200_show_string(0, ROW_6, "Elem:");
-    }
-    ips200_show_string(48, ROW_6, type_name);
-    ips200_show_string(112, ROW_6, "(");
-    ips200_show_uint(120, ROW_6, (uint32)display_type, 1);
-    ips200_show_string(128, ROW_6, ")");
-#if defined(CY_CORE_CM7_1)
-    ips200_show_string(0, ROW_7, "RunIdx:");
-    ips200_show_uint(64, ROW_7, (uint32)nag_system_run_index, 1);
-#else
-    ips200_show_string(0, ROW_7, "EvCnt:");
-    ips200_show_uint(56, ROW_7, (uint32)event_count, 2);
-#endif
-    if (nav_recording_active)
-    {
-        ips200_show_string(0, ROW_8, "K1 ReBegin");
-        ips200_show_string(0, ROW_9, "K2 StopRec");
-        ips200_show_string(0, ROW_10, "K3 NextType");
-        ips200_show_string(0, ROW_11, "K4 Mark");
-    }
-    else if (event_active)
-    {
-        ips200_show_string(0, ROW_8, "K1 Begin");
-        ips200_show_string(0, ROW_9, "K2 StopRec");
-        ips200_show_string(0, ROW_10, "K3 Replay");
-        ips200_show_string(0, ROW_11, "K4 EvDone");
-    }
-    else
-    {
-        ips200_show_string(0, ROW_8, "K1 Begin");
-        ips200_show_string(0, ROW_9, "K2 StopRec");
-        ips200_show_string(0, ROW_10, "K3 Replay");
-        ips200_show_string(0, ROW_11, "K4 Back");
-    }
-    ips200_draw_line(0, ROW_12, 239, ROW_12, IPS200_DEFAULT_PENCOLOR);
-    ips200_show_string(0, ROW_13, "Mileage:");
-#if defined(CY_CORE_CM7_1)
-    ips200_show_float(104, ROW_13, s_ui_dc.mileage_debug_total, 4, 2);
-    ips200_show_string(0, ROW_14, "SaveIdx:");
-    ips200_show_uint(104, ROW_14, (uint32)s_ui_dc.save_index, 5);
-    ips200_show_string(0, ROW_15, "FlashPg:");
-    ips200_show_uint(104, ROW_15, (uint32)s_ui_dc.flash_page_index, 3);
-#else
-    ips200_show_float(104, ROW_13, N.Mileage_Debug_Total, 4, 2);
-    ips200_show_string(0, ROW_14, "SaveIdx:");
-    ips200_show_uint(104, ROW_14, N.Save_index, 5);
-    ips200_show_string(0, ROW_15, "FlashPg:");
-    ips200_show_uint(104, ROW_15, N.Flash_page_index, 3);
-#endif
-}
-void ACT_2_2_1()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '2';
-    ReadPos[3] = '.';
-    ReadPos[4] = '1';
-    ReadPos[5] = 0x00;
-}
-void GUI_2_3(void)
-{
-    GUI_Display_Level2_Common2();
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    ips200_show_string(48,ROW_10,"-->");
-    ips200_show_string(152,ROW_10,"<--");
-}
-void ACT_2_3()
-{
-    ReadPos[0] = '2';
-    ReadPos[1] = '.';
-    ReadPos[2] = '3';
-    ReadPos[3] = 0x00;
-    ReadPos[4] = 0x00;
-}
-void GUI_2_3_1(void)
-{
-    uint8 point_count = 0;
-    uint8 current_show_point = 0;
-    uint8 recording_active = 0;
-    uint32 current_element = NAV_ELEM_NORMAL;
-    uint32 tracking_element = NAV_ELEM_NORMAL;
-    uint8 nav_state = GPS_NAV_STATE_IDLE;
-    uint8 nav_protect_reason = GPS_NAV_PROTECT_NONE;
-    uint8 nav_target_index = 0;
-    float nav_distance_m = 0.0f;
-    float nav_imu_yaw_deg = 0.0f;
-    float nav_yaw_err_deg = 0.0f;
-    uint8 nav_align_state = GPS_NAV_ALIGN_WAIT;
-    float nav_heading_bias_deg = 0.0f;
-    float nav_gps_first_deg = 0.0f;
-    float nav_dist_from_launch_m = 0.0f;
-    uint8 nav_drift_valid = 0u;
-    float nav_drift_dlat = 0.0f;
-    float nav_drift_dlon = 0.0f;
-    const char *element_name = "None";
-    const char *nav_state_name = "Idle";
-    const char *nav_protect_name = "None";
-    GUI_Display_Level2_Common2();
-#if defined(CY_CORE_CM7_1)
-    dualcore_ctrl_to_ui_pull(&s_ui_dc);
-    point_count = s_ui_dc.gps_point_count;
-    current_show_point = s_ui_dc.gps_show_point;
-    recording_active = s_ui_dc.gps_recording_active;
-    current_element = s_ui_dc.gps_current_yuansu;
-    nav_state = s_ui_dc.gps_nav_state;
-    nav_protect_reason = s_ui_dc.gps_nav_protect_reason;
-    nav_target_index = s_ui_dc.gps_nav_target_index;
-    nav_distance_m = s_ui_dc.gps_nav_distance_m;
-    nav_imu_yaw_deg = s_ui_dc.euler_yaw;
     nav_yaw_err_deg = s_ui_dc.gps_nav_yaw_err_deg;
     nav_align_state = s_ui_dc.gps_nav_align_state;
     nav_heading_bias_deg = s_ui_dc.gps_nav_heading_bias_deg;
@@ -1343,3 +904,597 @@ void ACT_2_1_3_1()
     ReadPos[6] = '1';
     ReadPos[7] = 0x00;
 }
+#ifndef CODE_REMOTE_LORA_H_
+#define CODE_REMOTE_LORA_H_
+#include "zf_common_typedef.h"
+struct dualcore_remote_to_ctrl;
+#ifndef REMOTE_LORA_JOYSTICK_ABS_MAX
+#define REMOTE_LORA_JOYSTICK_ABS_MAX  (2000)
+#endif
+#ifndef REMOTE_LORA_VALIDATE_SPEED_ABS_MAX
+#define REMOTE_LORA_VALIDATE_SPEED_ABS_MAX  (1500.0f)
+#endif
+#ifndef REMOTE_LORA_VALIDATE_SPEED_INVERT
+#define REMOTE_LORA_VALIDATE_SPEED_INVERT  0
+#endif
+#ifndef REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS
+#define REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS  (200.0f)
+#endif
+#ifndef REMOTE_LORA_KEY_INDEX_RIGHT_STICK
+#define REMOTE_LORA_KEY_INDEX_RIGHT_STICK  (1u)
+#endif
+#ifndef REMOTE_LORA_SPIN_TURNS_VALIDATE
+#define REMOTE_LORA_SPIN_TURNS_VALIDATE  (2.0f)
+#endif
+#ifndef REMOTE_LORA_SPIN_DIR
+#define REMOTE_LORA_SPIN_DIR  (1)
+#endif
+#ifndef REMOTE_LORA_KEY_INDEX_ROLL_BALANCE
+#define REMOTE_LORA_KEY_INDEX_ROLL_BALANCE  (2u)
+#endif
+#ifndef REMOTE_LORA_KEY_INDEX_JUMP
+#define REMOTE_LORA_KEY_INDEX_JUMP  (3u)
+#endif
+#ifndef REMOTE_LORA_LEFT_SWITCH0_INDEX
+#define REMOTE_LORA_LEFT_SWITCH0_INDEX  (0u)
+#endif
+#ifndef REMOTE_LORA_LEFT_SWITCH1_INDEX
+#define REMOTE_LORA_LEFT_SWITCH1_INDEX  (1u)
+#endif
+#ifndef REMOTE_LORA_REPLAY_ON_SW0_RISING
+#define REMOTE_LORA_REPLAY_ON_SW0_RISING  (0u)
+#endif
+#ifndef REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX
+#define REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX  (3u)
+#endif
+#ifndef REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL
+#define REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL  (0u)
+#endif
+void remote_lora_init(void);
+void remote_lora_update_from_driver_and_publish(void);
+uint8 remote_lora_is_remote_menu_enabled(void);
+void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out);
+#if defined(CY_CORE_CM7_0)
+void remote_lora_apply_validate_motor(void);
+#endif
+#endif
+#include "dualcore_shared.h"
+#include "remote_lora.h"
+#include "Menu.h"
+#include "zf_device_lora3a22.h"
+#include <string.h>
+#if defined(CY_CORE_CM7_1)
+static dualcore_remote_to_ctrl_t s_last_published;
+static uint8 s_inited;
+static int16 remote_lora_clamp_axis(int16 v)
+{
+    if (v > REMOTE_LORA_JOYSTICK_ABS_MAX)
+    {
+        return (int16)REMOTE_LORA_JOYSTICK_ABS_MAX;
+    }
+    if (v < -(int16)REMOTE_LORA_JOYSTICK_ABS_MAX)
+    {
+        return (int16)-(int16)REMOTE_LORA_JOYSTICK_ABS_MAX;
+    }
+    return v;
+}
+static void remote_lora_apply_defaults(dualcore_remote_to_ctrl_t *s)
+{
+    memset(s, 0, sizeof(*s));
+    s->left_x = 0;
+    s->left_y = 0;
+    s->right_x = 0;
+    s->right_y = 0;
+    s->key[0] = 0u;
+    s->key[1] = 0u;
+    s->key[2] = 0u;
+    s->key[3] = 0u;
+    s->switch_key[0] = 1u;
+    s->switch_key[1] = 1u;
+    s->switch_key[2] = 1u;
+    s->switch_key[3] = 1u;
+}
+void remote_lora_init(void)
+{
+    remote_lora_apply_defaults(&s_last_published);
+    lora3a22_init();
+    s_inited = 1u;
+}
+uint8 remote_lora_is_remote_menu_enabled(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc;
+    dualcore_ctrl_to_ui_pull(&dc);
+    return dc.menu_input_remote_first;
+#else
+    return 0u;
+#endif
+}
+void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out)
+{
+    if (out != NULL)
+    {
+        *out = s_last_published;
+    }
+}
+void remote_lora_update_from_driver_and_publish(void)
+{
+    dualcore_remote_to_ctrl_t snap;
+    uint8 had_new_frame = 0u;
+    if (!s_inited)
+    {
+        remote_lora_init();
+    }
+    remote_lora_apply_defaults(&snap);
+    if (lora3a22_finsh_flag != 0u)
+    {
+        had_new_frame = 1u;
+        lora3a22_finsh_flag = 0u;
+    }
+    snap.enabled = remote_lora_is_remote_menu_enabled();
+    if (snap.enabled == 0u)
+    {
+        remote_lora_apply_defaults(&snap);
+        snap.enabled = 0u;
+        snap.online = 0u;
+        snap.fresh = 0u;
+        dualcore_remote_publish(&snap);
+        s_last_published = snap;
+        return;
+    }
+    snap.online = lora3a22_state_flag ? 1u : 0u;
+    snap.fresh = had_new_frame;
+    if (snap.online != 0u)
+    {
+        snap.left_x = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[0]);
+        snap.left_y = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[1]);
+        snap.right_x = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[2]);
+        snap.right_y = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[3]);
+        snap.key[0] = lora3a22_uart_transfer.key[0] ? 1u : 0u;
+        snap.key[1] = lora3a22_uart_transfer.key[1] ? 1u : 0u;
+        snap.key[2] = lora3a22_uart_transfer.key[2] ? 1u : 0u;
+        snap.key[3] = lora3a22_uart_transfer.key[3] ? 1u : 0u;
+        snap.switch_key[0] = lora3a22_uart_transfer.switch_key[0] ? 1u : 0u;
+        snap.switch_key[1] = lora3a22_uart_transfer.switch_key[1] ? 1u : 0u;
+        snap.switch_key[2] = lora3a22_uart_transfer.switch_key[2] ? 1u : 0u;
+        snap.switch_key[3] = lora3a22_uart_transfer.switch_key[3] ? 1u : 0u;
+    }
+    else
+    {
+        remote_lora_apply_defaults(&snap);
+        snap.enabled = 1u;
+        snap.online = 0u;
+        snap.fresh = 0u;
+    }
+    dualcore_remote_publish(&snap);
+    s_last_published = snap;
+}
+#else
+void remote_lora_init(void)
+{
+}
+void remote_lora_update_from_driver_and_publish(void)
+{
+}
+uint8 remote_lora_is_remote_menu_enabled(void)
+{
+    return 0u;
+}
+void remote_lora_get_last_published(dualcore_remote_to_ctrl_t *out)
+{
+    (void)out;
+}
+#endif
+#include "dualcore_shared.h"
+#include "Menu.h"
+#include "remote_lora.h"
+#include "control.h"
+#include "navigation.h"
+#include "small_driver_uart_control.h"
+#if defined(CY_CORE_CM7_0)
+static float remote_lora_validate_clamp_speed(float v)
+{
+    const float lim = REMOTE_LORA_VALIDATE_SPEED_ABS_MAX;
+    if (v > lim)
+    {
+        return lim;
+    }
+    if (v < -lim)
+    {
+        return -lim;
+    }
+    return v;
+}
+static float remote_lora_clamp_steer_rate_dps(float w)
+{
+    const float lim = REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS;
+    if (w > lim)
+    {
+        return lim;
+    }
+    if (w < -lim)
+    {
+        return -lim;
+    }
+    return w;
+}
+void remote_lora_apply_validate_motor(void)
+{
+    dualcore_remote_to_ctrl_t r;
+    static uint8 s_prev_key0;
+    static uint8 s_prev_key_right_stick;
+    static uint8 s_prev_key_roll_balance;
+    static uint8 s_prev_key_jump;
+    static uint8 s_prev_left_sw0;
+    static uint8 s_prev_left_sw1;
+    static uint8 s_left_dip_synced;
+    float cmd;
+    float rate_cmd;
+    uint8 k0;
+    uint8 rising;
+    uint8 kr;
+    uint8 rising_r;
+    uint8 nav_recording_active;
+    dualcore_remote_pull(&r);
+    if (g_menu_input_remote_first != 0u)
+    {
+        if ((r.enabled == 0u) || (r.online == 0u))
+        {
+            g_remote_local_keys_debug = 0u;
+        }
+        else
+        {
+            uint8 swv = 0u;
+#if REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX < 4u
+            swv = (r.switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX] != 0u) ? 1u : 0u;
+#endif
+            g_remote_local_keys_debug = (uint8)((swv == REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL) ? 1u : 0u);
+        }
+        if (g_remote_local_keys_debug != 0u)
+        {
+            remote_lora_steer_snapshot_valid = 0u;
+            remote_lora_steer_rate_cmd_dps = 0.0f;
+            return;
+        }
+    }
+    if ((r.enabled == 0u) || (r.online == 0u))
+    {
+        remote_lora_steer_snapshot_valid = 0u;
+        s_left_dip_synced = 0u;
+        return;
+    }
+    cmd = (float)r.left_y * (REMOTE_LORA_VALIDATE_SPEED_ABS_MAX / (float)REMOTE_LORA_JOYSTICK_ABS_MAX);
+#if REMOTE_LORA_VALIDATE_SPEED_INVERT
+    cmd = -cmd;
+#endif
+    motor_user_speed_cmd = remote_lora_validate_clamp_speed(cmd);
+    rate_cmd = (float)r.right_x * (REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS / (float)REMOTE_LORA_JOYSTICK_ABS_MAX);
+    remote_lora_steer_rate_cmd_dps = remote_lora_clamp_steer_rate_dps(rate_cmd);
+    remote_lora_steer_snapshot_valid = 1u;
+    nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0));
+    k0 = (r.key[0] != 0u) ? 1u : 0u;
+    rising = (uint8)((k0 != 0u) && (s_prev_key0 == 0u));
+    s_prev_key0 = k0;
+    if (rising != 0u)
+    {
+        uint8 next_sw = (uint8)((Motor_Switch == MOTOR_ON) ? MOTOR_OFF : MOTOR_ON);
+        if ((next_sw == MOTOR_ON) && (Motor_Runaway_Latch != 0u))
+        {
+        }
+        else
+        {
+            Motor_Switch = next_sw;
+        }
+    }
+#if REMOTE_LORA_KEY_INDEX_RIGHT_STICK < 4u
+    kr = (r.key[REMOTE_LORA_KEY_INDEX_RIGHT_STICK] != 0u) ? 1u : 0u;
+#else
+    kr = 0u;
+#endif
+    rising_r = (uint8)((kr != 0u) && (s_prev_key_right_stick == 0u));
+    s_prev_key_right_stick = kr;
+    if ((rising_r != 0u) && (spin_enable == 0u) && (remote_lora_nav_allows_spin_request() != 0u))
+    {
+        spin_task_start(REMOTE_LORA_SPIN_TURNS_VALIDATE, (int8)REMOTE_LORA_SPIN_DIR);
+    }
+#if REMOTE_LORA_KEY_INDEX_ROLL_BALANCE < 4u
+    {
+        uint8 k_roll;
+        uint8 rising_roll;
+        k_roll = (r.key[REMOTE_LORA_KEY_INDEX_ROLL_BALANCE] != 0u) ? 1u : 0u;
+        rising_roll = (uint8)((k_roll != 0u) && (s_prev_key_roll_balance == 0u));
+        s_prev_key_roll_balance = k_roll;
+        if (rising_roll != 0u)
+        {
+            if (nav_recording_active != 0u)
+            {
+                Nag_Cycle_Record_Event_Type();
+            }
+            else
+            {
+                roll_balance_en = (uint8)(roll_balance_en ? 0u : 1u);
+            }
+        }
+    }
+#endif
+#if REMOTE_LORA_KEY_INDEX_JUMP < 4u
+    {
+        uint8 k_j;
+        uint8 rising_j;
+        k_j = (r.key[REMOTE_LORA_KEY_INDEX_JUMP] != 0u) ? 1u : 0u;
+        rising_j = (uint8)((k_j != 0u) && (s_prev_key_jump == 0u));
+        s_prev_key_jump = k_j;
+        if (rising_j != 0u)
+        {
+            if (nav_recording_active != 0u)
+            {
+                Nag_Request_Event_Mark();
+            }
+            else if ((jump_is_allowed() != 0u) && (jump_flag == 0u))
+            {
+                jump_flag = 1u;
+            }
+        }
+    }
+#endif
+#if (REMOTE_LORA_LEFT_SWITCH0_INDEX < 4u) && (REMOTE_LORA_LEFT_SWITCH1_INDEX < 4u)
+    {
+        uint8 sw0;
+        uint8 sw1;
+        uint8 edge_replay;
+        uint8 edge_rec_on;
+        uint8 edge_rec_stop;
+        sw0 = (r.switch_key[REMOTE_LORA_LEFT_SWITCH0_INDEX] != 0u) ? 1u : 0u;
+        sw1 = (r.switch_key[REMOTE_LORA_LEFT_SWITCH1_INDEX] != 0u) ? 1u : 0u;
+        if (s_left_dip_synced == 0u)
+        {
+            s_prev_left_sw0 = sw0;
+            s_prev_left_sw1 = sw1;
+            s_left_dip_synced = 1u;
+        }
+        else
+        {
+#if REMOTE_LORA_REPLAY_ON_SW0_RISING
+            edge_replay = (uint8)((s_prev_left_sw0 == 0u) && (sw0 == 1u));
+#else
+            edge_replay = (uint8)((s_prev_left_sw0 == 1u) && (sw0 == 0u));
+#endif
+            if (edge_replay != 0u)
+            {
+                Nag_Begin_Replay();
+            }
+            if (sw0 == 1u)
+            {
+                edge_rec_on = (uint8)((s_prev_left_sw1 == 1u) && (sw1 == 0u));
+                edge_rec_stop = (uint8)((s_prev_left_sw1 == 0u) && (sw1 == 1u));
+                if (edge_rec_on != 0u)
+                {
+                    Nag_Begin_Record();
+                }
+                if (edge_rec_stop != 0u)
+                {
+                    Nag_Request_Stop_Record();
+                }
+            }
+            s_prev_left_sw0 = sw0;
+            s_prev_left_sw1 = sw1;
+        }
+    }
+#endif
+}
+#endif
+#ifndef _VOFA_H_
+#define _VOFA_H_
+#include "zf_common_headfile.h"
+void SendDataStreamToVOFA(uint32_t Count, float Data, ...);
+void ReadDataFromPc(void);
+void SendDataToVofa(void);
+extern uint32 WirelessUart_ReadBuff_Count;
+extern uint8 WirelessUart_ReadBuff_Data[64];
+extern uint8 Menu_command;
+extern float ReadBuf_Pid;
+#if defined(CY_CORE_CM7_1)
+void vofa_send_nav_from_dualcore_snapshot(void);
+#define VOFA_GROUP_SPEED_DEBUG (1u)
+#define VOFA_GROUP_FUSION_DEBUG (2u)
+#define VOFA_GROUP_ODO_SLIP_DEBUG (3u)
+#endif
+#endif
+#include "vofa.h"
+#include "init.h"
+#include <stdlib.h>
+#include <string.h>
+const uint8_t vofa_justfloat_frame_tail[4] = {0x00, 0x00, 0x80, 0x7f};
+#define Wired_Mode 1
+float ReadBuf_Pid = 0;
+extern int16 pwm_ph1;
+extern int16 pwm_ph2;
+extern int16 pwm_ph3;
+extern int16 pwm_ph4;
+void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
+{
+    volatile float Temp = Data;
+    va_list Args;
+    va_start(Args, Data);
+#if Wired_Mode
+    wireless_uart_send_buffer((uint8 *)&Data, sizeof(float));
+#else
+    uart_write_buffer(UART_1, (uint8 *)&Data, sizeof(float));
+#endif
+    for (uint32_t i = 1; i < Count; i++)
+    {
+        Temp = va_arg(Args, double);
+#if Wired_Mode
+        wireless_uart_send_buffer((uint8 *)&Temp, sizeof(float));
+#else
+        uart_write_buffer(UART_1, (uint8 *)&Temp, sizeof(float));
+#endif
+    }
+#if Wired_Mode
+    wireless_uart_send_buffer((uint8 *)vofa_justfloat_frame_tail, 4);
+#else
+    uart_write_buffer(UART_1, (uint8 *)vofa_justfloat_frame_tail, 4);
+#endif
+    va_end(Args);
+}
+uint32 WirelessUart_ReadBuff_Count = 0;
+uint8 WirelessUart_ReadBuff_Data[64] = {0};
+uint8 Menu_command = 0;
+void ReadDataFromPc()
+{
+#if Wired_Mode
+    WirelessUart_ReadBuff_Count = wireless_uart_read_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
+    if (WirelessUart_ReadBuff_Count)
+    {
+        if (Menu_TryConsumePcMotorSpeedString(WirelessUart_ReadBuff_Data, WirelessUart_ReadBuff_Count))
+        {
+            memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+            WirelessUart_ReadBuff_Count = 0;
+        }
+        else
+        {
+        Menu_command = WirelessUart_ReadBuff_Data[0];
+        if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
+        {
+            ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
+        }
+        if (WirelessUart_ReadBuff_Data[0] == 's')
+        {
+        }
+        if (WirelessUart_ReadBuff_Count >= 3) {
+            if (WirelessUart_ReadBuff_Data[0] == 'p') {
+                switch (WirelessUart_ReadBuff_Data[1]) {
+                    case '1':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph1 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph1 -= 10;
+                        }
+                        break;
+                    case '2':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph2 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph2 -= 10;
+                        }
+                        break;
+                    case '3':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph3 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph3 -= 10;
+                        }
+                        break;
+                    case '4':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph4 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph4 -= 10;
+                        }
+                        break;
+                }
+            }
+        }
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+        WirelessUart_ReadBuff_Count = 0;
+        }
+    }
+#else
+    WirelessUart_ReadBuff_Count = debug_read_ring_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
+    if (WirelessUart_ReadBuff_Count)
+    {
+        debug_send_buffer(ReadPos, sizeof(ReadPos));
+        if (Menu_TryConsumePcMotorSpeedString(WirelessUart_ReadBuff_Data, WirelessUart_ReadBuff_Count))
+        {
+            memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+            WirelessUart_ReadBuff_Count = 0;
+        }
+        else
+        {
+        Menu_command = WirelessUart_ReadBuff_Data[0];
+        if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
+        {
+            ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
+        }
+        if (WirelessUart_ReadBuff_Count >= 3) {
+            if (WirelessUart_ReadBuff_Data[0] == 'p') {
+                switch (WirelessUart_ReadBuff_Data[1]) {
+                    case '1':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph1 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph1 -= 10;
+                        }
+                        break;
+                    case '2':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph2 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph2 -= 10;
+                        }
+                        break;
+                    case '3':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph3 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph3 -= 10;
+                        }
+                        break;
+                    case '4':
+                        if (WirelessUart_ReadBuff_Data[2] == '+') {
+                            pwm_ph4 += 10;
+                        } else if (WirelessUart_ReadBuff_Data[2] == '-') {
+                            pwm_ph4 -= 10;
+                        }
+                        break;
+                }
+            }
+        }
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
+        WirelessUart_ReadBuff_Count = 0;
+        }
+    }
+#endif
+}
+void SendDataToVofa()
+{
+}
+#if defined(CY_CORE_CM7_1)
+#include "dualcore_shared.h"
+#include "navigation.h"
+void vofa_send_nav_from_dualcore_snapshot(void)
+{
+  dualcore_ctrl_to_ui_t c;
+  dualcore_ctrl_to_ui_pull(&c);
+  uint8 g = (uint8)(c.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
+  switch (g)
+  {
+  case 0:
+    SendDataStreamToVOFA(4, c.euler_pitch, c.euler_roll, c.euler_yaw, c.gyro_z_bias_mean);
+    break;
+  case VOFA_GROUP_SPEED_DEBUG:
+    SendDataStreamToVOFA(2, c.speed_target_effective, c.car_speed);
+    break;
+  case VOFA_GROUP_FUSION_DEBUG:
+    SendDataStreamToVOFA(6,
+                         c.fusion_x_m,
+                         c.fusion_y_m,
+                         c.fusion_v_mps,
+                         c.fusion_gps_residual_m,
+                         c.fusion_hold_dist_m,
+                         c.fusion_heading_bias_deg);
+    break;
+  case VOFA_GROUP_ODO_SLIP_DEBUG:
+    SendDataStreamToVOFA(6,
+                         c.odo_wheel_left_cmps,
+                         c.odo_wheel_right_cmps,
+                         c.odo_gyro_z_dps,
+                         c.odo_vc_from_l_cmps,
+                         c.odo_vc_from_r_cmps,
+                         c.odo_corr_speed_cmps);
+    break;
+  default:
+    break;
+  }
+}
+#endif

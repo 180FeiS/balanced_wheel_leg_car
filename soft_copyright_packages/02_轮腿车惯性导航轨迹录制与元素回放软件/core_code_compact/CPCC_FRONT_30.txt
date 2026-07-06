@@ -1,0 +1,1500 @@
+#ifndef _NAVIGATION_H_
+#define _NAVIGATION_H_
+#define MaxSize 500
+#define Read_MaxSize 10000
+#define Nag_End_Page 1
+#define Nag_Start_Page 45
+#define WHEEL_RADIUS_CM 3.73f
+#define Nag_Set_mileage 2.0f
+#define Nag_Prev 200
+#define Nag_Yaw euler_angle.yaw
+#define Nag_Sample_Dt 0.001f
+#define Nag_Speed_Source car_speed
+#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)
+#define Nag_Speed_Deadband 1.0f
+#define Nag_Reissue_Error 0.5f
+#define Nag_OdoSlip_Enable 1u
+#define Nag_Wheel_Track_Cm 16.0f
+#define Nag_OdoSlip_Consistency_Th_Cmps 60.0f
+#define Nag_OdoSlip_Instant_Slew_Max_Cmps 120.0f
+#define Nag_OdoSlip_Enter_Count 10u
+#define Nag_OdoSlip_Exit_Count 25u
+#define Nag_OdoSlip_History_Len 15u
+#define Nag_OdoSlip_Rollback_Max_Cm 6.0f
+#define NAG_USE_FUSION_MILEAGE 1u
+#define Nag_Debug_Speed_Bypass_Enable 0u
+#define Nag_AdaptiveLookahead_Enable 1u
+#define Nag_Lookahead_Base_Points 3u
+#define Nag_Lookahead_Speed_Gain 0.010f
+#define Nag_Lookahead_Max_Points 24u
+#define Nag_Curve_Lookahead_Extra 10u
+#define Nag_Curve_Threshold_Straight 8.0f
+#define Nag_Curve_Threshold_Sharp 16.0f
+#define Nag_Speed_Ratio_Curve 0.9f
+#define Nag_Speed_Ratio_Sharp 0.8f
+#define Nag_Event_Speed_Ratio 0.35f
+#define Nag_EventSpeed_Enable 1u
+#define Nag_Spin_Target_Speed_Default 1.0f
+#define Nag_Spin_PreDecel_Dist_cm_Default 150.0f
+#define Nag_Spin_Rate_Max_Dps_Default 200.0f
+extern float nag_spin_target_speed;
+extern float nag_spin_pre_decel_dist_cm;
+#define Nag_Spin_PreAccel_Dist_cm 0.0f
+#define Nag_Spin_Trigger_Window_cm 30.0f
+#define Nag_EnterTurn_Target_Speed_Default 220.0f
+#define Nag_EnterTurn_PreDecel_Dist_cm_Default 0.0f
+extern float nag_enter_turn_target_speed;
+extern float nag_enter_turn_pre_decel_dist_cm;
+#define Nag_ExitTurn_Recovery_Speed_Default 0.0f
+#define Nag_ExitTurn_PreAccel_Dist_cm_Default 0.0f
+extern float nag_exit_turn_recovery_speed;
+extern float nag_exit_turn_pre_accel_dist_cm;
+#define Nag_EnterCones_Target_Speed_Default 1000.0f
+#define Nag_EnterCones_PreDecel_Dist_cm_Default 50.0f
+extern float nag_enter_cones_target_speed;
+extern float nag_enter_cones_pre_decel_dist_cm;
+#define Nag_ExitCones_Recovery_Speed 0.0f
+#define Nag_ExitCones_PreAccel_Dist_cm 20.0f
+#define Nag_EnterBridge_Target_Speed_Default 500.0f
+#define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f
+#define Nag_EnterBridge_Leg_Long 5.5f
+#define Nag_ExitBridge_Leg_Long 3.5f
+#define Nag_ExitBridge_Recovery_Speed 0.0f
+#define BRIDGE_BLOB_LOST_EXIT_MS        250u
+#define BRIDGE_ENTER_GRACE_MS           400u
+#define BRIDGE_BLOB_NO_FRAME_EXIT_MS    1000u
+#define Nag_BridgeBlob_Yaw_K_Pixel      0.22f
+#define Nag_BridgeBlob_Yaw_Max_Offset   30.0f
+#define Nag_BridgeBlob_Yaw_Deadband     0.1f
+extern float nag_enter_bridge_target_speed;
+extern float nag_enter_bridge_pre_decel_dist_cm;
+#define Nag_Bump_Target_Speed 220.0f
+#define Nag_Bump_PreDecel_Dist_cm 0.0f
+#define Nag_EnterStair_Target_Speed 300.0f
+#define Nag_EnterStair_Leg_Long 5.5f
+#define Nag_EnterStair_Yaw_Lookback_cm 20.0f
+#define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f
+extern float nag_enter_stair_pre_decel_dist_cm;
+#define Nag_HeadingHold_EnterStair_Enable 1u
+#define Nag_ExitStair_Leg_Long 3.5f
+#define Nag_Stair_Jump_Exit_Count 3u
+#define Nag_HeadingHold_ExitStair_Enable 0u
+#define Nag_Event_Max 8u
+#define Nag_Event_Page 46u
+#define Nag_Event_Magic 0x4E414745u
+#define Nag_Event_Version 5u
+#define Nag_Run_Launch_Speed_Page 47u
+#define Nag_Run_Launch_Speed_Magic 0x524C5350u
+#define Nag_Run_Launch_Speed_Version 1u
+#define Nag_Run_Launch_Params_Version 2u
+#define Nag_Run_Launch_Params_Version_V3 3u
+#define Nag_Run_Launch_Params_Version_V4 4u
+#define Nag_Run_Launch_Params_Version_V5 5u
+#define Nag_Run_Launch_Params_Version_V6 6u
+#define Nag_Run_Launch_Params_Version_V7 7u
+#define Nag_Run_Launch_Params_Version_V8 8u
+#define Nag_Run_Launch_Params_Version_V9 9u
+#define Nag_Run_Launch_Params_Version_V10 10u
+#define Nag_Run_Launch_Param_Count 13u
+#define Nag_Run_Launch_Config_Word_Count_V5 11u
+#define Nag_Run_Launch_Config_Word_Count_V6 12u
+#define Nag_Run_Launch_Config_Word_Count_V7 13u
+#define Nag_Run_Launch_Config_Word_Count_V8 15u
+#define Nag_Run_Launch_Config_Word_Count_V9 16u
+#define Nag_Run_Launch_Config_Word_Count 17u
+#define Nag_Launch_Field_Base_Spd 0u
+#define Nag_Launch_Field_Spin_Spd 1u
+#define Nag_Launch_Field_Spin_Dec 2u
+#define Nag_Launch_Field_TurnIn_Spd 3u
+#define Nag_Launch_Field_TurnIn_Dec 4u
+#define Nag_Launch_Field_TurnOut_Spd 5u
+#define Nag_Launch_Field_TurnOut_Acc 6u
+#define Nag_Launch_Field_Cone_Spd 7u
+#define Nag_Launch_Field_Cone_Dec 8u
+#define Nag_Launch_Field_Spin_Rate 9u
+#define Nag_Launch_Field_Stair_Dec 10u
+#define Nag_Launch_Field_BridgeIn_Spd 11u
+#define Nag_Launch_Field_BridgeIn_Dec 12u
+float Nag_LaunchParamGet(uint8 field_index);
+void Nag_LaunchParamSet(uint8 field_index, float value);
+void Nag_LaunchParamAdjust(uint8 field_index, float delta);
+void Nag_LaunchParamApplyDefaults(void);
+static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
+{
+    return (uint8)((field_index == Nag_Launch_Field_Base_Spd) ||
+                   (field_index == Nag_Launch_Field_Spin_Spd) ||
+                   (field_index == Nag_Launch_Field_TurnIn_Spd) ||
+                   (field_index == Nag_Launch_Field_TurnOut_Spd) ||
+                   (field_index == Nag_Launch_Field_Cone_Spd) ||
+                   (field_index == Nag_Launch_Field_BridgeIn_Spd));
+}
+static inline uint8 Nag_LaunchParamIsSpinRate(uint8 field_index)
+{
+    return (uint8)(field_index == Nag_Launch_Field_Spin_Rate);
+}
+static inline float Nag_LaunchParamGetStep(uint8 field_index)
+{
+    if (Nag_LaunchParamIsSpinRate(field_index))
+    {
+        return 10.0f;
+    }
+    if (Nag_LaunchParamIsSpeed(field_index))
+    {
+        return 100.0f;
+    }
+    return 10.0f;
+}
+#define Nag_Spin_Demo_Turns 2.0f
+#define Nag_Spin_Demo_Dir 1
+#define Nag_Spin_Stop_Speed_Threshold 30.0f
+#define Nag_Spin_Stop_Stable_Count 15u
+#define Nag_HeadingHold_Reissue_Error 2.0f
+#define Nag_HeadingHold_Spin_Enable 0u
+#define Nag_HeadingHold_EnterTurn_Enable 0u
+#define Nag_HeadingHold_Bump_Enable 0u
+typedef enum
+{
+    NAV_ELEM_NORMAL = 0,
+    NAV_ELEM_SPIN = 1,
+    NAV_ELEM_TURN_IN = 2,
+    NAV_ELEM_TURN_OUT = 3,
+    NAV_ELEM_CONE_IN = 4,
+    NAV_ELEM_CONE_OUT = 5,
+    NAV_ELEM_BRIDGE_IN = 6,
+    NAV_ELEM_BRIDGE_OUT = 7,
+    NAV_ELEM_BUMP = 8,
+    NAV_ELEM_STAIR_IN = 9,
+    NAV_ELEM_STAIR_OUT = 10,
+    NAV_ELEM_END = 11,
+    NAV_ELEM_COUNT = 12,
+} Nav_Unified_Element;
+#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR_OUT
+static inline uint8 Nav_UnifiedToInsEvent(uint8 unified)
+{
+    if (unified <= NAV_ELEM_NORMAL || unified >= NAV_ELEM_END)
+    {
+        return 0xFFu;
+    }
+    return (uint8)(unified - 1u);
+}
+static inline uint8 Nav_CycleUnifiedElement(uint8 current)
+{
+    current++;
+    if (current > NAV_ELEM_RECORD_CYCLE_MAX)
+    {
+        current = NAV_ELEM_NORMAL;
+    }
+    return current;
+}
+static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_TURN_IN) || (unified == NAV_ELEM_TURN_OUT) ||
+                   (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT) ||
+                   (unified == NAV_ELEM_BRIDGE_IN) || (unified == NAV_ELEM_BRIDGE_OUT));
+}
+static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_STAIR_IN));
+}
+static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
+{
+    return (uint8)((unified == NAV_ELEM_NORMAL) || (unified == NAV_ELEM_BUMP));
+}
+static inline const char *Nav_GetUnifiedElementName(uint8 unified)
+{
+    switch (unified)
+    {
+        case NAV_ELEM_NORMAL: return "Normal";
+        case NAV_ELEM_SPIN: return "Spin";
+        case NAV_ELEM_TURN_IN: return "TurnIn";
+        case NAV_ELEM_TURN_OUT: return "TurnOut";
+        case NAV_ELEM_CONE_IN: return "ConeIn";
+        case NAV_ELEM_CONE_OUT: return "ConeOut";
+        case NAV_ELEM_BRIDGE_IN: return "BridgeIn";
+        case NAV_ELEM_BRIDGE_OUT: return "BridgeOut";
+        case NAV_ELEM_BUMP: return "Bump";
+        case NAV_ELEM_STAIR_IN: return "StairIn";
+        case NAV_ELEM_STAIR_OUT: return "StairOut";
+        case NAV_ELEM_END: return "End";
+        default: return "Unknown";
+    }
+}
+typedef enum
+{
+       NAG_EVENT_TYPE_SPIN = 0,
+       NAG_EVENT_TYPE_ENTER_TURNAROUND = 1,
+       NAG_EVENT_TYPE_EXIT_TURNAROUND = 2,
+       NAG_EVENT_TYPE_ENTER_CONES = 3,
+       NAG_EVENT_TYPE_EXIT_CONES = 4,
+       NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE = 5,
+       NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE = 6,
+       NAG_EVENT_TYPE_BUMP = 7,
+       NAG_EVENT_TYPE_ENTER_STAIR = 8,
+       NAG_EVENT_TYPE_EXIT_STAIR = 9,
+       NAG_EVENT_TYPE_COUNT = 10,
+} Nag_Event_Type;
+static inline const char *Nag_GetEventTypeName(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_SPIN: return "Spin";
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return "TurnIn";
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return "TurnOut";
+        case NAG_EVENT_TYPE_ENTER_CONES: return "ConeIn";
+        case NAG_EVENT_TYPE_EXIT_CONES: return "ConeOut";
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return "BridgeIn";
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return "BridgeOut";
+        case NAG_EVENT_TYPE_BUMP: return "Bump";
+        case NAG_EVENT_TYPE_ENTER_STAIR: return "EnterStair";
+        case NAG_EVENT_TYPE_EXIT_STAIR: return "ExitStair";
+        default: return "Unknown";
+    }
+}
+typedef enum
+{
+       NAG_EVENT_STATE_IDLE = 0,
+       NAG_EVENT_STATE_ENTERED = 1,
+       NAG_EVENT_STATE_RUNNING = 2,
+       NAG_EVENT_STATE_DONE = 3,
+       NAG_EVENT_STATE_ABORT = 4,
+} Nag_Event_State;
+typedef struct
+{
+       uint16 enter_index;
+       uint16 exit_index;
+       uint8 type;
+       uint8 valid;
+} NagEvent;
+typedef struct{
+       float Final_Out;
+       float Mileage_All;
+       float Mileage_Step;
+       float Mileage_Debug_Total;
+       float Speed_Forward;
+       float Curve_Strength;
+       float Target_Speed;
+       float Angle_Run;
+       float Requested_Target_Yaw;
+       bool Nag_Stop_f;
+       uint8 Target_Request_Valid;
+       uint8 Flash_read_f;
+       uint16 size;
+       uint16 Run_index;
+       uint16 Save_count;
+       uint16 Save_index;
+       uint16 Prospect_index;
+       uint16 Active_Event_Enter;
+       uint16 Active_Event_Exit;
+       uint8 Save_state;
+       uint8 End_f;
+       uint8 Flash_page_index;
+       uint8 Flash_Save_Page_Index;
+       uint8 Nag_SystemRun_Index;
+       uint8 Event_Active;
+       uint8 Event_Count;
+       uint8 Event_Record_Pending;
+       uint8 Event_Record_Type;
+       uint8 Event_Active_Index;
+       uint8 Event_State;
+       uint8 Event_Start_Latched;
+       uint8 Event_Done_Latched;
+       uint8 Event_Active_Type;
+       uint16 Event_Start_RunIndex;
+       uint16 Event_Trigger_RunIndex;
+       uint8 Event_Triggered_In_Window;
+       uint8 Event_Consumed[Nag_Event_Max];
+       float Spin_Saved_SetSpeed;
+       uint16 Spin_Stop_Stable_Count;
+       uint8 Spin_Task_Started;
+       uint16 Spin_Resume_RunIndex;
+       uint8 Spin_Speed_Latched;
+       float Stair_Saved_Leg_Long;
+       float Stair_Saved_SetSpeed;
+       float Stair_Lookback_Yaw;
+       uint8 Stair_Jump_Completed_Count;
+       uint8 Stair_Chain_To_Exit;
+       uint16 Stair_Paired_Enter_Index;
+       float Bridge_Saved_Leg_Long;
+       uint8 Bridge_Saved_RollBalance;
+       uint8 Bridge_Zone_Active;
+       uint8 Bridge_Detect_Arm;
+       uint8 Bridge_Heading_Lock;
+       uint8 Bridge_Expected;
+       uint8 Bridge_Exit_Beep_Done;
+       float Bridge_Locked_Yaw;
+       uint16 Bridge_Exit_Run_Index;
+       uint8 HeadingHold_Enable;
+       uint8 HeadingHold_Request_Armed;
+       uint8 HeadingHold_Target_Latched;
+       uint8 HeadingHold_Event_Allowed;
+       float HeadingHold_Target_Yaw;
+       float Odo_Wheel_Left_Cmps;
+       float Odo_Wheel_Right_Cmps;
+       float Odo_Gyro_Z_Dps;
+       float Odo_Vc_From_L_Cmps;
+       float Odo_Vc_From_R_Cmps;
+       float Odo_Corrected_Speed_Cmps;
+       float Odo_Raw_Step_Cm;
+       float Odo_Protected_Step_Cm;
+       float Odo_Last_Trust_Speed_Cmps;
+       float Odo_Rollback_Pending_Cm;
+       float Odo_Rollback_Applied_Cm;
+       float Odo_History_Raw[Nag_OdoSlip_History_Len];
+       float Odo_History_Prot[Nag_OdoSlip_History_Len];
+       uint8 Odo_Slip_State;
+       uint8 Odo_Slip_Enter_Count;
+       uint8 Odo_Slip_Exit_Count;
+       uint8 Odo_History_Idx;
+       int Prev_mile[Nag_Prev];
+}Nag;
+typedef enum
+{
+       NAG_ODO_SLIP_NORMAL = 0u,
+       NAG_ODO_SLIP_LEFT = 1u,
+       NAG_ODO_SLIP_RIGHT = 2u,
+       NAG_ODO_SLIP_BOTH = 3u,
+} Nag_OdoSlip_State;
+extern Nag N;
+extern int32 Nav_read[Read_MaxSize];
+extern NagEvent Nag_Event_Table[Nag_Event_Max];
+extern uint8 Nag_Vofa_Group;
+#define NAG_VOFA_GROUP_COUNT (4u)
+void Nag_OdoSlip_ResetState(void);
+void Nag_OdoSlip_ApplyPendingRollback(void);
+typedef enum {
+    NAV_HEADING_MODE_INS = 0u,
+    NAV_HEADING_MODE_GPS = 1u,
+} NavHeadingMode;
+extern uint8 nav_heading_mode;
+void Nag_Run();
+uint8 Nag_BridgeDetectShouldArm(void);
+void Nag_BridgeDetectUpdate(void);
+void Nag_BridgeTimeoutTick1ms(void);
+void Run_Nag_GPS();
+void NagFlashRead();
+void Run_Nag_Save();
+void Nag_Read();
+void Init_Nag();
+void Nag_Begin_Record(void);
+void Nag_Begin_Replay(void);
+void Nag_CompleteReplayAfterOrigin(void);
+void Nag_Request_Stop_Record(void);
+void Nag_Request_Event_Mark(void);
+void Nag_Cycle_Record_Event_Type(void);
+void Nag_Notify_Event_Done(void);
+void Nag_NotifyStairJumpDone(void);
+void Nag_Element_Abort(void);
+float Nag_GetDebugReadYaw(void);
+float Nag_GetControlSpeedTarget(void);
+bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
+                                    float *target_speed,
+                                    float *pre_decel_dist_cm,
+                                    float *pre_accel_dist_cm);
+float GPS_ApplyEventSpeedAdjustments(float nav_speed);
+void Nag_EventPrepareEnter(uint8 event_type);
+void Nag_EventForceReset(void);
+uint16 Nag_GetDebugProspectIndex(void);
+bool Nag_HeadingHold_ShouldRequest(void);
+float Nag_HeadingHold_GetTargetYaw(void);
+bool Nag_Element_Start(uint8 event_type);
+void Nag_Element_Run(uint8 event_type);
+bool Nag_Element_IsDone(uint8 event_type);
+void Nag_Element_Stop(uint8 event_type);
+bool Nag_Hook_EnterTurn_Start(void);
+void Nag_Hook_EnterTurn_Run(void);
+bool Nag_Hook_EnterTurn_IsDone(void);
+void Nag_Hook_EnterTurn_Stop(void);
+bool Nag_Hook_ExitTurn_Start(void);
+void Nag_Hook_ExitTurn_Run(void);
+bool Nag_Hook_ExitTurn_IsDone(void);
+void Nag_Hook_ExitTurn_Stop(void);
+bool Nag_Hook_Spin_Start(void);
+void Nag_Hook_Spin_Run(void);
+bool Nag_Hook_Spin_IsDone(void);
+void Nag_Hook_Spin_Stop(void);
+bool Nag_Hook_EnterBridge_Start(void);
+void Nag_Hook_EnterBridge_Run(void);
+bool Nag_Hook_EnterBridge_IsDone(void);
+void Nag_Hook_EnterBridge_Stop(void);
+bool Nag_Hook_ExitBridge_Start(void);
+void Nag_Hook_ExitBridge_Run(void);
+bool Nag_Hook_ExitBridge_IsDone(void);
+void Nag_Hook_ExitBridge_Stop(void);
+bool Nag_Hook_Bump_Start(void);
+void Nag_Hook_Bump_Run(void);
+bool Nag_Hook_Bump_IsDone(void);
+void Nag_Hook_Bump_Stop(void);
+float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm);
+bool Nag_Hook_EnterStair_Start(void);
+void Nag_Hook_EnterStair_Run(void);
+bool Nag_Hook_EnterStair_IsDone(void);
+void Nag_Hook_EnterStair_Stop(void);
+bool Nag_Hook_ExitStair_Start(void);
+void Nag_Hook_ExitStair_Run(void);
+bool Nag_Hook_ExitStair_IsDone(void);
+void Nag_Hook_ExitStair_Stop(void);
+bool Nag_Hook_EnterCones_Start(void);
+void Nag_Hook_EnterCones_Run(void);
+bool Nag_Hook_EnterCones_IsDone(void);
+void Nag_Hook_EnterCones_Stop(void);
+bool Nag_Hook_ExitCones_Start(void);
+void Nag_Hook_ExitCones_Run(void);
+bool Nag_Hook_ExitCones_IsDone(void);
+void Nag_Hook_ExitCones_Stop(void);
+void Nag_System();
+#endif
+#include "zf_common_headfile.h"
+#include "navigation.h"
+#include "nav_fusion.h"
+#include "control.h"
+#include "Menu.h"
+#include "my_gps.h"
+#include "init.h"
+#include "dualcore_shared.h"
+#include "ekf.h"
+#include "small_driver_uart_control.h"
+#define NAG_STAIR_PAIRED_ENTER_INVALID    0xFFFFu
+#define NAG_BRIDGE_EXIT_INDEX_INVALID     0xFFFFu
+static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points);
+static uint16 Nag_DistanceToPoints(float distance_cm);
+static uint16 s_bridge_blob_lost_ms;
+static uint16 s_bridge_enter_grace_ms;
+static uint16 s_bridge_blob_no_frame_ms;
+static bool Nag_GetActiveBridgeZone(uint16 run_index,
+                                    uint16 *enter_index,
+                                    uint16 *exit_index,
+                                    uint8 *exit_event_index);
+static void Nag_UpdatePreviewAndSpeedTarget(void);
+static void Nag_BridgeConfirmEnter(void);
+static void Nag_BridgeConfirmExit(uint8 allow_beep);
+static void Nag_BridgeApplyBlobYaw(float center_err, uint8 track_valid);
+int32 Nav_read[Read_MaxSize];
+Nag N;
+uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
+NagEvent Nag_Event_Table[Nag_Event_Max];
+uint8 Nag_Vofa_Group = 0;
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
+static uint8 g_nag_replay_flash_ready = 0u;
+#endif
+float nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
+float nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
+float nag_enter_turn_target_speed = Nag_EnterTurn_Target_Speed_Default;
+float nag_enter_turn_pre_decel_dist_cm = Nag_EnterTurn_PreDecel_Dist_cm_Default;
+float nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
+float nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
+float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
+float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+float nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
+float nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
+float nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
+void Nag_LaunchParamApplyDefaults(void)
+{
+    nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
+    nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
+    nag_enter_turn_target_speed = Nag_EnterTurn_Target_Speed_Default;
+    nag_enter_turn_pre_decel_dist_cm = Nag_EnterTurn_PreDecel_Dist_cm_Default;
+    nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
+    nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
+    nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
+    nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+    nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
+    nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
+    nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
+    spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
+}
+float Nag_LaunchParamGet(uint8 field_index)
+{
+    switch (field_index)
+    {
+    case Nag_Launch_Field_Base_Spd:
+        return run_launch_speed;
+    case Nag_Launch_Field_Spin_Spd:
+        return nag_spin_target_speed;
+    case Nag_Launch_Field_Spin_Dec:
+        return nag_spin_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnIn_Spd:
+        return nag_enter_turn_target_speed;
+    case Nag_Launch_Field_TurnIn_Dec:
+        return nag_enter_turn_pre_decel_dist_cm;
+    case Nag_Launch_Field_TurnOut_Spd:
+        return nag_exit_turn_recovery_speed;
+    case Nag_Launch_Field_TurnOut_Acc:
+        return nag_exit_turn_pre_accel_dist_cm;
+    case Nag_Launch_Field_Cone_Spd:
+        return nag_enter_cones_target_speed;
+    case Nag_Launch_Field_Cone_Dec:
+        return nag_enter_cones_pre_decel_dist_cm;
+    case Nag_Launch_Field_Spin_Rate:
+        return spin_rate_max_dps;
+    case Nag_Launch_Field_Stair_Dec:
+        return nag_enter_stair_pre_decel_dist_cm;
+    case Nag_Launch_Field_BridgeIn_Spd:
+        return nag_enter_bridge_target_speed;
+    case Nag_Launch_Field_BridgeIn_Dec:
+        return nag_enter_bridge_pre_decel_dist_cm;
+    default:
+        return 0.0f;
+    }
+}
+void Nag_LaunchParamSet(uint8 field_index, float value)
+{
+    switch (field_index)
+    {
+    case Nag_Launch_Field_Base_Spd:
+        run_launch_speed = value;
+        break;
+    case Nag_Launch_Field_Spin_Spd:
+        nag_spin_target_speed = value;
+        break;
+    case Nag_Launch_Field_Spin_Dec:
+        nag_spin_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_TurnIn_Spd:
+        nag_enter_turn_target_speed = value;
+        break;
+    case Nag_Launch_Field_TurnIn_Dec:
+        nag_enter_turn_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_TurnOut_Spd:
+        nag_exit_turn_recovery_speed = value;
+        break;
+    case Nag_Launch_Field_TurnOut_Acc:
+        nag_exit_turn_pre_accel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_Cone_Spd:
+        nag_enter_cones_target_speed = value;
+        break;
+    case Nag_Launch_Field_Cone_Dec:
+        nag_enter_cones_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_Spin_Rate:
+        spin_set_rate_max_dps(value);
+        break;
+    case Nag_Launch_Field_Stair_Dec:
+        nag_enter_stair_pre_decel_dist_cm = value;
+        break;
+    case Nag_Launch_Field_BridgeIn_Spd:
+        nag_enter_bridge_target_speed = value;
+        break;
+    case Nag_Launch_Field_BridgeIn_Dec:
+        nag_enter_bridge_pre_decel_dist_cm = value;
+        break;
+    default:
+        break;
+    }
+}
+void Nag_LaunchParamAdjust(uint8 field_index, float delta)
+{
+    Nag_LaunchParamSet(field_index, Nag_LaunchParamGet(field_index) + delta);
+}
+static bool Nag_GetHeadingHoldConfig(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_SPIN: return (Nag_HeadingHold_Spin_Enable != 0u);
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return (Nag_HeadingHold_EnterTurn_Enable != 0u);
+        case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
+        case NAG_EVENT_TYPE_ENTER_STAIR: return (Nag_HeadingHold_EnterStair_Enable != 0u);
+        case NAG_EVENT_TYPE_EXIT_STAIR: return (Nag_HeadingHold_ExitStair_Enable != 0u);
+        default: return false;
+    }
+}
+static void Nag_HeadingHold_Enable(float target_yaw)
+{
+    N.HeadingHold_Target_Yaw = target_yaw;
+    N.HeadingHold_Target_Latched = 1u;
+    N.HeadingHold_Enable = 1u;
+    N.HeadingHold_Request_Armed = 1u;
+}
+static void Nag_HeadingHold_Disable(void)
+{
+    N.HeadingHold_Enable = 0u;
+    N.HeadingHold_Request_Armed = 0u;
+    N.HeadingHold_Target_Latched = 0u;
+    N.HeadingHold_Target_Yaw = 0.0f;
+    steer_yaw_request_pending = 0;
+    steer_yaw_delayed_by_spin = 0;
+}
+static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
+{
+    N.HeadingHold_Event_Allowed = Nag_GetHeadingHoldConfig(event_type) ? 1u : 0u;
+    if (!N.HeadingHold_Event_Allowed)
+    {
+        Nag_HeadingHold_Disable();
+        return;
+    }
+    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
+    {
+        return;
+    }
+    Nag_HeadingHold_Enable((float)euler_angle.yaw);
+}
+static uint8 Nag_Spin_ShouldTrackInsYaw(void)
+{
+    return (uint8)(N.Event_Active &&
+                   (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN) &&
+                   (N.Spin_Task_Started == 0u) &&
+                   (spin_enable == 0u));
+}
+void Nag_EventPrepareEnter(uint8 event_type)
+{
+    N.Target_Request_Valid = 0u;
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
+    if (event_type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
+        event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
+        event_type != NAG_EVENT_TYPE_ENTER_CONES &&
+        event_type != NAG_EVENT_TYPE_EXIT_CONES &&
+        event_type != NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE &&
+        event_type != NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE &&
+        event_type != NAG_EVENT_TYPE_EXIT_STAIR &&
+        event_type != NAG_EVENT_TYPE_SPIN)
+    {
+        steer_task_stop();
+    }
+    Nag_HeadingHold_OnEventEnter(event_type);
+}
+static void Nag_HeadingHold_OnEventExit(void)
+{
+    N.HeadingHold_Event_Allowed = 0u;
+    Nag_HeadingHold_Disable();
+}
+static void Nag_Spin_RestoreSetSpeed(void)
+{
+    if (N.Spin_Speed_Latched)
+    {
+        motor_user_speed_cmd = N.Spin_Saved_SetSpeed;
+        N.Spin_Speed_Latched = 0;
+    }
+    N.Spin_Saved_SetSpeed = 0.0f;
+    N.Spin_Stop_Stable_Count = 0;
+    N.Spin_Task_Started = 0;
+}
+bool Nag_Hook_EnterTurn_Start(void) { return true; }
+void Nag_Hook_EnterTurn_Run(void) {}
+bool Nag_Hook_EnterTurn_IsDone(void) { return true; }
+void Nag_Hook_EnterTurn_Stop(void) {}
+bool Nag_Hook_ExitTurn_Start(void) { return true; }
+void Nag_Hook_ExitTurn_Run(void) {}
+bool Nag_Hook_ExitTurn_IsDone(void) { return true; }
+void Nag_Hook_ExitTurn_Stop(void) {}
+bool Nag_Hook_Spin_Start(void)
+{
+    N.Spin_Saved_SetSpeed = motor_user_speed_cmd;
+    N.Spin_Stop_Stable_Count = 0;
+    N.Spin_Task_Started = 0;
+    N.Spin_Resume_RunIndex = 0;
+    N.Spin_Speed_Latched = 1;
+    motor_user_speed_cmd = 0.0f;
+    return true;
+}
+void Nag_Hook_Spin_Run(void)
+{
+    float abs_speed = fabsf((float)Nag_Speed_Source);
+    if (N.Spin_Task_Started)
+    {
+        return;
+    }
+    if (abs_speed <= Nag_Spin_Stop_Speed_Threshold)
+    {
+        if (N.Spin_Stop_Stable_Count < 0xFFFFu)
+        {
+            N.Spin_Stop_Stable_Count++;
+        }
+    }
+    else
+    {
+        N.Spin_Stop_Stable_Count = 0;
+        return;
+    }
+    if (N.Spin_Stop_Stable_Count < Nag_Spin_Stop_Stable_Count)
+    {
+        return;
+    }
+    Nag_HeadingHold_Disable();
+    N.Spin_Resume_RunIndex = N.Run_index;
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
+    N.Spin_Task_Started = 1;
+}
+bool Nag_Hook_Spin_IsDone(void)
+{
+    return (N.Spin_Task_Started && (spin_done != 0));
+}
+void Nag_Hook_Spin_Stop(void)
+{
+    if (N.Spin_Task_Started)
+    {
+        spin_task_stop();
+    }
+    Nag_Spin_RestoreSetSpeed();
+}
+bool Nag_Hook_Bump_Start(void) { return false; }
+void Nag_Hook_Bump_Run(void) {}
+bool Nag_Hook_Bump_IsDone(void) { return false; }
+void Nag_Hook_Bump_Stop(void) {}
+bool Nag_Hook_EnterCones_Start(void) { return true; }
+void Nag_Hook_EnterCones_Run(void) {}
+bool Nag_Hook_EnterCones_IsDone(void) { return true; }
+void Nag_Hook_EnterCones_Stop(void) {}
+bool Nag_Hook_ExitCones_Start(void) { return true; }
+void Nag_Hook_ExitCones_Run(void) {}
+bool Nag_Hook_ExitCones_IsDone(void) { return true; }
+void Nag_Hook_ExitCones_Stop(void) {}
+bool Nag_Hook_EnterBridge_Start(void)
+{
+    N.Bridge_Saved_Leg_Long = leg_long;
+    N.Bridge_Saved_RollBalance = roll_balance_en;
+    Nag_BridgeConfirmEnter();
+    return true;
+}
+void Nag_Hook_EnterBridge_Run(void) {}
+bool Nag_Hook_EnterBridge_IsDone(void) { return true; }
+void Nag_Hook_EnterBridge_Stop(void)
+{
+}
+bool Nag_Hook_ExitBridge_Start(void)
+{
+    return true;
+}
+void Nag_Hook_ExitBridge_Run(void) {}
+bool Nag_Hook_ExitBridge_IsDone(void) { return true; }
+void Nag_Hook_ExitBridge_Stop(void) {}
+static void Nag_BridgeConfirmEnter(void)
+{
+    uint16 enter_index = 0u;
+    uint16 exit_index = NAG_BRIDGE_EXIT_INDEX_INVALID;
+    uint8 exit_event_index = 0xFFu;
+    if (N.Bridge_Zone_Active != 0u)
+    {
+        return;
+    }
+    if (N.Bridge_Saved_Leg_Long <= 0.01f)
+    {
+        N.Bridge_Saved_Leg_Long = leg_long;
+        N.Bridge_Saved_RollBalance = roll_balance_en;
+    }
+    N.Bridge_Zone_Active = 1u;
+    N.Bridge_Expected = 0u;
+    N.Bridge_Detect_Arm = 1u;
+    leg_long = Nag_EnterBridge_Leg_Long;
+    roll_balance_en = 1u;
+    N.Bridge_Exit_Beep_Done = 0u;
+    N.Bridge_Exit_Run_Index = NAG_BRIDGE_EXIT_INDEX_INVALID;
+    if (Nag_GetActiveBridgeZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
+    {
+        N.Bridge_Exit_Run_Index = exit_index;
+    }
+    s_bridge_blob_lost_ms = 0u;
+    s_bridge_enter_grace_ms = 0u;
+    s_bridge_blob_no_frame_ms = 0u;
+    N.Target_Request_Valid = 0u;
+    buzzer_beep_request(BRIDGE_BEEP_MS);
+}
+static void Nag_BridgeConfirmExit(uint8 allow_beep)
+{
+    if (N.Bridge_Zone_Active == 0u)
+    {
+        return;
+    }
+    if (N.Bridge_Saved_Leg_Long > 0.01f)
+    {
+        leg_long = N.Bridge_Saved_Leg_Long;
+    }
+    else
+    {
+        leg_long = Nag_ExitBridge_Leg_Long;
+    }
+    roll_balance_en = N.Bridge_Saved_RollBalance;
+    if ((N.Bridge_Exit_Run_Index != NAG_BRIDGE_EXIT_INDEX_INVALID) &&
+        (N.Bridge_Exit_Run_Index > N.Run_index))
+    {
+        N.Run_index = N.Bridge_Exit_Run_Index;
+    }
+    N.Mileage_All = 0.0f;
+    N.Bridge_Zone_Active = 0u;
+    N.Bridge_Heading_Lock = 0u;
+    N.Bridge_Expected = 0u;
+    N.Bridge_Detect_Arm = 0u;
+    N.Bridge_Saved_Leg_Long = 0.0f;
+    N.Bridge_Saved_RollBalance = 0u;
+    N.Bridge_Exit_Run_Index = NAG_BRIDGE_EXIT_INDEX_INVALID;
+    s_bridge_blob_lost_ms = 0u;
+    s_bridge_enter_grace_ms = 0u;
+    s_bridge_blob_no_frame_ms = 0u;
+    Nag_UpdatePreviewAndSpeedTarget();
+    N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
+    steer_request_target_yaw(N.Angle_Run);
+    N.Requested_Target_Yaw = N.Angle_Run;
+    N.Target_Request_Valid = 1u;
+    if ((allow_beep != 0u) && (N.Bridge_Exit_Beep_Done == 0u))
+    {
+        buzzer_beep_request(BRIDGE_BEEP_MS);
+        N.Bridge_Exit_Beep_Done = 1u;
+    }
+}
+uint8 Nag_BridgeDetectShouldArm(void)
+{
+    return (N.Bridge_Zone_Active != 0u) ? 1u : 0u;
+}
+static float Nag_BridgeClipf(float value, float lo, float hi)
+{
+    if (value < lo)
+    {
+        return lo;
+    }
+    if (value > hi)
+    {
+        return hi;
+    }
+    return value;
+}
+static void Nag_BridgeApplyBlobYaw(float center_err, uint8 track_valid)
+{
+    float target_offset_deg = 0.0f;
+    float target_yaw_deg = 0.0f;
+    if (track_valid == 0u)
+    {
+        return;
+    }
+    if (spin_enable != 0u || Motor_Runaway_Latch != 0u)
+    {
+        return;
+    }
+    target_offset_deg = center_err * Nag_BridgeBlob_Yaw_K_Pixel;
+    target_offset_deg = Nag_BridgeClipf(target_offset_deg,
+                                        -Nag_BridgeBlob_Yaw_Max_Offset,
+                                        Nag_BridgeBlob_Yaw_Max_Offset);
+    if (fabsf(target_offset_deg) < Nag_BridgeBlob_Yaw_Deadband)
+    {
+        return;
+    }
+    target_yaw_deg = (float)euler_angle.yaw + target_offset_deg;
+    steer_request_target_yaw(target_yaw_deg);
+    N.Requested_Target_Yaw = target_yaw_deg;
+    N.Target_Request_Valid = 1u;
+}
+void Nag_BridgeTimeoutTick1ms(void)
+{
+    if (N.Bridge_Zone_Active == 0u)
+    {
+        s_bridge_enter_grace_ms = 0u;
+        s_bridge_blob_lost_ms = 0u;
+        s_bridge_blob_no_frame_ms = 0u;
+        return;
+    }
+    leg_long = Nag_EnterBridge_Leg_Long;
+    roll_balance_en = 1u;
+    if (s_bridge_enter_grace_ms < BRIDGE_ENTER_GRACE_MS)
+    {
+        s_bridge_enter_grace_ms++;
+    }
+    else
+    {
+        uint8 track_valid = dualcore_white_blob_read_track_valid();
+        if (track_valid != 0u)
+        {
+            s_bridge_blob_lost_ms = 0u;
+        }
+        else if (s_bridge_blob_lost_ms < 0xFFFFu)
+        {
+            s_bridge_blob_lost_ms++;
+        }
+        if (s_bridge_blob_lost_ms >= BRIDGE_BLOB_LOST_EXIT_MS)
+        {
+            Nag_BridgeConfirmExit(1u);
+            return;
+        }
+        if (s_bridge_blob_no_frame_ms < BRIDGE_BLOB_NO_FRAME_EXIT_MS)
+        {
+            s_bridge_blob_no_frame_ms++;
+        }
+        else
+        {
+            Nag_BridgeConfirmExit(1u);
+        }
+    }
+}
+void Nag_BridgeDetectUpdate(void)
+{
+    float center_err = 0.0f;
+    uint8 track_valid = 0u;
+    uint8 fresh = 0u;
+    if (nav_heading_mode != NAV_HEADING_MODE_INS)
+    {
+        return;
+    }
+    N.Bridge_Detect_Arm = Nag_BridgeDetectShouldArm();
+    if (N.Bridge_Zone_Active == 0u)
+    {
+        s_bridge_blob_lost_ms = 0u;
+        return;
+    }
+    dualcore_white_blob_pull(&center_err, &track_valid, &fresh);
+    Nag_BridgeApplyBlobYaw(center_err, track_valid);
+    if (fresh == 0u)
+    {
+        return;
+    }
+    s_bridge_blob_no_frame_ms = 0u;
+}
+float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
+{
+    uint16 point_count = 0u;
+    uint16 start_index = 0u;
+    uint16 i = 0u;
+    float sum_sin = 0.0f;
+    float sum_cos = 0.0f;
+    float yaw_deg = 0.0f;
+    float avg_yaw = 0.0f;
+    if (N.Save_index == 0u)
+    {
+        return (float)euler_angle.yaw;
+    }
+    point_count = Nag_DistanceToPoints(lookback_cm);
+    if (point_count == 0u)
+    {
+        point_count = 1u;
+    }
+    if (anchor_index >= N.Save_index)
+    {
+        anchor_index = (uint16)(N.Save_index - 1u);
+    }
+    if (anchor_index >= point_count)
+    {
+        start_index = (uint16)(anchor_index - point_count + 1u);
+    }
+    else
+    {
+        start_index = 0u;
+    }
+    for (i = start_index; i <= anchor_index; i++)
+    {
+        if (i >= Read_MaxSize)
+        {
+            break;
+        }
+        yaw_deg = (float)(Nav_read[i] / 100.0f);
+        sum_sin += sinf(yaw_deg * (float)(3.1415926f / 180.0f));
+        sum_cos += cosf(yaw_deg * (float)(3.1415926f / 180.0f));
+    }
+    if (sum_sin == 0.0f && sum_cos == 0.0f)
+    {
+        if (anchor_index < Read_MaxSize && N.Save_index > 0u)
+        {
+            return (float)(Nav_read[anchor_index] / 100.0f);
+        }
+        return (float)euler_angle.yaw;
+    }
+    avg_yaw = atan2f(sum_sin, sum_cos) * 57.2957795f;
+    return avg_yaw;
+}
+bool Nag_Hook_EnterStair_Start(void)
+{
+    uint16 enter_index = 0u;
+    float avg_yaw = 0.0f;
+    float speed_sign = 1.0f;
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
+    if (N.Event_Active_Index < N.Event_Count &&
+        Nag_Event_Table[N.Event_Active_Index].valid)
+    {
+        enter_index = Nag_Event_Table[N.Event_Active_Index].enter_index;
+    }
+    else
+    {
+        enter_index = N.Run_index;
+    }
+    N.Stair_Saved_SetSpeed = motor_user_speed_cmd;
+    N.Stair_Saved_Leg_Long = leg_long;
+    avg_yaw = Nag_ComputeYawAverageLookback(enter_index, Nag_EnterStair_Yaw_Lookback_cm);
+    N.Stair_Lookback_Yaw = avg_yaw;
+    Nag_HeadingHold_Enable(avg_yaw);
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    if ((float)motor_user_speed_cmd < 0.0f)
+    {
+        speed_sign = -1.0f;
+    }
+    motor_user_speed_cmd = speed_sign * Nag_EnterStair_Target_Speed;
+    leg_long = Nag_EnterStair_Leg_Long;
+    return true;
+}
+void Nag_Hook_EnterStair_Run(void) {}
+bool Nag_Hook_EnterStair_IsDone(void)
+{
+    return (N.Stair_Jump_Completed_Count >= Nag_Stair_Jump_Exit_Count);
+}
+void Nag_Hook_EnterStair_Stop(void)
+{
+    if (N.Stair_Chain_To_Exit != 0u)
+    {
+        N.Stair_Lookback_Yaw = 0.0f;
+        N.Stair_Jump_Completed_Count = 0u;
+        return;
+    }
+    motor_user_speed_cmd = N.Stair_Saved_SetSpeed;
+    leg_long = N.Stair_Saved_Leg_Long;
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
+    N.Stair_Jump_Completed_Count = 0u;
+}
+void Nag_NotifyStairJumpDone(void)
+{
+    if (N.Event_Active != 0u &&
+        N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR &&
+        N.Stair_Jump_Completed_Count < 255u)
+    {
+        N.Stair_Jump_Completed_Count++;
+    }
+}
+static void Nag_ConsumeTableExitStairEvents(void)
+{
+    uint8 event_index = 0u;
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        if (Nag_Event_Table[event_index].valid &&
+            (N.Event_Consumed[event_index] == 0u) &&
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_STAIR)
+        {
+            N.Event_Consumed[event_index] = 1u;
+        }
+    }
+}
+static void Nag_ActivateChainedExitStair(void)
+{
+    N.Event_Active = 1u;
+    N.Event_Active_Index = 0xFFu;
+    N.Active_Event_Enter = N.Run_index;
+    N.Active_Event_Exit = N.Run_index;
+    N.Event_Active_Type = NAG_EVENT_TYPE_EXIT_STAIR;
+    N.Event_Start_RunIndex = N.Run_index;
+    N.Event_Trigger_RunIndex = N.Run_index;
+    N.Event_Triggered_In_Window = 0u;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0u;
+    N.Event_Done_Latched = 0u;
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
+    Nag_EventPrepareEnter(NAG_EVENT_TYPE_EXIT_STAIR);
+}
+bool Nag_Hook_ExitStair_Start(void)
+{
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    motor_user_speed_cmd = N.Stair_Saved_SetSpeed;
+    leg_long = Nag_ExitStair_Leg_Long;
+    stair_jump_reset_boost_phase();
+    return true;
+}
+void Nag_Hook_ExitStair_Run(void) {}
+bool Nag_Hook_ExitStair_IsDone(void)
+{
+    return true;
+}
+void Nag_Hook_ExitStair_Stop(void)
+{
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
+}
+bool Nag_Element_Start(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_Start();
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return Nag_Hook_ExitTurn_Start();
+        case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_Start();
+        case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_Start();
+        case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_Start();
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_Start();
+        case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_Start();
+        case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_Start();
+        case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_Start();
+        default: return false;
+    }
+}
+void Nag_Element_Run(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: Nag_Hook_EnterTurn_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: Nag_Hook_ExitTurn_Run(); break;
+        case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Run(); break;
+        case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Run(); break;
+        default: break;
+    }
+}
+bool Nag_Element_IsDone(uint8 event_type)
+{
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_IsDone();
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: return Nag_Hook_ExitTurn_IsDone();
+        case NAG_EVENT_TYPE_SPIN: return Nag_Hook_Spin_IsDone();
+        case NAG_EVENT_TYPE_ENTER_CONES: return Nag_Hook_EnterCones_IsDone();
+        case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_IsDone();
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_IsDone();
+        case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_IsDone();
+        case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_IsDone();
+        case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_IsDone();
+        default: return false;
+    }
+}
+void Nag_Element_Stop(uint8 event_type)
+{
+    Nag_HeadingHold_OnEventExit();
+    switch (event_type)
+    {
+        case NAG_EVENT_TYPE_ENTER_TURNAROUND: Nag_Hook_EnterTurn_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_TURNAROUND: Nag_Hook_ExitTurn_Stop(); break;
+        case NAG_EVENT_TYPE_SPIN: Nag_Hook_Spin_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_CONES: Nag_Hook_EnterCones_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Stop(); break;
+        case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Stop(); break;
+        default: break;
+    }
+}
+static uint16 Nag_ClampIndex(uint16 index, uint16 max_index)
+{
+    return (index > max_index) ? max_index : index;
+}
+#if Nag_AdaptiveLookahead_Enable
+static uint16 Nag_GetLookaheadPoints(void)
+{
+    float abs_speed = fabsf(N.Speed_Forward);
+    uint16 dynamic_points = (uint16)(Nag_Lookahead_Speed_Gain * abs_speed);
+    uint16 lookahead = (uint16)(Nag_Lookahead_Base_Points + dynamic_points);
+    if (lookahead > Nag_Lookahead_Max_Points)
+    {
+        lookahead = Nag_Lookahead_Max_Points;
+    }
+    return lookahead;
+}
+static float Nag_GetCurveStrengthAt(uint16 base_index)
+{
+    uint16 max_index = 0;
+    uint16 far_index = 0;
+    float yaw_now = 0.0f;
+    float yaw_far = 0.0f;
+    if (N.Save_index < 2)
+    {
+        return 0.0f;
+    }
+    max_index = (uint16)(N.Save_index - 1);
+    far_index = Nag_ClampIndex((uint16)(base_index + Nag_Curve_Lookahead_Extra), max_index);
+    yaw_now = (float)(Nav_read[base_index] / 100.0f);
+    yaw_far = (float)(Nav_read[far_index] / 100.0f);
+    return fabsf((float)ange_deviation1(yaw_far, yaw_now));
+}
+#endif
+static void Nag_UpdatePreviewAndSpeedTarget(void)
+{
+    uint16 max_index = 0;
+    float base_speed = fabsf((float)motor_user_speed_cmd);
+    if (N.Save_index < 2)
+    {
+        N.Prospect_index = 0;
+        N.Curve_Strength = 0.0f;
+        N.Target_Speed = base_speed;
+        return;
+    }
+    max_index = (uint16)(N.Save_index - 1);
+#if Nag_AdaptiveLookahead_Enable
+    {
+        uint16 lookahead = Nag_GetLookaheadPoints();
+        N.Prospect_index = Nag_ClampIndex((uint16)(N.Run_index + lookahead), max_index);
+        N.Curve_Strength = Nag_GetCurveStrengthAt(N.Run_index);
+        if (N.Curve_Strength >= Nag_Curve_Threshold_Sharp)
+        {
+            N.Target_Speed = base_speed * Nag_Speed_Ratio_Sharp;
+        }
+        else if (N.Curve_Strength >= Nag_Curve_Threshold_Straight)
+        {
+            N.Target_Speed = base_speed * Nag_Speed_Ratio_Curve;
+        }
+        else
+        {
+            N.Target_Speed = base_speed;
+        }
+    }
+#else
+    N.Prospect_index = Nag_ClampIndex(N.Run_index, max_index);
+    N.Curve_Strength = 0.0f;
+    N.Target_Speed = base_speed;
+#endif
+}
+static void Nag_ClearEventConsumed(void)
+{
+    memset(N.Event_Consumed, 0, sizeof(N.Event_Consumed));
+}
+static void Nag_ClearEventRuntimeState(void)
+{
+    Nag_HeadingHold_OnEventExit();
+    N.Event_Active = 0;
+    N.Event_Active_Index = 0xFFu;
+    N.Active_Event_Enter = 0;
+    N.Active_Event_Exit = 0;
+    N.Event_State = NAG_EVENT_STATE_IDLE;
+    N.Event_Start_Latched = 0;
+    N.Event_Done_Latched = 0;
+    N.Event_Active_Type = NAG_EVENT_TYPE_SPIN;
+    N.Event_Start_RunIndex = 0;
+    N.Event_Trigger_RunIndex = 0;
+    N.Event_Triggered_In_Window = 0;
+    N.Spin_Saved_SetSpeed = 0.0f;
+    N.Spin_Stop_Stable_Count = 0;
+    N.Spin_Task_Started = 0;
+    N.Spin_Resume_RunIndex = 0;
+    N.Spin_Speed_Latched = 0;
+    N.Stair_Saved_SetSpeed = 0.0f;
+    N.Stair_Saved_Leg_Long = 0.0f;
+    N.Stair_Lookback_Yaw = 0.0f;
+    N.Stair_Jump_Completed_Count = 0u;
+    N.Stair_Chain_To_Exit = 0u;
+    N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
+}
+void Nag_EventForceReset(void)
+{
+    if (N.Event_Active)
+    {
+        Nag_Element_Stop(N.Event_Active_Type);
+    }
+    Nag_ClearEventRuntimeState();
+}
+static void Nag_Element_StateMachine(void)
+{
+    uint8 event_index = N.Event_Active_Index;
+    uint8 event_type = N.Event_Active_Type;
+    if (!N.Event_Active)
+    {
+        return;
+    }
+    if (nav_heading_mode == NAV_HEADING_MODE_GPS)
+    {
+        if (event_index >= gps_point_count)
+        {
+            return;
+        }
+    }
+    else if (event_index >= N.Event_Count)
+    {
+        return;
+    }
+    switch (N.Event_State)
+    {
+        case NAG_EVENT_STATE_ENTERED:
+            if (!N.Event_Start_Latched)
+            {
+                N.Event_Start_Latched = 1;
+                if (Nag_Element_Start(event_type))
+                {
+                    N.Event_State = NAG_EVENT_STATE_RUNNING;
+                }
+                else
+                {
+                }
+            }
+            break;
+        case NAG_EVENT_STATE_RUNNING:
+            Nag_Element_Run(event_type);
+            if (Nag_Element_IsDone(event_type))
+            {
+                N.Event_Done_Latched = 1;
+                N.Event_State = NAG_EVENT_STATE_DONE;
+            }
+            break;
+        case NAG_EVENT_STATE_DONE:
+            N.Final_Out = 0.0f;
+            Nag_Notify_Event_Done();
+            break;
+        case NAG_EVENT_STATE_ABORT:
+            Nag_Element_Stop(event_type);
+            N.Final_Out = 0.0f;
+            break;
+        case NAG_EVENT_STATE_IDLE:
+        default:
+            break;
+    }
+}
+static uint8 Nag_FindEventByEnterIndex(uint16 run_index)
+{
+    uint8 event_index = 0;
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        if (Nag_Event_Table[event_index].valid &&
+            (N.Event_Consumed[event_index] == 0u) &&
+            Nag_Event_Table[event_index].enter_index == run_index)
+        {
+            return event_index;
+        }
+    }
+    return 0xFFu;
+}
+static uint8 Nag_FindSpinEventInTriggerWindow(uint16 run_index, uint16 *dist_points)
+{
+    uint8 event_index = 0;
+    uint8 best_index = 0xFFu;
+    uint16 best_dist = 0xFFFFu;
+    uint16 window_points = Nag_DistanceToPoints(Nag_Spin_Trigger_Window_cm);
+    if (window_points == 0u)
+    {
+        if (dist_points != NULL)
+        {
+            *dist_points = 0xFFFFu;
+        }
+        return 0xFFu;
+    }
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        uint16 enter_index = 0;
+        uint16 curr_dist = 0;
+        if (!Nag_Event_Table[event_index].valid ||
+            (N.Event_Consumed[event_index] != 0u) ||
+            (Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_SPIN))
+        {
+            continue;
+        }
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        if (enter_index < run_index)
+        {
+            continue;
+        }
+        curr_dist = (uint16)(enter_index - run_index);
+        if (curr_dist <= window_points && curr_dist < best_dist)
+        {
+            best_dist = curr_dist;
+            best_index = event_index;
+        }
+    }
+    if (dist_points != NULL)
+    {
+        *dist_points = best_dist;
+    }
+    return best_index;
+}
+static void Nag_ActivateEvent(uint8 event_index, uint8 triggered_in_window)
+{
+    N.Event_Active = 1;
+    N.Event_Active_Index = event_index;
+    N.Active_Event_Enter = Nag_Event_Table[event_index].enter_index;
+    N.Active_Event_Exit = Nag_Event_Table[event_index].exit_index;
+    N.Event_Active_Type = Nag_Event_Table[event_index].type;
+    N.Event_Start_RunIndex = N.Run_index;
+    N.Event_Trigger_RunIndex = N.Run_index;
+    N.Event_Triggered_In_Window = triggered_in_window;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0;
+    N.Event_Done_Latched = 0;
+    Nag_EventPrepareEnter(N.Event_Active_Type);
+}
+static uint8 Nag_FindNextEventAhead(uint16 run_index, uint16 *dist_points)
+{
+    uint8 event_index = 0;
+    uint8 best_index = 0xFFu;
+    uint16 best_dist = 0xFFFFu;
+    for (event_index = 0; event_index < N.Event_Count; event_index++)
+    {
+        uint16 enter_index = 0;
+        uint16 curr_dist = 0;
+        if (!Nag_Event_Table[event_index].valid ||
+            (N.Event_Consumed[event_index] != 0u))
+        {
+            continue;
+        }
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        if (enter_index < run_index)
+        {
+            continue;
+        }
+        curr_dist = (uint16)(enter_index - run_index);
+        if (curr_dist < best_dist)
+        {
+            best_dist = curr_dist;
+            best_index = event_index;
+        }
+    }
+    if (dist_points != NULL)
+    {
+        *dist_points = best_dist;
+    }
+    return best_index;
+}
+static uint16 Nag_DistanceToPoints(float distance_cm)
+{
+    float points_f = 0.0f;
+    uint16 points = 0u;
+    if (distance_cm <= 0.0f || Nag_Set_mileage <= 0.0f)
+    {
+        return 0u;
+    }
+    points_f = distance_cm / Nag_Set_mileage;
+    points = (uint16)ceilf(points_f);
+    if (points == 0u)
+    {
+        points = 1u;
+    }
+    return points;
+}
+static uint16 Nag_FindPairedExitStairMarker(uint16 enter_stair_marker)
+{
+    uint8 event_index = 0u;
+    uint16 best_marker = NAG_STAIR_PAIRED_ENTER_INVALID;
+    if (enter_stair_marker == NAG_STAIR_PAIRED_ENTER_INVALID)
+    {
+        return NAG_STAIR_PAIRED_ENTER_INVALID;
+    }
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        uint16 exit_marker;
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_STAIR)
+        {
+            continue;
+        }
+        exit_marker = Nag_Event_Table[event_index].enter_index;
+        if (exit_marker > enter_stair_marker &&
+            exit_marker < best_marker)
+        {
+            best_marker = exit_marker;
+        }
+    }
+    return best_marker;
+}
+static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_index)
+{
+    uint16 exit_marker;
+    uint16 resume_index;
+    uint16 max_run_index;
+    if (event_index != 0xFFu)
+    {
+        resume_index = (uint16)(event_enter_index + 1u);
+    }
+    else if (N.Stair_Paired_Enter_Index != NAG_STAIR_PAIRED_ENTER_INVALID)
+    {
+        exit_marker = Nag_FindPairedExitStairMarker(N.Stair_Paired_Enter_Index);
+        if (exit_marker != NAG_STAIR_PAIRED_ENTER_INVALID)
+        {
+            resume_index = (uint16)(exit_marker + 1u);
+        }
+        else
+        {
+            resume_index = (uint16)(N.Stair_Paired_Enter_Index + 1u);
+        }

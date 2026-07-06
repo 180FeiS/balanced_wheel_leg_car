@@ -1,6 +1,3 @@
-/*
- * 双核人机交互与无线遥控软件 — CM7_1 主入口摘录（软著 06）
- */
 #include "zf_common_headfile.h"
 #include "Menu.h"
 #include "dualcore_shared.h"

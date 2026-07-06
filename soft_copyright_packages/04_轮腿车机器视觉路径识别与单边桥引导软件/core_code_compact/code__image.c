@@ -1,7 +1,3 @@
-/*********************************************************************************************************************
- * @file    image.c
- * @brief   TC387 camera.c 迁入：压缩、大津、二值、边线、最长白列、误差与自动曝光（见 image.h）。
- *********************************************************************************************************************/
 #include "image.h"
 #include "zf_driver_flash.h"
 #include <stdlib.h>
@@ -32,9 +28,7 @@ int Longest_White_Column_Right[2];
 static int Left_Lost_Flag[IMAGE_COMPRESS_H];
 static int Right_Lost_Flag[IMAGE_COMPRESS_H];
 #if (IMAGE_COMPRESS_H != 60)
-#error "Err_Sum 加权表依 TC 为 60 行；若改 MT9V03X_H 请重填 image_err_weight[]"
 #endif
-/** TC 原 `Weight[]`：行权重，与 `IMAGE_COMPRESS_H==60` 一致 */
 static const uint8 image_err_weight[IMAGE_COMPRESS_H] =
 {
     1, 1, 1, 1, 1,      1, 1, 1, 1, 1,
@@ -44,9 +38,6 @@ static const uint8 image_err_weight[IMAGE_COMPRESS_H] =
     5, 3, 1, 1, 1,      1, 1, 1, 1, 1,
     1, 1, 1, 1, 1,      1, 1, 1, 1, 1,
 };
-/*--------------------------------------------------------------------------------------------------------------------
- * @brief  TC `photo_compress`：image_two_value[i][j] = raw[2i][2j]
- *-------------------------------------------------------------------------------------------------------------------*/
 void image_photo_compress(const uint8 *src_full_row0)
 {
     uint16 i;
@@ -164,7 +155,6 @@ uint8 image_otsu_threshold(const uint8 *image, uint16 col, uint16 row)
         }
     }
     return threshold;
-#undef IMG_OTSU_GRAY_LEVELS
 }
 void image_binarize_buffer(uint8 *buf, uint16 col, uint16 row,
                            int threshold, uint8 black, uint8 white)
@@ -186,9 +176,6 @@ void image_binarize_buffer(uint8 *buf, uint16 col, uint16 row,
         }
     }
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * @brief  TC `hd_whitemax`：最亮列、截止行、左右边（差比和）；已修正 `hd_white_sum` 累加前未清零。
- *-------------------------------------------------------------------------------------------------------------------*/
 void hd_whitemax(int bw_Threshold)
 {
     int i;
@@ -286,9 +273,6 @@ void hd_whitemax(int bw_Threshold)
         }
     }
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * @brief  TC `camera_huidu`：按黑白跳变阈值扫左右边。
- *-------------------------------------------------------------------------------------------------------------------*/
 void camera_huidu(int bw_Threshold)
 {
     int i;
@@ -336,9 +320,6 @@ void camera_huidu(int bw_Threshold)
         }
     }
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * @brief  TC `Longest_White_Column`，输入需为二值图（IMG_WHITE / IMG_BLACK）。
- *-------------------------------------------------------------------------------------------------------------------*/
 void Longest_White_Column(void)
 {
     int i;
@@ -501,7 +482,6 @@ float Err_bx_Sum(void)
 {
     int   i;
     float err = 0.0f;
-    /** 原 TC 用 W 作循环上界易越界；此处按行维 `IMAGE_COMPRESS_H` */
     for (i = (int)IMAGE_COMPRESS_H - 10; i >= 10; i--)
     {
         err += (float)((int)IMAGE_COMPRESS_W / 2
@@ -511,11 +491,8 @@ float Err_bx_Sum(void)
     err /= 40.0f;
     return err;
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * Flash 页 49：摄像头曝光（CM7_1 读写；与导航页 46~48 独立）
- *-------------------------------------------------------------------------------------------------------------------*/
 #define IMAGE_CAMERA_EXP_PAGE     49u
-#define IMAGE_CAMERA_EXP_MAGIC      0x494D4745u /* "IMGE" */
+#define IMAGE_CAMERA_EXP_MAGIC      0x494D4745u
 #define IMAGE_CAMERA_EXP_VERSION    1u
 static uint32 image_camera_exp_checksum(uint32 exposure_raw)
 {
@@ -562,9 +539,6 @@ void image_camera_exposure_flash_write(void)
     flash_write_page_from_buffer(0, IMAGE_CAMERA_EXP_PAGE, FLASH_PAGE_LENGTH);
     flash_buffer_clear();
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * AE 会话：每次改曝光后等非阻塞等帧，再统计 ROI；收敛或失败后由 consume 写 Flash。
- *-------------------------------------------------------------------------------------------------------------------*/
 #define IMAGE_AE_LO                 380000
 #define IMAGE_AE_HI                 410000
 #define IMAGE_AE_TARGET             395000
@@ -583,7 +557,6 @@ static uint32 s_ae_iter = 0u;
 static uint32 s_ae_frame_wait_loops = 0u;
 static uint8  s_ae_in_range_streak = 0u;
 static uint8  s_ae_stuck_count = 0u;
-/** 按 ROI 亮度与目标比估算下一曝光（近似线性），避免每步 ±1 导致 128 步远不够 */
 static uint16 image_ae_compute_next_exposure(int camera_light, uint16 cur_exp)
 {
     uint32 new_exp;
@@ -633,7 +606,6 @@ void image_ae_session_arm(void)
     if (s_ae_state == IMAGE_AE_IDLE)
     {
         s_ae_state = IMAGE_AE_RUNNING;
-        /* 先等新帧再测量，避免用进入菜单前的旧图误判 DONE */
         s_ae_sub = AE_SUB_WAIT_FRAME;
         s_ae_iter = 0u;
         s_ae_frame_wait_loops = 0u;
@@ -661,7 +633,6 @@ void image_ae_session_poll(void)
             s_ae_frame_wait_loops++;
             if (s_ae_frame_wait_loops > IMAGE_AE_FRAME_WAIT_LOOPS)
             {
-                /* 超时仍用当前缓冲试测，避免因偶发丢 flag 整段结束 */
                 s_ae_sub = AE_SUB_MEASURE;
                 s_ae_frame_wait_loops = 0u;
             }
@@ -727,7 +698,6 @@ uint8 image_ae_session_consume_done_and_save(void)
     }
     if (s_ae_state == IMAGE_AE_FAILED)
     {
-        /* 未收敛不写 Flash，避免把半成品曝光当成有效值持久化 */
         s_ae_state = IMAGE_AE_IDLE;
         return 1u;
     }
@@ -742,12 +712,8 @@ void image_camera_auto_exposure(void)
     }
     (void)image_ae_session_consume_done_and_save();
 }
-/*--------------------------------------------------------------------------------------------------------------------
- * 白连通域检测（桥区/验证共用）与验证状态机（CM7_1 检测，CM7_0 验证 apply_yaw）
- *-------------------------------------------------------------------------------------------------------------------*/
 #if defined(CY_CORE_CM7_1) && IMAGE_WHITE_BLOB_ANY_ENABLE
 #include "dualcore_shared.h"
-/** BFS 队列容量：全幅可用区约 50×78 像素，留余量 */
 #define IMAGE_WHITE_BLOB_Q_MAX  (4096)
 static uint8 s_blob_visited[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W];
 static uint8 image_white_blob_in_roi(int row, int col, int row_end, int col_lo, int col_hi)
@@ -762,9 +728,6 @@ static uint8 image_white_blob_in_roi(int row, int col, int row_end, int col_lo, 
     }
     return (uint8)(image_two_value[row][col] == IMG_WHITE);
 }
-/**
- * 4 邻域 flood-fill：统计面积、质心、包围盒（bottom_row 用于白块→中线切换）。
- */
 static void image_white_blob_measure_component(int seed_r, int seed_c,
                                                int row_end, int col_lo, int col_hi,
                                                int *area_out, int *sum_x_out, int *sum_y_out,
@@ -977,7 +940,6 @@ void image_white_blob_detect(image_white_blob_result_t *out)
     }
     else if ((roi_pixels > 0) && (best_area > (roi_pixels * 4) / 5))
     {
-        /* 连通域占 ROI 过大，多为暗场 Otsu 整幅误分割 */
         track_valid = 0u;
         best_area = 0;
         center_err = 0.0f;
@@ -996,14 +958,13 @@ void image_white_blob_detect(image_white_blob_result_t *out)
         out->track_valid = track_valid;
     }
 }
-#endif /* CY_CORE_CM7_1 && IMAGE_WHITE_BLOB_ANY_ENABLE */
+#endif
 #if defined(CY_CORE_CM7_1) && IMAGE_WHITE_BLOB_VALIDATE_ENABLE
 #include "single_bridge.h"
 #include "dualcore_shared.h"
 static uint8 s_vision_mode = IMAGE_VISION_MODE_BLOB;
 static uint8 s_switch_debounce = 0u;
 static uint8 s_midline_lost_debounce = 0u;
-/** 白块下探到中下部且面积足够大，满足切换中线模式条件（单帧） */
 static uint8 image_white_blob_ready_for_midline(const image_white_blob_result_t *blob)
 {
     if (blob == NULL || blob->track_valid == 0u)
@@ -1112,13 +1073,9 @@ void image_vision_guidance_process_frame(int bw_threshold)
         }
     }
 }
-#endif /* CY_CORE_CM7_1 && IMAGE_WHITE_BLOB_VALIDATE_ENABLE */
+#endif
 #if defined(CY_CORE_CM7_1) && IMAGE_BRIDGE_WHITE_BLOB_ENABLE
 #include "dualcore_shared.h"
-/**
- * 单边桥回放：每帧最大白连通域 → dualcore blob 通道（全程 BLOB，不切中线）。
- * 调用方须在 mt9v03x_finish_flag 置位后调用，并在本函数返回前清零 finish_flag。
- */
 void image_bridge_blob_process_frame(int bw_threshold)
 {
     static uint32 s_bridge_blob_frame_seq;
@@ -1129,7 +1086,7 @@ void image_bridge_blob_process_frame(int bw_threshold)
     dualcore_white_blob_publish(blob.center_err, blob.track_valid, s_bridge_blob_frame_seq);
     dualcore_bridge_vision_publish_inactive();
 }
-#endif /* CY_CORE_CM7_1 && IMAGE_BRIDGE_WHITE_BLOB_ENABLE */
+#endif
 #if defined(CY_CORE_CM7_0) && IMAGE_WHITE_BLOB_VALIDATE_ENABLE
 #include "control.h"
 #include "navigation.h"
@@ -1147,7 +1104,6 @@ static float image_vision_guidance_clipf(float v, float lo, float hi)
     }
     return v;
 }
-/** 主循环 yaw 修正：center_err(像素) → 绝对航向目标偏移，经 steer_request_target_yaw 交给 1ms 航向双环 */
 static void image_vision_guidance_apply_yaw_from_err(float center_err, uint8 track_valid, uint8 fresh)
 {
     float target_offset_deg;
@@ -1160,7 +1116,6 @@ static void image_vision_guidance_apply_yaw_from_err(float center_err, uint8 tra
     {
         return;
     }
-    /* 回放态默认禁视觉 yaw；桥区白块引导时 Bridge_Zone_Active 放行 */
     if (N.Nag_SystemRun_Index == 3u && N.Bridge_Zone_Active == 0u)
     {
         return;
@@ -1204,4 +1159,4 @@ void image_vision_guidance_apply_yaw(void)
         image_midline_apply_yaw();
     }
 }
-#endif /* CY_CORE_CM7_0 && IMAGE_WHITE_BLOB_VALIDATE_ENABLE */
+#endif

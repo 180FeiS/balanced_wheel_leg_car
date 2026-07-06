@@ -1,4 +1,93 @@
 #include "zf_common_headfile.h"
+#include "Menu.h"
+#include "dualcore_shared.h"
+#include "remote_lora.h"
+static void cm71_vofa_main_loop_tx_dispatch(void)
+{
+    vofa_send_nav_from_dualcore_snapshot();
+}
+int main(void)
+{
+    clock_init(SYSTEM_CLOCK_250M);
+    debug_info_init();
+    all_init_cm7_1_ui();
+    remote_lora_init();
+    while (true)
+    {
+        selectMenu_Key();
+        Menu_UpdateImageAeArm();
+        ui_pull_ctrl_snapshot();
+        selectMenu();
+        remote_lora_update_from_driver_and_publish();
+        dualcore_vision_publish_after_step(0u);
+        cm71_vofa_main_loop_tx_dispatch();
+    }
+}
+#include "zf_common_headfile.h"
+void pit0_ch2_isr(void)
+{
+    pit_isr_flag_clear(PIT_CH2);
+    key_scanner();
+    menu_key_capture_event();
+}
+#ifndef CODE_LOGIC_MENU_H_
+#define CODE_LOGIC_MENU_H_
+#include "zf_common_typedef.h"
+#include "zf_common_headfile.h"
+#define HASH_KEY_LEN 20
+#define HASH_SIZE 50
+#define HASH_OK 1
+#define HASH_ERROR (HASH_SIZE + 2)
+#ifndef MENU_INPUT_REMOTE_MENU_FIRST
+#define MENU_INPUT_REMOTE_MENU_FIRST 1
+#endif
+#define Run_Config_Field_InputMode 0u
+#define Run_Config_Field_VofaEnable 1u
+#define Run_Config_Field_VofaGroup 2u
+#define Run_Config_Field_FusionEnable 3u
+#define Run_Config_Field_Count 4u
+extern uint8 g_menu_input_remote_first;
+extern uint8 g_menu_vofa_enable;
+extern uint8 g_menu_nav_fusion_enable;
+struct HASH_VTBL;
+typedef struct MENU_MEMBER
+{
+    char pos[HASH_KEY_LEN];
+    void (*gui)();
+    void (*act)();
+} MENU_MEMBER_t;
+typedef struct HASH_TABLE
+{
+    MENU_MEMBER_t hashTable[HASH_SIZE];
+    struct HASH_VTBL *vPtr;
+    int hashTableSize;
+} HASH_TABLE_t;
+typedef struct HASH_VTBL
+{
+    uint8_t (*insert)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*search)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str);
+    uint8_t (*searchLeft)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchRight)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchUp)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchDown)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+} HASH_VTBL_t;
+extern MENU_MEMBER_t menuMember;
+extern HASH_TABLE_t hashMenu;
+extern char ReadPos[HASH_KEY_LEN];
+extern void MenuInit(void);
+extern void selectMenu(void);
+extern void selectMenu_Key(void);
+extern void menu_key_capture_event(void);
+extern void dip_switch_motor_sync_from_hw(void);
+extern uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count);
+extern uint8 Menu_GetRunLaunchFieldIndex(void);
+extern uint8 Menu_GetRunConfigFieldIndex(void);
+extern void Menu_RunConfigToggleField(uint8 field_index);
+extern uint8 Menu_GetRunJumpFieldIndex(void);
+extern uint8 MenuIsImageSectionPage(void);
+extern void Menu_UpdateImageAeArm(void);
+#endif
+#include "zf_common_headfile.h"
 #include <stdlib.h>
 #include <string.h>
 #include "dualcore_shared.h"
@@ -1116,4 +1205,296 @@ static void *MemCpy(void *dest, void *src, unsigned int size)
         *b_dest++ = *b_src++;
     }
     return dest;
+}
+#ifndef __UI_H__
+#define __UI_H__
+#include "zf_common_typedef.h"
+#define PENCOLOR    RGB565_GREEN
+#define BGCOLOR     RGB565_BLACK
+#define ROW_1   0
+#define ROW_2   16
+#define ROW_3   32
+#define ROW_4   48
+#define ROW_5   64
+#define ROW_6   80
+#define ROW_7   96
+#define ROW_8   112
+#define ROW_9   128
+#define ROW_10  144
+#define ROW_11  160
+#define ROW_12  176
+#define ROW_13  192
+#define ROW_14  208
+#define ROW_15  224
+#define ROW_16  240
+#define ROW_17  256
+#define ROW_18  272
+#define ROW_19  288
+#define ROW_20  304
+extern void GUI_1();
+extern void ACT_1();
+extern void GUI_2();
+extern void ACT_2();
+extern void GUI_3();
+extern void ACT_3();
+extern void GUI_1_1();
+extern void ACT_1_1();
+extern void GUI_1_2();
+extern void ACT_1_2();
+extern void GUI_1_3();
+extern void ACT_1_3();
+extern void GUI_1_4();
+extern void ACT_1_4();
+extern void GUI_1_5();
+extern void ACT_1_5();
+extern void GUI_2_1();
+extern void ACT_2_1();
+extern void GUI_2_2();
+extern void ACT_2_2();
+extern void GUI_2_3();
+extern void ACT_2_3();
+extern void GUI_2_4();
+extern void ACT_2_4();
+extern void GUI_2_5();
+extern void ACT_2_5();
+extern void GUI_2_6();
+extern void ACT_2_6();
+extern void GUI_3_1();
+extern void ACT_3_1();
+extern void GUI_3_1_1();
+extern void ACT_3_1_1();
+extern void GUI_3_2();
+extern void ACT_3_2();
+extern void GUI_3_3();
+extern void ACT_3_3();
+extern void GUI_3_3_1();
+extern void ACT_3_3_1();
+extern void GUI_3_4();
+extern void ACT_3_4();
+extern void GUI_3_4_1();
+extern void ACT_3_4_1();
+extern void GUI_1_1_1();
+extern void ACT_1_1_1();
+extern void GUI_1_2_1();
+extern void ACT_1_2_1();
+extern void GUI_1_3_1();
+extern void ACT_1_3_1();
+extern void GUI_1_4_1();
+extern void ACT_1_4_1();
+extern void GUI_1_5_1();
+extern void ACT_1_5_1();
+extern void GUI_2_1_1();
+extern void ACT_2_1_1();
+extern void GUI_2_1_2();
+extern void ACT_2_1_2();
+extern void GUI_2_1_3();
+extern void ACT_2_1_3();
+extern void GUI_2_1_1_1();
+extern void ACT_2_1_1_1();
+extern void GUI_2_1_2_1();
+extern void ACT_2_1_2_1();
+extern void GUI_2_1_3_1();
+extern void ACT_2_1_3_1();
+extern void GUI_2_2_1();
+extern void ACT_2_2_1();
+extern void GUI_2_2_2();
+extern void ACT_2_2_2();
+extern void GUI_2_2_3();
+extern void ACT_2_2_3();
+extern void GUI_2_2_4();
+extern void ACT_2_2_4();
+extern void GUI_2_2_5();
+extern void ACT_2_2_5();
+extern void GUI_2_2_6();
+extern void ACT_2_2_6();
+extern void GUI_2_3_1();
+extern void ACT_2_3_1();
+extern void GUI_2_3_2();
+extern void ACT_2_3_2();
+extern void GUI_2_3_3();
+extern void ACT_2_3_3();
+extern void GUI_2_3_4();
+extern void ACT_2_3_4();
+void ui_pull_ctrl_snapshot(void);
+#endif
+#include "zf_common_headfile.h"
+#include "image.h"
+#if defined(CY_CORE_CM7_1)
+#include "single_bridge.h"
+#endif
+#include "my_gps.h"
+#if defined(CY_CORE_CM7_1)
+#include "dualcore_shared.h"
+static dualcore_ctrl_to_ui_t s_ui_dc;
+#else
+#include "control.h"
+#include "nav_fusion.h"
+#endif
+#include "Menu.h"
+#include "navigation.h"
+#include "control.h"
+static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
+void ui_pull_ctrl_snapshot(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+#else
+#endif
+}
+typedef enum {
+    DISPLAY_MODE_IPS200,
+    DISPLAY_MODE_SERIAL
+} DisplayMode;
+DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200;
+float FPS = 0;
+static void GUI_Display_FPS(void)__attribute__((unused));
+static void GUI_Display_Image_Sidebar()__attribute__((unused));
+static void GUI_Display_Image_Below(void)__attribute__((unused));
+static void GUI_SetAngleLoop()__attribute__((unused));
+static void GUI_SetDirLoop()__attribute__((unused));
+static void GUI_Display_Level1_Common1(void)__attribute__((unused));
+static void GUI_Display_Level2_Common1(void)__attribute__((unused));
+static void GUI_Display_Level2_Common2(void)__attribute__((unused));
+static void GUI_Display_Level2_Common3(void)__attribute__((unused));
+static void GUI_Display_Level3_Common1(void)__attribute__((unused));
+static void GUI_Display_Level3_Common2(void)__attribute__((unused));
+static void GUI_Display_Level3_ImageDetect(uint8 current_idx)__attribute__((unused));
+static void GUI_Display_Level3_Common3(void)__attribute__((unused));
+static void GUI_Display_Level3_Common4(void)__attribute__((unused));
+static void GUI_Display_Level3_Common5(void)__attribute__((unused));
+static void GUI_Display_FPS(void)
+{
+    ips200_show_string(184,ROW_1,"FPS:");
+    ips200_show_int(208,ROW_1,(uint16_t)FPS,3);
+}
+static void GUI_Display_Level1_Common1(void)
+{
+    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
+    ips200_show_string(0,ROW_1,"Meun ");
+    GUI_Display_FPS();
+}
+void GUI_1(void)
+{
+    GUI_Display_Level1_Common1();
+    ips200_show_string(80,ROW_7," Test");
+    ips200_show_string(80,ROW_10," Debug");
+    ips200_show_string(80,ROW_13," Run ");
+    ips200_show_string(48,ROW_7,"-->");
+    ips200_show_string(136,ROW_7,"<--");
+}
+void ACT_1()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = 0x00;
+    ReadPos[2] = 0x00;
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+void GUI_2(void)
+{
+    GUI_Display_Level1_Common1();
+    ips200_show_string(80,ROW_7," Test");
+    ips200_show_string(80,ROW_10," Debug");
+    ips200_show_string(80,ROW_13," Run ");
+    ips200_show_string(48,ROW_10,"-->");
+    ips200_show_string(136,ROW_10,"<--");
+}
+void ACT_2()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = 0x00;
+    ReadPos[2] = 0x00;
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+void GUI_3(void)
+{
+    GUI_Display_Level1_Common1();
+    ips200_show_string(80,ROW_7," Test");
+    ips200_show_string(80,ROW_10," Debug");
+    ips200_show_string(80,ROW_13," Run ");
+    ips200_show_string(48,ROW_13,"-->");
+    ips200_show_string(136,ROW_13,"<--");
+}
+void ACT_3()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = 0x00;
+    ReadPos[2] = 0x00;
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+static void GUI_Display_Level2_Common1(void)
+{
+    ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
+    ips200_show_string(0,ROW_1,"Test ");
+    GUI_Display_FPS();
+}
+void GUI_1_1(void)
+{
+    GUI_Display_Level2_Common1();
+    ips200_show_string(80,ROW_6,"Motor");
+    ips200_show_string(80,ROW_8,"Encode");
+    ips200_show_string(80,ROW_10,"Image");
+    ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
+    ips200_show_string(48,ROW_6,"-->");
+    ips200_show_string(136,ROW_6,"<--");
+}
+void ACT_1_1()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '1';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+void GUI_1_2(void)
+{
+    GUI_Display_Level2_Common1();
+    ips200_show_string(80,ROW_6,"Motor");
+    ips200_show_string(80,ROW_8,"Encode");
+    ips200_show_string(80,ROW_10,"Image");
+    ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
+    ips200_show_string(48,ROW_8,"-->");
+    ips200_show_string(136,ROW_8,"<--");
+}
+void ACT_1_2()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '2';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+void GUI_1_3(void)
+{
+    GUI_Display_Level2_Common1();
+    ips200_show_string(80,ROW_6,"Motor");
+    ips200_show_string(80,ROW_8,"Encode");
+    ips200_show_string(80,ROW_10,"Image");
+    ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
+    ips200_show_string(48,ROW_10,"-->");
+    ips200_show_string(136,ROW_10,"<--");
+}
+void ACT_1_3()
+{
+    ReadPos[0] = '1';
+    ReadPos[1] = '.';
+    ReadPos[2] = '3';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+void GUI_1_4(void)
+{
+    GUI_Display_Level2_Common1();
+    ips200_show_string(80,ROW_6,"Motor");
+    ips200_show_string(80,ROW_8,"Encode");
+    ips200_show_string(80,ROW_10,"Image");
+    ips200_show_string(80,ROW_12,"Gyro");
+    ips200_show_string(80,ROW_14,"GPS");
+    ips200_show_string(48,ROW_12,"-->");
+    ips200_show_string(136,ROW_12,"<--");
 }

@@ -1,9 +1,5 @@
 #ifndef CODE_INTERFACES_NAVIGATION_PORT_H_
 #define CODE_INTERFACES_NAVIGATION_PORT_H_
-/*
- * 惯导导航软件对外 API（供运动控制/视觉/人机交互调用）。
- * 软著 02 主归属 navigation.c；其他模块仅保留本头文件。
- */
 #include "zf_common_typedef.h"
 void Init_Nag(void);
 void Nag_System(void);

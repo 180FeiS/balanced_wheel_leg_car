@@ -1,6 +1,3 @@
-/*
- * 机器视觉路径识别软件 — CM7_1 主循环摘录（软著 04）
- */
 #include "zf_common_headfile.h"
 #include "image.h"
 #include "single_bridge.h"

@@ -1,7 +1,3 @@
-/* ===== glue/main_cm7_1_ui_excerpt.c ===== */
-/*
- * 双核人机交互与无线遥控软件 — CM7_1 主入口摘录（软著 06）
- */
 #include "zf_common_headfile.h"
 #include "Menu.h"
 #include "dualcore_shared.h"
@@ -27,10 +23,6 @@ int main(void)
         cm71_vofa_main_loop_tx_dispatch();
     }
 }
-/* ===== glue/cm7_1_isr_ui_excerpt.c ===== */
-/*
- * 人机交互软件 — 按键扫描 ISR 摘录（软著 06）
- */
 #include "zf_common_headfile.h"
 void pit0_ch2_isr(void)
 {
@@ -38,177 +30,63 @@ void pit0_ch2_isr(void)
     key_scanner();
     menu_key_capture_event();
 }
-/* ===== code/Menu.h ===== */
-/*
- * @Author: bom
- * @Version: V1.0
- * @Date: 2024-12-12 22:02:51
- * @LastEditTime: 2024-12-24 21:38:53
- * @FilePath: \Balance_Car V3.0.1\project\code\Menu.h
- * @Description:
- */
-/*********************************************************************************************************************
- * �޸ļ�¼
- * ����              ����             �汾           ˵��
- * 2024-07-24        Bron            V1.0.0         ��¹���
- * 2024-12-19        Bron            V2.0.1         ����Menu��Manu_Basic
- ********************************************************************************************************************/
 #ifndef CODE_LOGIC_MENU_H_
 #define CODE_LOGIC_MENU_H_
 #include "zf_common_typedef.h"
 #include "zf_common_headfile.h"
-// #define MAX_EXPLAIN    10        /*���˵������*/
-#define HASH_KEY_LEN 20            // ��ϣ���д洢��λ���ַ�������󳤶�
-#define HASH_SIZE 50               // ��ϣ����С(���ɴ洢�Ĳ˵�������)
-#define HASH_OK 1                  // ��ϣ�����ɹ�����ֵ
-#define HASH_ERROR (HASH_SIZE + 2) // ��ϣ����ʧ�ܷ���ֵ
-/*
- * �˵�����Դ��Flash ���䣬Run��Config �༭��Run��Save �־û�������Ч Flash ʱ�ñ���Ĭ�� 0����
- * 0 = ����+���룺���ؼ��� SWITCH1/2������ң�ؿ�����ģʽ�л���selectMenu ��ִ�� Menu_command �� switch�������밴��˫������
- * 1 = ң�����ȣ�ȫң�أ����ؼ��뱾�ز���Ĭ�ϲ����룩��CM7_0 �� dip_switch_motor_sync_from_hw Ĭ�ϲ��� SWITCH1/2��
- *    ����ң�ص� 4 ·�����ƽ��remote_lora.h��REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX / REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL��
- *    �е������ص��ԡ����� 0 ���Ƶİ����뱾�ز���·����ȫң��ʱ Motor_Runaway_Latch ���ܿ���������������Թض����� control.c Ϊ׼��
- * ����ʱ���� g_menu_input_remote_first��CM7_0 ���У�CM7_1 �� dualcore ���ն�ȡ����
- */
+#define HASH_KEY_LEN 20
+#define HASH_SIZE 50
+#define HASH_OK 1
+#define HASH_ERROR (HASH_SIZE + 2)
 #ifndef MENU_INPUT_REMOTE_MENU_FIRST
 #define MENU_INPUT_REMOTE_MENU_FIRST 1
 #endif
 #define Run_Config_Field_InputMode 0u
 #define Run_Config_Field_VofaEnable 1u
-#define Run_Config_Field_VofaGroup 2u  /* VOFA ������ 0=IMU 1=�ٶ� 2=�ں� 3=��̾�ƫ��Flash V9 ���� */
-#define Run_Config_Field_FusionEnable 3u /* �����ںϿ��� 0=�� 1=����Flash V10 ���� */
+#define Run_Config_Field_VofaGroup 2u
+#define Run_Config_Field_FusionEnable 3u
 #define Run_Config_Field_Count 4u
 extern uint8 g_menu_input_remote_first;
-/*
- * VOFA ���ߵ��Կ��أ�Flash ���䣬Run��Config �༭��Run��Save �־û� V6����
- * 0 = �ر� JustFloat ���߷�����Ĭ�ϣ������� LORA ң�ع��� UART_1 ʱ������ţ���
- * 1 = ������CM7_1 ��ѭ�����˱�־���� cm71_vofa_main_loop_tx_dispatch()��
- * ����ʱ���� g_menu_vofa_enable��CM7_0 ���У�CM7_1 �� dualcore ���ն�ȡ����
- */
 extern uint8 g_menu_vofa_enable;
-/*
- * �����ںϿ��أ�Flash ���䣬Run��Config �༭��Run��Save �־û� V10����
- * 0 = �ر��ںϣ�GPS/�ߵ��˻�ԭ GNSS �� car_speed ���֣�1 = ���� nav_fusion��
- * ����ʱ���� g_menu_nav_fusion_enable��CM7_0 ���У�CM7_1 �� dualcore ���ն�ȡ����
- */
 extern uint8 g_menu_nav_fusion_enable;
-/*
- * ������ API Լ����hashMenu.vPtr->searchUp/Down/Left/Right ��ʾ�˵������������ǰ������������ҡ���
- * ������/�����ֽ���ζ�Ӧ�����ǣ�һ��ֻ�� Menu.c �� selectMenu_Key �� Menu_command ��֧�д�����
- * GPS ������ҳ KEY3 Idle �����μ� MenuTryHandleGpsDebugKeyEvent ע�ͣ�����¼ + GPS_NAV_GPS_FIRST_DISTANCE_M �� COG �궨����
- */
-/*
- * �˵�λ�ñ���˵����
- * ʹ�õ�ָ�ʽ��ʾ�˵���Ĳ㼶��ϵ�����磺
- * "1"    - ��һ���˵��ĵ�1��ѡ��
- * "2.3"  - ��һ���˵��ĵ�2��ѡ���µĵ�3����ѡ��
- * "1.1.2"- ��һ���˵��ĵ�1��ѡ���µĵ�1����ѡ��ĵ�2����ѡ��
- */
-// ǰ��������ϣ���麯�����ṹ
 struct HASH_VTBL;
-// �˵���ṹ��
 typedef struct MENU_MEMBER
 {
-    char pos[HASH_KEY_LEN]; // �˵����λ�ñ���
-    void (*gui)();          // ���ڸ��¸ò˵����GUI��ʾ
-    void (*act)();          // ѡ�иò˵���ʱִ�еĲ���
+    char pos[HASH_KEY_LEN];
+    void (*gui)();
+    void (*act)();
 } MENU_MEMBER_t;
-// ��ϣ���ṹ��
 typedef struct HASH_TABLE
 {
-    MENU_MEMBER_t hashTable[HASH_SIZE]; // �洢�˵���Ĺ�ϣ������
-    struct HASH_VTBL *vPtr;             // ��ϣ�������������麯����
-    int hashTableSize;                  // ��ǰ��ϣ���еĲ˵�������
+    MENU_MEMBER_t hashTable[HASH_SIZE];
+    struct HASH_VTBL *vPtr;
+    int hashTableSize;
 } HASH_TABLE_t;
-// ��ϣ�����������麯����
 typedef struct HASH_VTBL
 {
-    // ��������
-    uint8_t (*insert)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);            // ���ϣ���в����²˵���
-    uint8_t (*search)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str); // ����λ�ñ�����Ҳ˵���
-    // �˵������������ṹ���壺��ο����� Balance_Car_initial Menu.c HashTableCtor һ�£�
-    uint8_t (*searchLeft)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);  // �л�����һ��ͬ��ѡ��
-    uint8_t (*searchRight)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember); // �л�����һ��ͬ��ѡ��
-    uint8_t (*searchUp)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);    // �����ϼ��˵�
-    uint8_t (*searchDown)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember); // ���뵱ǰѡ����Ӳ˵�
+    uint8_t (*insert)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*search)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str);
+    uint8_t (*searchLeft)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchRight)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchUp)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+    uint8_t (*searchDown)(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
 } HASH_VTBL_t;
-// ȫ�ֱ�������ǰѡ�еĲ˵���
 extern MENU_MEMBER_t menuMember;
 extern HASH_TABLE_t hashMenu;
 extern char ReadPos[HASH_KEY_LEN];
-// �˵�ϵͳ��ʼ������
 extern void MenuInit(void);
 extern void selectMenu(void);
 extern void selectMenu_Key(void);
 extern void menu_key_capture_event(void);
 extern void dip_switch_motor_sync_from_hw(void);
-/* ���ڶ��ֽ���չ֡ V<��ֵ>���� ReadDataFromPc ��д�� Menu_command ǰ���ã������� 1 ��ʾ����֡���ѡ� */
 extern uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count);
-/* Run -> Launch ����ҳ��ǰѡ�еĲ����ֶ�������0..Nag_Run_Launch_Param_Count-1�� */
 extern uint8 Menu_GetRunLaunchFieldIndex(void);
-/* Run -> Config ����ҳ��ǰѡ�е�Ԥ�����ֶ�������0..Run_Config_Field_Count-1�� */
 extern uint8 Menu_GetRunConfigFieldIndex(void);
 extern void Menu_RunConfigToggleField(uint8 field_index);
-/* Run -> Jump ����ҳ��ǰѡ�еĲ����ֶ�������0..Run_Jump_Param_Count-1�� */
 extern uint8 Menu_GetRunJumpFieldIndex(void);
-/* Debug -> Image��pos 2.1*�������ؽ���ʱ arm �Զ��ع�Ự */
 extern uint8 MenuIsImageSectionPage(void);
 extern void Menu_UpdateImageAeArm(void);
-#endif /* CODE_LOGIC_MENU_H_ */
-/* ===== code/Menu.c ===== */
-/*
- * @Author: bom
- * @Version: V1.0
- * @Date: 2024-12-12 22:02:51
- * @LastEditTime: 2024-12-24 22:46:12
- * @FilePath: \Balance_Car V3.0.1\project\code\Menu.c
- * @Description:
- */
-/*********************************************************************************************************************
- ��ֲʹ��˵����
- 1. ��Ҫ������ͷ�ļ�:
-    - Menu.h: �˵���ض��������
-    - string.h: �ַ�����������
-    - UI.h: ������ʾ��غ���
- 2. �ؼ��ṹ�ͱ���:
-    - HASH_TABLE_t hashMenu: ȫ�ֹ�ϣ���������洢���в˵���
-    - MENU_MEMBER_t menuMember: ��ǰѡ�еĲ˵�����Ϣ
- 3. ʹ�ò���:
-    a) ���� MenuInit() ��ʼ���˵�ϵͳ
-    b) �� MenuInit() �����ж���˵��ṹ:
-       - ���� menuMember.gui (������ʾ����)
-       - ���� menuMember.act (�˵���������)
-       - ���� menuMember.pos (�˵�λ�ñ�ţ���"1"��"1.1"��)
-       - ���� hashMenu.vPtr->insert() ����˵���
- 4. �˵����ƽӿڣ���ο����̽ṹ����һ�£����ؼ��� selectMenu_Key ��ӳ�䵽�����壩:
-    - hashMenu.vPtr->searchUp(): �����ϼ��˵�
-    - hashMenu.vPtr->searchDown(): �����¼��˵�
-    - hashMenu.vPtr->searchLeft(): �л�����һ��ͬ���˵�
-    - hashMenu.vPtr->searchRight(): �л�����һ��ͬ���˵�
-    ���״��㣺������� vs ���ؼ������������Ժ��ٸĻ�ȥ�ȿӣ�
-    - vtable �ĸ�ָ��������ʷ��������롸�˵�����һ�£��� Balance_Car_initial Menu.c ��ͬ����
-      searchDown=����(HashDepthDown)��searchUp=����(HashDepthUp)��Left/Right=ͬ��(HashPeerLeft/PeerRight)��
-    - �����˰� HashTableCtor д�ɡ������������塹������� Up/Down ���ͬ����Left/Right ��ɷ���/���ӣ���
-      ������ο����̼� HashDepth/HashPeer ��������ȫ�Բ��ϣ�Run/Debug �ȷ�֧��Ϊ�������λ��
-    - �����̰���ϰ���� KEY1/2 ��ͬ����KEY3 ���롢KEY4 ���أ�ֻ���� selectMenu_Key()�������� a/b/c/d��
-      ��������¼�ӳ�䵽�����ĸ� search*����Ҫ�ٸ� HashTableCtor ȥ��ӭ�ϼ�������
- 5. ע������:
-    - �˵�λ�ñ�Ÿ�ʽΪ: "1"��"2"(һ���˵�)��"1.1"��"1.2"(�����˵�)
-    - ���֧�ֲ˵������ HASH_KEY_LEN ����
-    - ���˵��������� HASH_SIZE ����
-    ���յ���
-    menuMember.gui();
-    menuMember.act();
-********************************************************************************************************************/
-/*********************************************************************************************************************
- * �޸ļ�¼��
- * �汾��      ����          ����      ˵��
- * V1.0.0    2024-07-24    Bron     ��¹���
- * V1.0.2    2024-07-27    Bron     ������˵����
- * V1.1.0    2024-07-30    Bron     ���򰴼���Ϊvofaģ�ⰴ��
- * V1.1.4    2024-08-01    Bron     ����Һ�������л�ģʽ
- * V2.0.1    2024-12-19    Bron     ����Menu��Manu_Basic
- ********************************************************************************************************************/
+#endif
 #include "zf_common_headfile.h"
 #include <stdlib.h>
 #include <string.h>
@@ -221,9 +99,8 @@ extern void Menu_UpdateImageAeArm(void);
 #include "flash.h"
 #include "nav_fusion.h"
 #endif
-/* ȫ�ֱ������� */
-HASH_TABLE_t hashMenu;    // ����˵���Ĺ�ϣ��
-MENU_MEMBER_t menuMember; // ��ǰѡ�еĲ˵�����Ϣ
+HASH_TABLE_t hashMenu;
+MENU_MEMBER_t menuMember;
 char ReadPos[HASH_KEY_LEN] = {'1', 0, 0, 0, 0};
 #define MENU_KEY_EVENT_QUEUE_LEN 8
 typedef enum
@@ -237,17 +114,16 @@ typedef enum
 static volatile uint8 menu_key_nav_queue[MENU_KEY_EVENT_QUEUE_LEN];
 static volatile uint8 menu_key_nav_head = 0;
 static volatile uint8 menu_key_nav_tail = 0;
-/* �ڲ��������� */
-static void HashTableCtor(HASH_TABLE_t *const This);                                                // ��ϣ����ʼ��
-static uint16_t CreatHashKey(const char *skey);                                                     // ���ɹ�ϣֵ
-static void *MemSet(void *src, int value, int n);                                                   // �ڴ��ʼ��
-static void *MemCpy(void *dest, void *src, unsigned int size);                                      // �ڴ渴��
-static uint8_t HashInsert(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);               // ����˵���
-static uint8_t HashDepthUp(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);              // �����ϼ��˵�
-static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);            // �����¼��˵�
-static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);             // �л������ͬ���˵�
-static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);            // �л����Ҳ�ͬ���˵�
-static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str); // ���Ҳ˵���
+static void HashTableCtor(HASH_TABLE_t *const This);
+static uint16_t CreatHashKey(const char *skey);
+static void *MemSet(void *src, int value, int n);
+static void *MemCpy(void *dest, void *src, unsigned int size);
+static uint8_t HashInsert(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+static uint8_t HashDepthUp(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember);
+static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str);
 static void MenuKeyEventPush(menu_key_nav_enum nav);
 static uint8 MenuKeyEventPop(menu_key_nav_enum *nav);
 static uint8 MenuIsNavDebugPage(void);
@@ -284,11 +160,8 @@ void Menu_UpdateImageAeArm(void)
         s_was_in_image_section = 1u;
     }
 }
-/* Launch ҳ��KEY1 ѭ��ѡ���ֶΣ�KEY2/KEY3 ���ٶȡ�100�������10 ���ڡ� */
 static uint8 s_run_launch_field_index = 0u;
-/* Config ҳ��KEY1 ѭ��ѡ��Ԥ�����ֶΣ�KEY2 �л���ǰ�ֶ�ȡֵ�� */
 static uint8 s_run_config_field_index = 0u;
-/* Jump ҳ��KEY1 ѭ��ѡ���ֶΣ�KEY2/KEY3 �� ��0.5 ���ڡ� */
 static uint8 s_run_jump_field_index = 0u;
 uint8 Menu_GetRunLaunchFieldIndex(void)
 {
@@ -339,20 +212,6 @@ static uint8 MenuIsRemoteMenuFirst(void)
     return g_menu_input_remote_first;
 #endif
 }
-/*-------------------------------------------------------------------------
- * �˵��ӿں���-�û�ֻ����Ĵ˲���
- *-------------------------------------------------------------------------*/
-/*
- * @Function: selectMenu_Key
- * @Description: ʹ�ð����˵�ѡ��������
- * @Param: Void
- * @Return: Void
- * @Example: selectMenu();
- */
-/* ���� 1����֡������չЭ�����ѣ�ReadDataFromPc ��Ӧ��д�� Menu_command��
- * selectMenu() ���������ֽڣ����ֽ� V<��ֵ> �ڱ�����������
- * ��ʽ��V<��ֵ>  �� V1200 / V0 / V-800��д�� run_launch_speed�����ߵ��طŽ���ִ��̬ʱװ�أ�
- */
 uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
 {
     char tmp[68];
@@ -379,20 +238,11 @@ uint8 Menu_TryConsumePcMotorSpeedString(const uint8 *data, uint32 count)
     }
     return 0u;
 }
-/*-------------------------------------------------------------------------
- * �������ٶȻ�׼���������Ե��ã��� selectMenu_Key / selectMenu �ڣ���
- * 1. SWITCH2�����ش��� motor_poll_switch2_speed_baseline()������ʱ��ִ�� yaw ������ã���ǰ�����Ϊ 0�����ɹ���ת LED1��
- * 2. SWITCH1��Motor_Switch Ψһ��Դ��ʧ��������⣩��
- * 3. ����δ����ط�ִ��̬ǰ���ٶȻ����� Nag_GetControlSpeedTarget() �ſ�Ϊ 0��
- * 4. Motor_Runaway_Latch��������ȼ��ص����ң�����ȹر�ʱ�� SWITCH1 �� OFF ���������档
- *    g_menu_input_remote_first==1 ʱ�������룬�������ң�����λ���ض�������ʧ���Լ� control.c��
- *-------------------------------------------------------------------------*/
 void dip_switch_motor_sync_from_hw(void)
 {
 #if defined(CY_CORE_CM7_1)
     (void)0;
 #else
-    /* ң�������ҷǰ��ص��ԣ����� SWITCH�����ص���ʱ�� GPIO����ͬ����ģʽ�� */
     if (g_menu_input_remote_first != 0u && g_remote_local_keys_debug == 0u)
     {
         return;
@@ -420,13 +270,8 @@ void dip_switch_motor_sync_from_hw(void)
 #endif
         }
     }
-#endif /* !CY_CORE_CM7_1 */
+#endif
 }
-/*
- * ����ɨ����ӣ�MENU_KEY_NAV_* ֻ��ʾ��������ķ����¼����͡��������� selectMenu_Key() ���䵽 hash �����
- * ���� KEY3 �Ƶ� MENU_KEY_NAV_RIGHT����ʵ�ʲ˵������ǡ������¼�������Ӧ hash ��Ӧ�� searchDown()��
- * ��Ҫ���� RIGHT �����ȥ�� searchRight()���ǻ���ͬ���л�����
- */
 void menu_key_capture_event(void)
 {
 #if defined(CY_CORE_CM7_1)
@@ -562,11 +407,6 @@ void menu_key_capture_event(void)
             gpio_toggle_level(LED1);
             key_clear_state(KEY_2);
         }
-        /* ¼��̬ͳһ�ſأ�
-         * 1. Nag_SystemRun_Index == 1 ��ʾ�Դ���¼�����̣�
-         * 2. End_f == 0 ��ʾ��δ����ֹͣ¼�ƺ����βд flash �׶Ρ�
-         * ���� KEY3/KEY4 ������¼����β�����������Ԫ�����ͻ��㡣
-         */
         uint8 nav_recording_active = (N.Nag_SystemRun_Index == 1 && N.End_f == 0);
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
@@ -583,11 +423,6 @@ void menu_key_capture_event(void)
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
-            /* KEY4 ���ȼ���
-             * 1. ¼���У��������浱ǰԪ�ص㣨Nag_Request_Event_Mark����
-             * 2. ��¼����Ԫ�ؽӹ��У��ֶ�֪ͨԪ����ɣ��ָ�������
-             * 3. ���������������һ���˵���
-             */
             if (nav_recording_active)
             {
                 Nag_Request_Event_Mark();
@@ -631,7 +466,7 @@ void menu_key_capture_event(void)
             key_clear_state(KEY_4);
         }
     }
-#endif /* !CY_CORE_CM7_1 */
+#endif
 }
 void selectMenu_Key(void)
 {
@@ -647,31 +482,23 @@ void selectMenu_Key(void)
 #else
    uint8 motor_sw_key = Motor_Switch;
 #endif
-   /*
-    * ����ӳ�䣨�����ָУ���KEY1 ͬ����һ�KEY2 ͬ����һ�KEY3 �����¼���KEY4 �����ϼ���
-    * ��Ӧ vPtr��searchLeft / searchRight / searchDown / searchUp����Ϊ�˵������壬���� MENU_KEY_NAV_* ����������
-    */
    while(MenuKeyEventPop(&nav))
    {
         switch(nav)
         {
         case MENU_KEY_NAV_LEFT:
-             /* KEY4��������һ�����ṹ���� searchUp�� */
              hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_RIGHT:
-             /* KEY3��������һ�����ṹ���� searchDown�� */
              hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_DOWN:
-             /* KEY2��ͬ����һ��ṹ���� searchRight�� */
              hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
         case MENU_KEY_NAV_UP:
-             /* KEY1��ͬ����һ��ṹ���� searchLeft�� */
              hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
              menu_nav = 1;
              break;
@@ -679,7 +506,6 @@ void selectMenu_Key(void)
              break;
         }
    }
-   /* �� selectMenu() һ�£������������ػ棬��������ѭ������ɣ������� ips200 SPI ��ͻ�� */
    if(menu_nav && (motor_sw_key == MOTOR_OFF))
    {
         ips200_clear();
@@ -717,17 +543,14 @@ static uint8 MenuIsGpsDebugPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "2.3.1") == 0);
 }
-/* �������ٶ�����ҳ���� KEY1/2/3����Ҫ���� "3.1" �� Launch �����б�ҳ�� */
 static uint8 MenuIsRunLaunchSpeedPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "3.1.1") == 0);
 }
-/* Run/Flash ������û����ʵ�¼����ڸ�ҳ�� KEY3�����룩ʱ����Ϊ���� Run ������ flash�� */
 static uint8 MenuIsRunFlashPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "3.2") == 0);
 }
-/* Run/Config ����ҳ��KEY1 ѡ�ֶΣ�KEY2 �л�ȡֵ�� */
 static uint8 MenuIsRunConfigPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "3.3.1") == 0);
@@ -745,7 +568,6 @@ static void MenuAdjustRunLaunchParam(float delta)
     Nag_LaunchParamAdjust(s_run_launch_field_index, delta);
 #endif
 }
-/* ���� 1 ��ʾ KEY1/2/3 �ѱ� Launch ҳ���ѣ�KEY4 ����ͨ�÷��ء� */
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
 {
     float step = 0.0f;
@@ -784,7 +606,6 @@ static void MenuAdjustRunJumpParam(float delta)
     JumpParamAdjust(s_run_jump_field_index, delta);
 #endif
 }
-/* ���� 1 ��ʾ KEY1/2/3 �ѱ� Jump ҳ���ѣ�KEY4 ����ͨ�÷��ء� */
 static uint8 MenuTryHandleRunJumpKeyEvent(void)
 {
     float step = JumpParamGetStep(s_run_jump_field_index);
@@ -812,7 +633,6 @@ static uint8 MenuTryHandleRunJumpKeyEvent(void)
     }
     return 0u;
 }
-/* ���� 1 ��ʾ Run/Flash ҳ������ KEY3 ���涯����KEY1/KEY2/KEY4 ������ͨ�˵������� */
 static uint8 MenuTryHandleRunFlashKeyEvent(void)
 {
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -829,7 +649,6 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
     }
     return 0u;
 }
-/* ���� 1 ��ʾ Config ҳ������ KEY1/KEY2��KEY3 �޶�����KEY4 ����ͨ�÷��ء� */
 static uint8 MenuTryHandleRunConfigKeyEvent(void)
 {
     if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -854,11 +673,6 @@ static uint8 MenuTryHandleRunConfigKeyEvent(void)
     }
     return 0u;
 }
-/* GPS ����ҳ�� GPS ����Ψһ������ڣ�
- * Idle��KEY1 ��ʼ��㣬KEY2 ������д flash��KEY3 �������� GPS ������GPS_ApplyLaunchSpeed ��¼��㾭γ�ȣ�
- *       ʻ��Լ GPS_NAV_GPS_FIRST_DISTANCE_M ���� RMC gnss.direction �� GPS_first �궨ƫ����׷�㣩��KEY4 �����ϼ���
- * Recording��KEY1 ռλ��KEY2 ������д flash��KEY3 ���浱ǰ�㣬KEY4 �л�������Ԫ�ء�
- */
 static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 {
 #if defined(CY_CORE_CM7_1)
@@ -929,13 +743,6 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
     }
     return 0u;
 }
-/*
- * @Function: selectMenu
- * @Description: �˵�ѡ��������
- * @Param: Void
- * @Return: Void
- * @Example: selectMenu();
- */
 void selectMenu(void)
 {
     ReadDataFromPc();
@@ -957,47 +764,24 @@ void selectMenu(void)
     if (g_remote_local_keys_debug == 0u)
 #endif
     {
-    /* ȫң��ʱ Menu_command �ĵ��ֽڵ������������� selectMenu_Key һ�¡�
-     * ע�⣺�ϵ� Balance_Car_initial��System_startup.c������Ϊ a/b=c/d / c=Down / d=Up��
-     * ��˴���ͬ���Ĵ��ڽű�����λ��ǰ��ض��ձ����� selectMenu_Key�� */
     switch (Menu_command)
     {
     case 'a':
-        /* ����ؼ�һ�£�ͬ����һ�� */
         hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
         ips200_clear();
         break;
     case 'b':
-        /* ����ؼ�һ�£�ͬ����һ�� */
         hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
         ips200_clear();
         break;
     case 'c':
-        /* ����ؼ�һ�£������¼� */
         hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
         ips200_clear();
         break;
     case 'd':
-        /* ����ؼ�һ�£������ϼ� */
         hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
         ips200_clear();
         break;
-        /*
-    case 'e':
-        Flash.Flash_Error = FLASH_RUNNING;
-        Flash.Flash_state = FLASH_WRITE;
-        ips200_clear();
-        break;
-    case 'f':
-        Flash.Flash_Error = FLASH_RUNNING;
-        Flash.Flash_state = FLASH_CLEAR;
-        ips200_clear();
-        break;
-    case 'g':
-        Flash.Flash_Error = FLASH_RUNNING;
-        Flash.Flash_state = FLASH_MENU;
-        break;
-        */
     case 'i':
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_JUMP, 0, 0.0f);
@@ -1075,7 +859,7 @@ void selectMenu(void)
         run_launch_speed = 0.0f;
 #endif
         break;
-    case 't': /* �ߵ�¼�ƣ��������浱ǰԪ�ص� */
+    case 't':
 #if defined(CY_CORE_CM7_1)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_EVENT_MARK, 0, 0.0f);
 #else
@@ -1101,26 +885,15 @@ void selectMenu(void)
     }
     Menu_command = 0;
     if(motor_sw_sel == MOTOR_OFF
-  //  || MOTOR_ON
     )
     {
         menuMember.gui();
         menuMember.act();
     }
 }
-/**
- * @Function: MenuInit
- * @Description: �˵���ʼ��
- * @Param: Void
- * @Return: Void
- * @Example: MenuInit();
- * ע�⣺�������MENU_SELECT�����ϵ�Ĭ�ϲ˵�ѡ��ע��˳�ʼ������ŵ�Flash_Init()֮���ȶ�ȡflash�����ٶԲ˵����г�ʼ��
- */
 void MenuInit()
 {
-    /*������ϣ��*/
     HashTableCtor(&hashMenu);
-    /*�������ݣ������ϣ��*/
     menuMember.gui = GUI_1;
     menuMember.act = ACT_1;
     strcpy(menuMember.pos, "1");
@@ -1217,26 +990,6 @@ void MenuInit()
         menuMember.act = ACT_1_5_1;
         strcpy(menuMember.pos, "1.5.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
-/*
-        menuMember.gui = GUI_1_3_1;
-        menuMember.act = ACT_1_3_1;
-        strcpy(menuMember.pos, "1.3.1");
-        hashMenu.vPtr->insert(&hashMenu, &menuMember);
-        menuMember.gui = GUI_1_4_1;
-        menuMember.act = ACT_1_4_1;
-        strcpy(menuMember.pos, "1.4.1");
-        hashMenu.vPtr->insert(&hashMenu, &menuMember);
-        //    menuMember.gui=GUT_1_5_1;
-        //    menuMember.act=ACT_1_5_1;
-        //    strcpy(menuMember.pos."1.5.1");
-        //    hashMenu.vPte->insert(&hasMenu.&menuMember);
-        //
-        //     menuMember.gui=GUI_1_5_1;
-        //     menuMember.act=ACT_1_5_1;
-        //     strcpy(menuMember.pos,"1.5.1");
-        //     hashMenu.vPtr->insert(&hashMenu,&menuMember);
-        //
-*/
         menuMember.gui = GUI_2_1_1;
         menuMember.act = ACT_2_1_1;
         strcpy(menuMember.pos, "2.1.1");
@@ -1269,110 +1022,40 @@ void MenuInit()
         menuMember.act = ACT_2_3_1;
         strcpy(menuMember.pos, "2.3.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
-/*
-        menuMember.gui = GUI_2_2_1;
-        menuMember.act = ACT_2_2_1;
-        strcpy(menuMember.pos, "2.2.1");
-        hashMenu.vPtr->insert(&hashMenu, &menuMember);
-        menuMember.gui = GUI_2_2_2;
-        menuMember.act = ACT_2_2_2;
-        strcpy(menuMember.pos, "2.2.2");
-        hashMenu.vPtr->insert(&hashMenu, &menuMember);
-            menuMember.gui=GUI_2_2_3;
-            menuMember.act=ACT_2_2_3;
-            strcpy(menuMember.pos,"2.2.3");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_2_4;
-            menuMember.act=ACT_2_2_4;
-            strcpy(menuMember.pos,"2.2.4");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_2_5;
-            menuMember.act=ACT_2_2_5;
-            strcpy(menuMember.pos,"2.2.5");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_2_6;
-            menuMember.act=ACT_2_2_6;
-            strcpy(menuMember.pos,"2.2.6");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_3_1;
-            menuMember.act=ACT_2_3_1;
-            strcpy(menuMember.pos,"2.3.1");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_3_2;
-            menuMember.act=ACT_2_3_2;
-            strcpy(menuMember.pos,"2.3.2");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_3_3;
-            menuMember.act=ACT_2_3_3;
-            strcpy(menuMember.pos,"2.3.3");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-            menuMember.gui=GUI_2_3_4;
-            menuMember.act=ACT_2_3_4;
-            strcpy(menuMember.pos,"2.3.4");
-            hashMenu.vPtr->insert(&hashMenu,&menuMember);
-*/
 #if MENU_SELECT
     hashMenu.vPtr->search(&hashMenu, &menuMember, &ReadPos[0]);
 #else
     hashMenu.vPtr->search(&hashMenu, &menuMember, "2.2.1");
 #endif
 }
-/*----------------------------------------------------------------
-                            ������
-----------------------------------------------------------------*/
-/*----------------------------------------------------------------
- * @Function: HashTableCtor
- * @Description: Hash�����캯��
- * @Param: {HASH_TABLE_t*} const This    ��ϣ�����ṹ��
- * @Return: Void
- * @Example: HashTableCtor(&hashMenu);
- */
 static void HashTableCtor(HASH_TABLE_t *const This)
 {
     static HASH_VTBL_t vTable;
     MemSet(This, 0, sizeof(HASH_TABLE_t));
     vTable.insert = HashInsert;
     vTable.search = FindHashValue;
-    /* �̶�Ϊ���˵������塹�󶨣��μ��ļ�ͷ���״��㡹��
-     * ���� Down/Right �ȶԵ��ɡ��������桹������ HashPeer/ HashDepth ʵ�ּ��ο���������ȫ����ͻ */
     vTable.searchDown = HashDepthDown;
     vTable.searchUp = HashDepthUp;
     vTable.searchLeft = HashPeerLeft;
     vTable.searchRight = HashPeerRight;
     This->vPtr = &vTable;
 }
-/*----------------------------------------------------------------
- * @Function: CreatHashKey
- * @Description: ����HASH���ؼ���
- * @param {char*} skey
- * @Return: Void
- * @Example: hashKey = CreatHashKey(tempMember->pos);
- */
 static uint16_t CreatHashKey(const char *skey)
 {
-    // ���ﴫ��ȥ�����ַ���
-    char *p = (char *)skey; // ����ǿת
+    char *p = (char *)skey;
     uint16_t hashKey = 0;
-    if (*p) // �ַ����ǿ�
+    if (*p)
     {
         for (; *p != '\0'; p++)
         {
-            hashKey = (hashKey << 5) - hashKey + *p; // ���ɹؼ��֣�Key��
+            hashKey = (hashKey << 5) - hashKey + *p;
         }
     }
     return hashKey % (HASH_SIZE);
 }
-/*----------------------------------------------------------------
- * @Function: HashInsert
- * @Description: ��Ԫ�ز������
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @Return: Void
- * @Example: HashInsert(&hashMenu, &menuMember);
- */
 static uint8_t HashInsert(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember)
 {
-    if (This->hashTableSize >= HASH_SIZE - 1) // ���������
+    if (This->hashTableSize >= HASH_SIZE - 1)
     {
         return HASH_ERROR;
     }
@@ -1385,14 +1068,6 @@ static uint8_t HashInsert(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMem
     This->hashTableSize++;
     return HASH_OK;
 }
-/*----------------------------------------------------------------
- * @Function: HashDepthUp
- * @Description: ��һ��
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @Return: Void
- * @Example: HashDepthUp(&hashMenu, &menuMember);
- */
 static uint8_t HashDepthUp(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember)
 {
     char tempPos[HASH_KEY_LEN];
@@ -1400,16 +1075,16 @@ static uint8_t HashDepthUp(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMe
     char *ptrPos;
     if (strlen(tempMember->pos) <= 1)
     {
-        return HASH_ERROR; /*�����ڴ�Խ��*/
+        return HASH_ERROR;
     }
     strcpy((char *)tempPos, tempMember->pos);
     ptrPos = tempPos;
-    while (*(++ptrPos) != '\0') // ʹָ��ָ���ַ������"\0"
+    while (*(++ptrPos) != '\0')
     {
     }
     *(ptrPos - 1) = '\0';
     *(ptrPos - 2) = '\0';
-    flag = FindHashValue(This, tempMember, tempPos); // ���ҵ����²˵�д��tempMember��
+    flag = FindHashValue(This, tempMember, tempPos);
     if (flag == HASH_ERROR)
     {
         return HASH_ERROR;
@@ -1419,14 +1094,6 @@ static uint8_t HashDepthUp(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMe
         return HASH_OK;
     }
 }
-/*----------------------------------------------------------------
- * @Function: HashDepthDown
- * @Description: ��һ��
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @Return: Void
- * @Example: HashDepthDown(&hashMenu, &menuMember);
- */
 static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember)
 {
     char tempPos[HASH_KEY_LEN];
@@ -1434,17 +1101,17 @@ static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
     char *ptrPos;
     if (strlen(tempMember->pos) >= HASH_KEY_LEN - 3)
     {
-        return HASH_ERROR; /*�����ڴ�Խ��*/
+        return HASH_ERROR;
     }
     strcpy(tempPos, tempMember->pos);
     ptrPos = tempPos;
-    while (*(++ptrPos) != '\0') // ʹָ��ָ���ַ������"\0"
+    while (*(++ptrPos) != '\0')
     {
     }
     *ptrPos = '.';
     *(ptrPos + 1) = '1';
     *(ptrPos + 2) = '\0';
-    flag = FindHashValue(This, tempMember, tempPos); // ���ҵ����²˵�д��tempMember��
+    flag = FindHashValue(This, tempMember, tempPos);
     if (flag == HASH_ERROR)
     {
         return HASH_ERROR;
@@ -1454,14 +1121,6 @@ static uint8_t HashDepthDown(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
         return HASH_OK;
     }
 }
-/*----------------------------------------------------------------
- * @Function: HashPeerLeft
- * @Description: ��ƽ��
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @Return: Void
- * @Example: HashPeerLeft(&hashMenu, &menuMember);
- */
 static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember)
 {
     char tempPos[HASH_KEY_LEN];
@@ -1470,12 +1129,12 @@ static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempM
     char *ptrPos;
     strcpy(tempPos, tempMember->pos);
     ptrPos = tempPos;
-    while (*(++ptrPos) != '\0') // ʹָ��ָ���ַ������"\0"
+    while (*(++ptrPos) != '\0')
     {
     }
     temp = *(--ptrPos) - 1;
-    *(ptrPos) = temp;                                // �����λ�õ���һ���ַ�ֵ-1������˵��"1.1.3"��Ϊ"1.1.2"
-    flag = FindHashValue(This, tempMember, tempPos); // ���ҵ����²˵�д��tempMember��
+    *(ptrPos) = temp;
+    flag = FindHashValue(This, tempMember, tempPos);
     if (flag == HASH_ERROR)
     {
         return HASH_ERROR;
@@ -1485,14 +1144,6 @@ static uint8_t HashPeerLeft(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempM
         return HASH_OK;
     }
 }
-/*----------------------------------------------------------------
- * @Function: HashPeerRight
- * @Description: ��ƽ��
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @Return: Void
- * @Example: HashPeerRight(&hashMenu, &menuMember);
- */
 static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember)
 {
     char tempPos[HASH_KEY_LEN];
@@ -1501,12 +1152,12 @@ static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
     char *ptrPos;
     strcpy(tempPos, tempMember->pos);
     ptrPos = tempPos;
-    while (*(++ptrPos) != '\0') // ʹָ��ָ���ַ������"\0"
+    while (*(++ptrPos) != '\0')
     {
     }
     temp = *(--ptrPos) + 1;
-    *(ptrPos) = temp;                                // �����λ�õ���һ���ַ�ֵ-1������˵��"1.1.3"��Ϊ"1.1.2"
-    flag = FindHashValue(This, tempMember, tempPos); // ���ҵ����²˵�д��tempMember��
+    *(ptrPos) = temp;
+    flag = FindHashValue(This, tempMember, tempPos);
     if (flag == HASH_ERROR)
     {
         return HASH_ERROR;
@@ -1516,15 +1167,6 @@ static uint8_t HashPeerRight(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
         return HASH_OK;
     }
 }
-/*----------------------------------------------------------------
- * @Function: FindHashValue
- * @Description: �ɹؼ��ַ��ض�Ӧֵ
- * @Param: {HASH_TABLE_t*} const This
- * @Param: {MENU_MEMBER_t*} const tempMember
- * @param {char*} str
- * @Return: Void
- * @Example: FindHashValue(&hashMenu, &menuMember,tempPos);
- */
 static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const tempMember, char *str)
 {
     int count = HASH_SIZE, hashKey;
@@ -1545,16 +1187,7 @@ static uint8_t FindHashValue(HASH_TABLE_t *const This, MENU_MEMBER_t *const temp
     }
     return HASH_ERROR;
 };
-/*----------------------------------------------------------------
- * @Function: MemSet
- * @Description: �����ڴ�ռ䲢��ʼ��
- * @param {void} *src
- * @param {int} value
- * @param {int} n
- * @Return: Void
- * @Example: MemSet(This, 0, sizeof(HASH_TABLE_t));
- */
-static void *MemSet(void *src, int value, int n) /*��ʼ��*/
+static void *MemSet(void *src, int value, int n)
 {
     char *c_src = (char *)src;
     while (n--)
@@ -1563,15 +1196,6 @@ static void *MemSet(void *src, int value, int n) /*��ʼ��*/
     }
     return src;
 }
-/*----------------------------------------------------------------
- * @Function: MemCpy
- * @Description: �����ڴ�ռ�
- * @param {void} *dest
- * @param {void} *src
- * @param {unsigned int} size
- * @Return: Void
- * @Example:     MemCpy(tempMember, &(This->hashTable[hashKey]),sizeof(MENU_MEMBER_t)); //���ҵ��Ĳ˵�д��tempMember
- */
 static void *MemCpy(void *dest, void *src, unsigned int size)
 {
     char *b_dest = (char *)dest, *b_src = (char *)src;
@@ -1582,94 +1206,31 @@ static void *MemCpy(void *dest, void *src, unsigned int size)
     }
     return dest;
 }
-/* ===== code/UI.h ===== */
-/*
- * @Author: bom
- * @Version: V1.0
- * @Date: 2024-12-18 17:23:09
- * @LastEditTime: 2024-12-20 22:26:58
- * @FilePath: \Balance_Car V3.0.1\project\code\UI.h
- * @Description:
- */
-/*********************************************************************************************************************
-* �޸ļ�¼
-* ����              ����             �汾           ˵��
-* 2024-07-24        Bron            V1.0.0         ��¹���
-* 2024-07-27        Bron            V1.0.2         ��˶����˵��Ŀ��
-********************************************************************************************************************/
-/*********************************************************************************************************************
-* �༶�˵��ṹ����
-*********************************************************************************************************************
-* 1. ��������ģʽ (GUI_1)
-*    - 1_1. ���Ե��
-*      - 1_1_1. �����ϸ��Ϣ
-*    - 1_2. ���Ա�����
-*      - 1_2_1. ��������ϸ��Ϣ
-*    - 1_3. ��������ͷ
-*      - 1_3_1. ����ͷ��ϸ��Ϣ
-*    - 1_4. ����������
-*      - 1_4_1. ��������ϸ��Ϣ
-*    - 1_5. GPS
-*      - 1_5_1. GPS ����
-*
- * 2. ����ģʽ (GUI_2)
- *    - 2_1. Image��Debug ���� Image �У�KEY3 ���������б���
- *      - 2_1_1 / 2_1_2 / 2_1_3. Step / Bridge / Bumpy �����б���ͬ���л���
- *      - 2_1_1_1. ̨�׼�⹦��ҳ
- *      - 2_1_2_1. �����ż�⹦��ҳ
- *      - 2_1_3_1. ����·�ι���ҳ
-*    - 2_2. �ٶȻ�����
-*      - 2_2_1. ���ٶȻ�P
-*      - 2_2_2. ���ٶȻ�I
-*      - 2_2_3. �ǶȻ�P
-*      - 2_2_4. ���ٶȻ�D
-*      - 2_2_5. �ٶȻ�P
-*      - 2_2_6. �ٶȻ�D
-*    - 2_3. ת������
-*      - 2_3_1. ת���ڻ�P
-*      - 2_3_2. ת���ڻ�D
-*      - 2_3_3. ת���⻷P
-*      - 2_3_4. ת���⻷D
-*    - 2_4. �ٶ�����
-*    - 2_5. ����Flash����
-*    - 2_6. ���FLASH������
-*
-* 3. ����ģʽ (GUI_3)
-*    - 3    pos��3��һ�� Run�������˵�����һ��ͬ����
-*    - GUI_3 ���������������У�Launch/Save/Config/Jump �����б����� GUI_3_1��3_4������б����� GUI_3����
-*    - 3_1  Launch �����б������� 3_1_1��
-*    - 3_2  Save��KEY3 ���� Run ������Launch + Config + Jump��
- *    - 3_3  Config Ԥ���ã����� 3_3_1��KEY1 ѡ�ֶ� KEY2 ��ֵ��
- *      - 3_3_1. InputMode + VofaEnable + VofaGroup Ԥ������
-*    - 3_4  Jump ��Ծ���������� 3_4_1��KEY1 ѡ�ֶ� KEY2/3 ��0.5��
-*      - 3_4_1. �Ľ׶��ȳ� + �Ľ׶�ʱ����20ms ��
-*      - 3_1_1. Launch ������ҳ���ٶ�/�ƶ����룩
-*********************************************************************************************************************/
 #ifndef __UI_H__
 #define __UI_H__
 #include "zf_common_typedef.h"
 #define PENCOLOR    RGB565_GREEN
 #define BGCOLOR     RGB565_BLACK
-#define ROW_1   0       //0*16
-#define ROW_2   16      //1*16
-#define ROW_3   32      //2*16
-#define ROW_4   48      //3*16
-#define ROW_5   64      //4*16
-#define ROW_6   80      //5*16
-#define ROW_7   96      //6*16
-#define ROW_8   112     //7*16
-#define ROW_9   128     //8*16
-#define ROW_10  144     //9*16
-#define ROW_11  160     //10*16
-#define ROW_12  176     //11*16
-#define ROW_13  192     //12*16
-#define ROW_14  208     //13*16
-#define ROW_15  224     //14*16
-#define ROW_16  240     //15*16
-#define ROW_17  256     //16*16
-#define ROW_18  272     //17*16
-#define ROW_19  288     //18*16
-#define ROW_20  304     //19*16
+#define ROW_1   0
+#define ROW_2   16
+#define ROW_3   32
+#define ROW_4   48
+#define ROW_5   64
+#define ROW_6   80
+#define ROW_7   96
+#define ROW_8   112
+#define ROW_9   128
+#define ROW_10  144
+#define ROW_11  160
+#define ROW_12  176
+#define ROW_13  192
+#define ROW_14  208
+#define ROW_15  224
+#define ROW_16  240
+#define ROW_17  256
+#define ROW_18  272
+#define ROW_19  288
+#define ROW_20  304
 extern void GUI_1();
 extern void ACT_1();
 extern void GUI_2();
@@ -1754,41 +1315,8 @@ extern void GUI_2_3_3();
 extern void ACT_2_3_3();
 extern void GUI_2_3_4();
 extern void ACT_2_3_4();
-/* CM7_1����ˢ�²˵� GUI ǰ���ã��ӹ�������ȡ���ƺ˿��չ���ʾ��CM7_0 Ϊ�ղ����� */
 void ui_pull_ctrl_snapshot(void);
 #endif
-/* ===== code/UI.c ===== */
-/*
- * @Author: bom
- * @Version: V1.0
- * @Date: 2024-12-18 17:23:09
- * @LastEditTime: 2025-03-14 16:07:09
- * @FilePath: \Balance_Car V3.0.1\project\code\UI.c
- * @Description:
- */
-/*********************************************************************************************************************
-* @file            UI.c
-* @author          bom
-* @version         V1.0
-* @date            2024-12-18
-* @brief           ƽ�⳵ UI ���Ƴ���
-*
-* @note
-* 1. ���ļ�����ƽ�⳵���� UI ��ʾ�Ϳ��ƹ���
-* 2. ֧�� LCD ��ʾ�����ڵ��ԺͲ�������
-* 3. ���������Ķ༶�˵�ϵͳ
-********************************************************************************************************************/
-/*********************************************************************************************************************
-* �޸ļ�¼
-* ����              ����             �汾           ˵��
-* 2024-07-24        Bron            V1.0.0         ��¹���
-* 2024-07-27        Bron            V1.0.2         ��˶����˵��Ŀ��
-* 2024-07-30        Bron            V1.1.1         ������ u �� d �ı�ʾ��ʽ�������˼��˵�
-* 2024-07-31        Bron            V1.1.2         ������ pid ���β˵���ʽ������ flash
-* 2024-08-01        Bron            V1.1.4         ΢���� pid ��������С��λ����ʾ
-* 2024-08-02        Bron            V1.2.0         ���ظ���ʾ������������������
-* 2024-12-19        Bron            V2.0.1         ��ֲ���¹��̣����������˵�
-********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
 #if defined(CY_CORE_CM7_1)
@@ -1805,7 +1333,6 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "Menu.h"
 #include "navigation.h"
 #include "control.h"
-/* Run������ pos 3.1~3.4 �� menuMember ͷ��һ�£����� HashPeer ����ʱ��������ʵ pos ��ͬ�������� pos��3�������Ӳ˵��б��� */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
 void ui_pull_ctrl_snapshot(void)
 {
@@ -1814,49 +1341,12 @@ void ui_pull_ctrl_snapshot(void)
 #else
 #endif
 }
-/*********************************************************************************************************************
-* �༶�˵����
-*********************************************************************************************************************
-* 1. ��������ģʽ (GUI_1)
-*    - 1_1. ���Ե��
-*      - 1_1_1. �����ϸ��Ϣ
-*    - 1_2. ���Ա�����
-*      - 1_2_1. ��������ϸ��Ϣ
-*    - 1_3. ��������ͷ
-*      - 1_3_1. ����ͷ��ϸ��Ϣ
-*    - 1_4. ����������
-*      - 1_4_1. ��������ϸ��Ϣ
-*    - 1_5. GPS
-*      - 1_5_1. GPS ����
-*
-* 2. ����ģʽ (GUI_2)
-*    - 2_1. ͼ������
-*      - 2_1_1. ̨�׼��
-*      - 2_1_2. �����ż��
-*      - 2_1_3. ����·�μ��
-*    - 2_2. ��������
-*      - 2_2_1. �������Խ���
-*    - 2_3. GPS
-*      - 2_3_1. GPS ��ҳ��
-*    - 2_4. �ٶ�����
-*    - 2_5. ���� Flash ����
-*    - 2_6. ��� Flash ������
-*
-* 3. ����ģʽ��GUI ������ pos �㼶һ�£��״���һ����3���������3.1����ͬһ���Ӳ˵���
-*    - GUI_3 ������ pos��3�������� Test/Debug/Run ������һ�� Run
-*    - GUI_3_1��GUI_3_3 ���� pos��3.1��3.3���������б� Launch/Flash/More
-*    - GUI_3_1_1 ���� pos��3.1.1����Launch �����������ٶ�ҳ
-*********************************************************************************************************************/
-/*********************************************************************************************************************
-* ��ʾģʽ����
-*********************************************************************************************************************/
 typedef enum {
-    DISPLAY_MODE_IPS200,   // Һ��ģʽ
-    DISPLAY_MODE_SERIAL  // ����ģʽ
+    DISPLAY_MODE_IPS200,
+    DISPLAY_MODE_SERIAL
 } DisplayMode;
-DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200; // Ĭ����ʾģʽΪҺ��ģʽ
+DisplayMode currentDisplayMode = DISPLAY_MODE_IPS200;
 float FPS = 0;
-/* �ڲ��������� */
 static void GUI_Display_FPS(void)__attribute__((unused));
 static void GUI_Display_Image_Sidebar()__attribute__((unused));
 static void GUI_Display_Image_Below(void)__attribute__((unused));
@@ -1872,13 +1362,9 @@ static void GUI_Display_Level3_ImageDetect(uint8 current_idx)__attribute__((unus
 static void GUI_Display_Level3_Common3(void)__attribute__((unused));
 static void GUI_Display_Level3_Common4(void)__attribute__((unused));
 static void GUI_Display_Level3_Common5(void)__attribute__((unused));
-/*********************************************************************************************************************
-* һ���˵�����
-*********************************************************************************************************************/
 static void GUI_Display_FPS(void)
 {
     ips200_show_string(184,ROW_1,"FPS:");
-    //FPS = 1000000 / Scheduler.Tasks[1].Stats.LastExecuteTime;
     ips200_show_int(208,ROW_1,(uint16_t)FPS,3);
 }
 static void GUI_Display_Level1_Common1(void)
@@ -1887,14 +1373,14 @@ static void GUI_Display_Level1_Common1(void)
     ips200_show_string(0,ROW_1,"Meun ");
     GUI_Display_FPS();
 }
-void GUI_1(void) // ��������ģʽ
+void GUI_1(void)
 {
     GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");//80
+    ips200_show_string(80,ROW_7," Test");
     ips200_show_string(80,ROW_10," Debug");
     ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_7,"-->");//8*6
-    ips200_show_string(136,ROW_7,"<--");//8*6
+    ips200_show_string(48,ROW_7,"-->");
+    ips200_show_string(136,ROW_7,"<--");
 }
 void ACT_1()
 {
@@ -1904,14 +1390,14 @@ void ACT_1()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_2(void) // ����ģʽ
+void GUI_2(void)
 {
     GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");//80
+    ips200_show_string(80,ROW_7," Test");
     ips200_show_string(80,ROW_10," Debug");
     ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_10,"-->");//8*6
-    ips200_show_string(136,ROW_10,"<--");//8*6
+    ips200_show_string(48,ROW_10,"-->");
+    ips200_show_string(136,ROW_10,"<--");
 }
 void ACT_2()
 {
@@ -1921,14 +1407,14 @@ void ACT_2()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_3(void) // pos��3����һ�� Run���� GUI_1/2 ͬԴ�������б������� pos 3.1��3.3
+void GUI_3(void)
 {
     GUI_Display_Level1_Common1();
-    ips200_show_string(80,ROW_7," Test");//80
+    ips200_show_string(80,ROW_7," Test");
     ips200_show_string(80,ROW_10," Debug");
     ips200_show_string(80,ROW_13," Run ");
-    ips200_show_string(48,ROW_13,"-->");//8*6
-    ips200_show_string(136,ROW_13,"<--");//8*6
+    ips200_show_string(48,ROW_13,"-->");
+    ips200_show_string(136,ROW_13,"<--");
 }
 void ACT_3()
 {
@@ -1938,26 +1424,22 @@ void ACT_3()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-/*********************************************************************************************************************
-* �����˵�����
-*********************************************************************************************************************/
 static void GUI_Display_Level2_Common1(void)
 {
     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
     ips200_show_string(0,ROW_1,"Test ");
     GUI_Display_FPS();
 }
-void GUI_1_1(void) // ���Ե��
+void GUI_1_1(void)
 {
     GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_6,"Motor");
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
     ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_6,"-->");//8*6
-    ips200_show_string(136,ROW_6,"<--");//8*6
-    // ʵ�ֲ��Ե�����߼�
+    ips200_show_string(48,ROW_6,"-->");
+    ips200_show_string(136,ROW_6,"<--");
 }
 void ACT_1_1()
 {
@@ -1967,17 +1449,16 @@ void ACT_1_1()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_1_2(void) // ���Ա�����
+void GUI_1_2(void)
 {
-    // ʵ�ֲ��Ա��������߼�
     GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_6,"Motor");
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
     ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_8,"-->");//8*6
-    ips200_show_string(136,ROW_8,"<--");//8*6
+    ips200_show_string(48,ROW_8,"-->");
+    ips200_show_string(136,ROW_8,"<--");
 }
 void ACT_1_2()
 {
@@ -1987,17 +1468,16 @@ void ACT_1_2()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_1_3(void) // ��������ͷ
+void GUI_1_3(void)
 {
-    // ʵ�ֲ�������ͷ���߼�
     GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_6,"Motor");
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
     ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_10,"-->");//8*6
-    ips200_show_string(136,ROW_10,"<--");//8*6
+    ips200_show_string(48,ROW_10,"-->");
+    ips200_show_string(136,ROW_10,"<--");
 }
 void ACT_1_3()
 {
@@ -2007,17 +1487,16 @@ void ACT_1_3()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_1_4(void) // ����������
+void GUI_1_4(void)
 {
-    // ʵ�ֲ��������ǵ��߼�
     GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_6,"Motor");
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
     ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_12,"-->");//8*6
-    ips200_show_string(136,ROW_12,"<--");//8*6
+    ips200_show_string(48,ROW_12,"-->");
+    ips200_show_string(136,ROW_12,"<--");
 }
 void ACT_1_4()
 {
@@ -2030,13 +1509,13 @@ void ACT_1_4()
 void GUI_1_5(void)
 {
     GUI_Display_Level2_Common1();
-    ips200_show_string(80,ROW_6,"Motor");//80
+    ips200_show_string(80,ROW_6,"Motor");
     ips200_show_string(80,ROW_8,"Encode");
     ips200_show_string(80,ROW_10,"Image");
     ips200_show_string(80,ROW_12,"Gyro");
     ips200_show_string(80,ROW_14,"GPS");
-    ips200_show_string(48,ROW_14,"-->");//8*6
-    ips200_show_string(136,ROW_14,"<--");//8*6
+    ips200_show_string(48,ROW_14,"-->");
+    ips200_show_string(136,ROW_14,"<--");
 }
 void ACT_1_5()
 {
@@ -2046,16 +1525,13 @@ void ACT_1_5()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-// /*********************************************************************************************************************
-// * ����ģʽѡ�����
-// *********************************************************************************************************************/
 static void GUI_Display_Level2_Common2(void)
 {
     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
     ips200_show_string(0,ROW_1,"Debug");
     GUI_Display_FPS();
 }
-void GUI_2_1(void) // Debug �����б���Image ��
+void GUI_2_1(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80, ROW_6, " Image  ");
@@ -2075,7 +1551,7 @@ void ACT_2_1()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_2_2(void) // �����б���NavDbg ��ѡ�У���������һ��Ϊ�б�̬�������ҡ����� GUI_2_2_1��
+void GUI_2_2(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80,ROW_6," Image  ");
@@ -2095,7 +1571,7 @@ void ACT_2_2()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_2_2_1(void) // �������Խ��棨��� 2.2 �����ҡ����룩
+void GUI_2_2_1(void)
 {
     uint8 nav_recording_active = 0;
     uint8 event_active = 0;
@@ -2225,7 +1701,7 @@ void ACT_2_2_1()
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;
 }
-void GUI_2_3(void) // GPS�����Զ����б��
+void GUI_2_3(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80,ROW_6," Image  ");
@@ -2379,7 +1855,6 @@ void GUI_2_3_1(void)
     ips200_show_string(120, ROW_17, "Dv");
     ips200_show_uint(144, ROW_17, (uint32)nav_drift_valid, 1);
     ips200_show_string(160, ROW_17, "dLa");
-    /* 240 ������2+3 λ����� 7 �֡�8px����� 192 ʱĩ�� x=240 ���� ips200_show_char ���� */
     ips200_show_float(184, ROW_17, nav_drift_dlat, 2, 3);
     ips200_show_string(0, ROW_18, "Err:");
     ips200_show_float(40, ROW_18, nav_yaw_err_deg, 3, 1);
@@ -2429,7 +1904,7 @@ void ACT_2_3_1()
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;
 }
-void GUI_2_4(void) // �ٶ�����
+void GUI_2_4(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80,ROW_6," Image  ");
@@ -2449,7 +1924,7 @@ void ACT_2_4()
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
-void GUI_2_5(void) // ���� Flash ����
+void GUI_2_5(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80,ROW_6," Image  ");
@@ -2478,7 +1953,7 @@ void ACT_2_5()
     }
 #endif
 }
-void GUI_2_6(void) // ��� FLASH ������
+void GUI_2_6(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(80,ROW_6," Image  ");
@@ -2507,16 +1982,12 @@ void ACT_2_6()
     }
 #endif
 }
-// *********************************************************************************************************************
-// * Run ����/������Common3 ���� + �б��򷢳�ҳ��һ�� GUI_3 ���ø��������б��������� menu ����λ
-// *********************************************************************************************************************
 static void GUI_Display_Level2_Common3(void)
 {
     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
     ips200_show_string(0,ROW_1,"Run");
     GUI_Display_FPS();
 }
-/** ���� Run �б���selected_row_index 0=Launch 1=Save 2=Config 3=Jump */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -2547,7 +2018,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
         ips200_show_string(24, ROW_15, "KEY3: save run");
     }
 }
-void GUI_3_1(void) // Launch ������б��ǣ�����һ��
+void GUI_3_1(void)
 {
     GUI_Run_ShowSubmenuList(0u);
 }
@@ -2823,7 +2294,7 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
     return Nag_LaunchParamGet(field_index);
 #endif
 }
-void GUI_3_1_1(void) /* Launch ����ҳ��KEY1 ѡ�ֶΣ�KEY2/3 ��ֵ��KEY4 ���� */
+void GUI_3_1_1(void)
 {
     static const char *const labels[Nag_Run_Launch_Param_Count] =
     {
@@ -2845,7 +2316,6 @@ void GUI_3_1_1(void) /* Launch ����ҳ��KEY1 ѡ�ֶΣ�KEY2/3 ��
     for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
     {
         float value = GUI_RunLaunchParamValue(field_index);
-        /* ÿ֡ȫҳ�ػ�ʱ������ɼ�ͷ������ KEY1 �л�����һ�� "->" �Բ��� */
         if (selected == field_index)
         {
             ips200_show_string(0, rows[field_index], "->");
@@ -2855,7 +2325,6 @@ void GUI_3_1_1(void) /* Launch ����ҳ��KEY1 ѡ�ֶΣ�KEY2/3 ��
             ips200_show_string(0, rows[field_index], "  ");
         }
         ips200_show_string(16, rows[field_index], labels[field_index]);
-        /* ips200_show_float Ҫ�� pointnum Ϊ 1~6������Ϊ 0 */
         if (Nag_LaunchParamIsSpeed(field_index))
         {
             ips200_show_float(96, rows[field_index], (double)value, 5, 1);
@@ -2879,18 +2348,12 @@ void ACT_3_1_1()
     ReadPos[3] = '.';
     ReadPos[4] = '1';
 }
-/*********************************************************************************************************************
-* �����˵�����
-*********************************************************************************************************************/
-/*********************************************************************************************************************
-* ͼ�����
-*********************************************************************************************************************/
 static void GUI_Display_Level3_Common1(void)
 {
     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
     GUI_Display_FPS();
 }
-void GUI_1_1_1(void) // ���Ե��������ҳ��
+void GUI_1_1_1(void)
 {
     GUI_Display_Level3_Common1();
     ips200_show_string(0,ROW_1,"Motor ");
@@ -2927,7 +2390,6 @@ void GUI_1_2_1(void)
     ips200_show_string(24,ROW_5,"R_Speed:");    ips200_show_int(88,ROW_5,Right_Motor_Speed,5);
     ips200_show_string(24,ROW_6,"Car_Speed:");  ips200_show_int(88,ROW_6,car_speed,5);
 #endif
-    //ips200_show_string(24,ROW_7,"Integ:");      ips200_show_int(88,ROW_7,Integ_Encode,5);
 }
 void ACT_1_2_1()
 {
@@ -3009,7 +2471,6 @@ void ACT_1_5_1()
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;
 }
-/** Image �����б����� GUI_Run_ShowSubmenuList ͬ����selected 0=Step 1=Bridge 2=Bumpy */
 static void GUI_Image_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -3055,7 +2516,7 @@ static void GUI_Image_ShowSubmenuList(uint8 selected_row_index)
     ips200_show_int(120, ROW_19, (int32)test_printf_light, 6);
 #endif
 }
-void GUI_2_1_1(void) // Image �����б���Step ��
+void GUI_2_1_1(void)
 {
     GUI_Image_ShowSubmenuList(0u);
 }
@@ -3068,7 +2529,7 @@ void ACT_2_1_1()
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;
 }
-void GUI_2_1_2(void) // Image �����б���Bridge ��
+void GUI_2_1_2(void)
 {
     GUI_Image_ShowSubmenuList(1u);
 }
@@ -3081,7 +2542,7 @@ void ACT_2_1_2()
     ReadPos[4] = '2';
     ReadPos[5] = 0x00;
 }
-void GUI_2_1_3(void) // Image �����б���Bumpy ��
+void GUI_2_1_3(void)
 {
     GUI_Image_ShowSubmenuList(2u);
 }
@@ -3094,7 +2555,7 @@ void ACT_2_1_3()
     ReadPos[4] = '3';
     ReadPos[5] = 0x00;
 }
-void GUI_2_1_1_1(void) // ̨�׼��
+void GUI_2_1_1_1(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(56, ROW_3, "Step Detect");
@@ -3125,7 +2586,7 @@ void ACT_2_1_1_1()
     ReadPos[6] = '1';
     ReadPos[7] = 0x00;
 }
-void GUI_2_1_2_1(void) // �����ż��
+void GUI_2_1_2_1(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(48, ROW_2, "Single Bridge");
@@ -3180,7 +2641,7 @@ void ACT_2_1_2_1()
     ReadPos[6] = '1';
     ReadPos[7] = 0x00;
 }
-void GUI_2_1_3_1(void) // ����·�μ��
+void GUI_2_1_3_1(void)
 {
     GUI_Display_Level2_Common2();
     ips200_show_string(56, ROW_3, "Bumpy Road");
@@ -3201,630 +2662,37 @@ void ACT_2_1_3_1()
     ReadPos[6] = '1';
     ReadPos[7] = 0x00;
 }
-// void GUI_1_3_1(void) // ��������ͷ
-// {
-//     GUI_Display_Level3_Common1();
-//     ips200_show_string(0,ROW_1,"Image");
-//     ips200_show_gray_image(0,21,mt9v03x_image[0],MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
-// }
-// void ACT_1_3_1()
-// {
-//     ReadPos[0] = '1';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '3';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-// }
-// void GUI_1_4_1(void) // ����������
-// {
-//     GUI_Display_Level3_Common1();
-//     ips200_show_string(0,ROW_1,"Gyro");
-//     ips200_show_string(24,ROW_4,"Gyro_x:");  ips200_show_float(88,ROW_4,imu660ra_gyro_x,5,2);
-//     ips200_show_string(24,ROW_5,"Gyro_y:");  ips200_show_float(88,ROW_5,imu660ra_gyro_y,5,2);
-//     ips200_show_string(24,ROW_6,"Gyro_z:");  ips200_show_float(88,ROW_6,imu660ra_gyro_z,5,2);
-//     ips200_show_string(24,ROW_8,"Acc_x:");  ips200_show_float(88,ROW_8,imu660ra_acc_x,5,2);
-//     ips200_show_string(24,ROW_9,"Acc_y:");  ips200_show_float(88,ROW_9,imu660ra_acc_y,5,2);
-//     ips200_show_string(24,ROW_10,"Acc_z:");  ips200_show_float(88,ROW_10,imu660ra_acc_z,5,2);
-//     ips200_show_string(24,ROW_12,"Zero_x:");  ips200_show_float(88,ROW_12,Gyro.ZeroDrift_gyro_x,5,2);
-//     ips200_show_string(24,ROW_13,"Zero_y:");  ips200_show_float(88,ROW_13,Gyro.ZeroDrift_gyro_y,5,2);
-//     ips200_show_string(24,ROW_14,"Zero_z:");  ips200_show_float(88,ROW_14,Gyro.ZeroDrift_gyro_z,5,2);
-//     ips200_show_string(24,ROW_16,"Pitch:");  ips200_show_float(88,ROW_16,Gyro.pitch,5,2);
-//     ips200_show_string(24,ROW_17,"Roll:");  ips200_show_float(88,ROW_17,Gyro.roll,5,2);
-//     ips200_show_string(24,ROW_18,"Yaw:");  ips200_show_float(88,ROW_18,Gyro.yaw,5,2);
-// }
-// void ACT_1_4_1()
-// {
-//     ReadPos[0] = '1';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '4';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-// }
-// // /*********************************************************************************************************************
-// // * ֱ�������Խ���
-// // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common2(void)
-// {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);//�??�??
-//     ips200_show_string(0,ROW_1,"Image");
-//     ips200_draw_line(188,20,188,319,IPS200_DEFAULT_PENCOLOR);//竖线
-//     GUI_Display_FPS();
-// }
-// void GUI_2_1_1(void) // 原�?�?浘�??? + 二澧慵化
-// {
-//     GUI_Display_Level3_Common2();
-//     ips200_show_gray_image(0,21,mt9v03x_image[0],MT9V03X_W,MT9V03X_H,MT9V03X_W,MT9V03X_H,0);
-//     ips200_show_gray_image(0,21+MT9V03X_H+2,ImageBin[0],IMAGE_W,IMAGE_H,MT9V03X_W,MT9V03X_H,0);
-//     GUI_Display_Image_Sidebar();
-//     GUI_Display_Image_Below();
-// }
-// void ACT_2_1_1()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '1';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-// }
-// void GUI_2_1_2(void) // 二澧慵化 + 连续边线
-// {
-//     GUI_Display_Level3_Common2();
-//     ips200_show_gray_image(0,21,ImageBin[0],IMAGE_W,IMAGE_H,MT9V03X_W,MT9V03X_H,0);
-//     ips200_show_gray_image(0,21+MT9V03X_H+2,ImageEdgeLineNew[0],IMAGE_W,IMAGE_H,MT9V03X_W,MT9V03X_H,0);
-//     GUI_Display_Image_Sidebar();
-//     GUI_Display_Image_Below();
-// }
-// void ACT_2_1_2()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '1';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '2';
-// }
-// void GUI_2_1_3(void) // 连续边线 + 离散边线
-// {
-//     GUI_Display_Level3_Common2();
-//     ips200_show_gray_image(0,21,ImageEdgeLine[0],IMAGE_W,IMAGE_H,MT9V03X_W,MT9V03X_H,0);
-//     ips200_show_gray_image(0,21+MT9V03X_H+2,ImageEdgeLineNew[0],IMAGE_W,IMAGE_H,MT9V03X_W,MT9V03X_H,0);
-//     GUI_Display_Image_Sidebar();
-//     GUI_Display_Image_Below();
-// }
-// void ACT_2_1_3()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '1';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '3';
-// }
-// static void GUI_Display_Level3_Common3(void)
-// {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-//     ips200_show_string(0,ROW_1,"Angle_Pid ");
-//     GUI_Display_FPS();
-// }
-// void GUI_2_2_1(void) // 角棰銦度环P
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(112,48,112,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_show_string(120,ROW_5,"L_pwm");       ips200_show_int(174,ROW_5,Left_Motor_Pwm,5);
-//     ips200_show_string(120,ROW_6,"R_pwm");       ips200_show_int(174,ROW_6,Right_Motor_Pwm,5);
-//     ips200_show_string(120,ROW_10,"Ang_In");       ips200_show_float(174,ROW_10,Gyro.gyro_y,4,1);
-// }
-// void ACT_2_2_1()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         AngleDotPID.Kp = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_2_2(void) // 角棰銦度环I
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(238,48,238,64,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_2_2()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '2';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         AngleDotPID.Ki = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_2_3(void) // 角度环P
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(112,128,112,144,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_2_3()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '3';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         AnglePID.Kp = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_2_4(void) // 角棰銦度环D
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(238,128,238,144,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_2_4()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '4';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         AnglePID.Kd = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_2_5(void) // 速度环P
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(50,208,112,208,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,224,112,224,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,208,50,224,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(112,208,112,224,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_2_5()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '5';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         SpeedPID.Kp = -ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_2_6(void) // 速度环D
-// {
-//     GUI_Display_Level3_Common3();
-//     GUI_SetAngleLoop();
-//     //画�??
-//     ips200_draw_line(168,208,238,208,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,224,238,224,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,208,168,224,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(238,208,238,224,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_2_6()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '2';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '6';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         SpeedPID.Kd = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// // /*********************************************************************************************************************
-// // * �??向环调式界面
-// // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common4(void) // �??向环调试界面
-// {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-//     ips200_show_string(0,ROW_1,"Dir_Pid ");
-//     GUI_Display_FPS();
-// }
-// void GUI_2_3_1(void) // �??向内环P
-// {
-//     GUI_Display_Level3_Common4();
-//     GUI_SetDirLoop();
-//     //画�??
-//     ips200_draw_line(50,48,112,48,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,64,112,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,48,50,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(112,48,112,64,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_3_1()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '3';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         DirAngleDotPID.Kp = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_3_2(void) // �??向内环D
-// {
-//     GUI_Display_Level3_Common4();
-//     GUI_SetDirLoop();
-//     //画�??
-//     ips200_draw_line(168,48,238,48,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,64,238,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,48,168,64,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(238,48,238,64,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_3_2()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '3';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '2';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         DirAngleDotPID.Kd = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_3_3(void) // �??向�?�?幆P
-// {
-//     GUI_Display_Level3_Common4();
-//     GUI_SetDirLoop();
-//     //画�??
-//     ips200_draw_line(50,128,112,128,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,144,112,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(50,128,50,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(112,128,112,144,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_3_3()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '3';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '3';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         DirOutPID.Kp = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// void GUI_2_3_4(void) // �??向�?�?幆D
-// {
-//     GUI_Display_Level3_Common4();
-//     GUI_SetDirLoop();
-//     //画�??
-//     ips200_draw_line(168,128,238,128,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,144,238,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(168,128,168,144,IPS200_DEFAULT_PENCOLOR);
-//     ips200_draw_line(238,128,238,144,IPS200_DEFAULT_PENCOLOR);
-// }
-// void ACT_2_3_4()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '3';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '4';
-//     if(Flash.Flash_Error == FLASH_RUNNING)
-//     {
-//         DirOutPID.Kd = ReadBuf_Pid;
-//         Flash.Flash_Error = FLASH_STOP;
-//     }
-// }
-// // /*********************************************************************************************************************
-// // * 速度决策设置界面
-// // *********************************************************************************************************************/
-// static void GUI_Display_Level3_Common5(void)
-// {
-//     ips200_draw_line(0,20,239,20,IPS200_DEFAULT_PENCOLOR);
-//     ips200_show_string(0,ROW_1,"Speed_Select");
-//     GUI_Display_FPS();
-// }
-// void GUI_2_4_1(void)
-// {
-//     GUI_Display_Level3_Common5();
-// }
-// void ACT_2_4_1()
-// {
-//     ReadPos[0] = '2';
-//     ReadPos[1] = '.';
-//     ReadPos[2] = '4';
-//     ReadPos[3] = '.';
-//     ReadPos[4] = '1';
-// }
-/*********************************************************************************************************************
-* 其他辅助函数
-*********************************************************************************************************************/
-// static void GUI_Display_Image_Sidebar(void) // 图像界面侧边栏显示内�??
-// {
-//     ips200_show_string(192,ROW_3,"Th");         ips200_show_int(192,ROW_4,Threshold,3);
-//     ips200_show_string(192,ROW_5,"Pitch");      ips200_show_float(192,ROW_6,Gyro.pitch,3,1);
-//     ips200_show_string(192,ROW_7,"Pst");        ips200_show_int(192,ROW_8,ImagePst.Pst[0],3);
-//     ips200_show_string(192,ROW_9,"Pwm");        ips200_show_int(192,ROW_10,DirPwm,4);
-//     ips200_show_string(192,ROW_11,"Meun");      ips200_show_int(192,ROW_12,Menu_command,4);
-//     ips200_show_string(192,ROW_13,"Encode");    ips200_show_float(192,ROW_14,AnglePID.Kp,1,3);
-//     ips200_show_string(192,ROW_15,"Encode");    ips200_show_int(192,ROW_16,Car_Speed,4);
-// }
-// static void GUI_Display_Image_Below(void) // 图像界面下方显示内�??
-// {
-//     switch(ElementStatusMachine.CurrentStatus)
-//     {
-//         case NO_ELEMENT_STATUS:
-//             ips200_show_string(80,ROW_1,"No_Element");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_1:
-//             ips200_show_string(80,ROW_1,"RightHuan1");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_2:
-//             ips200_show_string(80,ROW_1,"RightHuan2");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_3:
-//             ips200_show_string(80,ROW_1,"RightHuan3");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_4:
-//             ips200_show_string(80,ROW_1,"RightHuan4");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_5:
-//             ips200_show_string(80,ROW_1,"RightHuan5");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_6:
-//             ips200_show_string(80,ROW_1,"RightHuan6");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_7:
-//             ips200_show_string(80,ROW_1,"RightHuan7");
-//         break;
-//         case RIGHT_ROUNDABOUT_STATUS_8:
-//             ips200_show_string(80,ROW_1,"RightHuan8");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_1:
-//             ips200_show_string(80,ROW_1,"Left_Huan1");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_2:
-//             ips200_show_string(80,ROW_1,"Left_Huan2");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_3:
-//             ips200_show_string(80,ROW_1,"Left_Huan3");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_4:
-//             ips200_show_string(80,ROW_1,"Left_Huan4");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_5:
-//             ips200_show_string(80,ROW_1,"Left_Huan5");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_6:
-//             ips200_show_string(80,ROW_1,"Left_Huan6");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_7:
-//             ips200_show_string(80,ROW_1,"Left_Huan7");
-//         break;
-//         case LEFT_ROUNDABOUT_STATUS_8:
-//             ips200_show_string(80,ROW_1,"Left_Huan8");
-//         break;
-//         case CROSS_STATUS_1:
-//             ips200_show_string(80,ROW_1,"Cross_Mid1");
-//         break;
-//         case CROSS_STATUS_2:
-//             ips200_show_string(80,ROW_1,"Cross_Mid2");
-//         break;
-//         case PODAO_STATUS_1:
-//             ips200_show_string(80,ROW_1,"  Podao  ");
-//         break;
-//     }
-//     ips200_draw_line(0,21+(IMAGE_H - ImagePst.AimIndex),239,21+(IMAGE_H - ImagePst.AimIndex),IPS200_DEFAULT_PENCOLOR);
-//     //拐点画线
-//     for(uint8 i = 0;i < 6;i++)
-//     {
-//         //右下
-//         if(RightCorner[0].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 + i,0,187),Clip16(RightCorner[0].Position.y*2 - i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 + i,0,187),Clip16(RightCorner[0].Position.y*2 + i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 - i,0,187),Clip16(RightCorner[0].Position.y*2 - i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[0].Position.x*2 - i,0,187),Clip16(RightCorner[0].Position.y*2 + i + 21,21,209),RGB565_RED);
-//         }
-//         //左下
-//         if(LeftCorner[0].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 + i,0,187),Clip16(LeftCorner[0].Position.y*2 - i + 21,21,209),RGB565_YELLOW);
-//             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 + i,0,187),Clip16(LeftCorner[0].Position.y*2 + i + 21,21,209),RGB565_YELLOW);
-//             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 - i,0,187),Clip16(LeftCorner[0].Position.y*2 - i + 21,21,209),RGB565_YELLOW);
-//             ips200_draw_point(Clip16(LeftCorner[0].Position.x*2 - i,0,187),Clip16(LeftCorner[0].Position.y*2 + i + 21,21,209),RGB565_YELLOW);
-//         }
-//         //右中
-//         if(RightCorner[1].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 + i,0,187),Clip16(RightCorner[1].Position.y*2 - i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 + i,0,187),Clip16(RightCorner[1].Position.y*2 + i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 - i,0,187),Clip16(RightCorner[1].Position.y*2 - i + 21,21,209),RGB565_RED);
-//             ips200_draw_point(Clip16(RightCorner[1].Position.x*2 - i,0,187),Clip16(RightCorner[1].Position.y*2 + i + 21,21,209),RGB565_RED);
-//         }
-//         //左中
-//         if(LeftCorner[1].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 + i,0,187),Clip16(LeftCorner[1].Position.y*2 - i + 21,21,209),RGB565_BLUE);
-//             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 + i,0,187),Clip16(LeftCorner[1].Position.y*2 + i + 21,21,209),RGB565_BLUE);
-//             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 - i,0,187),Clip16(LeftCorner[1].Position.y*2 - i + 21,21,209),RGB565_BLUE);
-//             ips200_draw_point(Clip16(LeftCorner[1].Position.x*2 - i,0,187),Clip16(LeftCorner[1].Position.y*2 + i + 21,21,209),RGB565_BLUE);
-//         }
-//         //右上
-//         if(RightCorner[2].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 + i,0,187),Clip16(RightCorner[2].Position.y*2 - i + 21,21,209),RGB565_MAGENTA);
-//             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 + i,0,187),Clip16(RightCorner[2].Position.y*2 + i + 21,21,209),RGB565_MAGENTA);
-//             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 - i,0,187),Clip16(RightCorner[2].Position.y*2 - i + 21,21,209),RGB565_MAGENTA);
-//             ips200_draw_point(Clip16(RightCorner[2].Position.x*2 - i,0,187),Clip16(RightCorner[2].Position.y*2 + i + 21,21,209),RGB565_MAGENTA);
-//         }
-//         //左上
-//         if(LeftCorner[2].Find == 1)
-//         {
-//             ips200_draw_point(Clip16(LeftCorner[2].Position.x*2 + i,0,187),Clip16(LeftCorner[2].Position.y*2 - i + 21,21,209),RGB565_BROWN);
-//             ips200_draw_point(Clip16(LeftCorner[2].Position.x*2 + i,0,187),Clip16(LeftCorner[2].Position.y*2 + i + 21,21,209),RGB565_BROWN);
-//             ips200_draw_point(Clip16(LeftCorner[2].Position.x*2 - i,0,187),Clip16(LeftCorner[2].Position.y*2 - i + 21,21,209),RGB565_BROWN);
-//             ips200_draw_point(Clip16(LeftCorner[2].Position.x*2 - i,0,187),Clip16(LeftCorner[2].Position.y*2 + i + 21,21,209),RGB565_BROWN);
-//         }
-//     }
-//     if(RightCorner[0].Find == 1)
-//     {
-//         ips200_show_string(0,ROW_17,"RB_x:");   ips200_show_int(64,ROW_17,RightCorner[0].Position.x,3);
-//         ips200_show_string(0,ROW_18,"RB_y:");   ips200_show_int(64,ROW_18,RightCorner[0].Position.y,3);
-//         ips200_show_string(0,ROW_19,"RB_C:");   ips200_show_int(64,ROW_19,RightCorner[0].Index,4);
-//     }
-//     if(LeftCorner[0].Find == 1)
-//     {
-//         ips200_show_string(96,ROW_17,"LB_x:");  ips200_show_int(144,ROW_17,LeftCorner[0].Position.x,3);
-//         ips200_show_string(96,ROW_18,"LB_y:");  ips200_show_int(144,ROW_18,LeftCorner[0].Position.y,3);
-//         ips200_show_string(96,ROW_19,"LB_C:");  ips200_show_int(144,ROW_19,LeftCorner[0].Index,4);
-//     }
-//     if(RightCorner[1].Find == 1)
-//     {
-//         ips200_show_string(0,ROW_17,"RM_x:");   ips200_show_int(64,ROW_17,RightCorner[1].Position.x,3);
-//         ips200_show_string(0,ROW_18,"RM_y:");   ips200_show_int(64,ROW_18,RightCorner[1].Position.y,3);
-//         ips200_show_string(0,ROW_19,"RM_C:");   ips200_show_int(64,ROW_19,RightCorner[1].Index,4);
-//     }
-//     if(LeftCorner[1].Find == 1)
-//     {
-//         ips200_show_string(96,ROW_17,"LM_x:");  ips200_show_int(144,ROW_17,LeftCorner[1].Position.x,3);
-//         ips200_show_string(96,ROW_18,"LM_y:");  ips200_show_int(144,ROW_18,LeftCorner[1].Position.y,3);
-//         ips200_show_string(96,ROW_19,"LM_C:");  ips200_show_int(144,ROW_19,LeftCorner[1].Index,4);
-//     }
-//     ips200_show_string(0,ROW_17,"RU_x:");   ips200_show_int(64,ROW_17,RightCorner[2].Position.x,3);
-//     ips200_show_string(0,ROW_18,"RU_y:");   ips200_show_int(64,ROW_18,RightCorner[2].Position.y,3);
-//     ips200_show_string(0,ROW_19,"RU_C:");   ips200_show_int(64,ROW_19,RightCorner[2].Index,4);
-//     ips200_show_string(96,ROW_17,"LU_x:");  ips200_show_int(144,ROW_17,LeftCorner[2].Position.x,3);
-//     ips200_show_string(96,ROW_18,"LU_y:");  ips200_show_int(144,ROW_18,LeftCorner[2].Position.y,3);
-//     ips200_show_string(96,ROW_19,"LU_C:");  ips200_show_int(144,ROW_19,LeftCorner[2].Index,4);
-//     ips200_show_string(0,ROW_13,"L_Count");     ips200_show_int(64,ROW_13,LeftBorder.Count,3);
-//     ips200_show_string(0,ROW_14,"R_Count");     ips200_show_int(64,ROW_14,RightBorder.Count,3);
-//     ips200_show_string(96,ROW_13,"L_Use");      ips200_show_int(144,ROW_13,LeftBorder.UsefullCount,3);
-//     ips200_show_string(96,ROW_14,"R_Use");      ips200_show_int(144,ROW_14,RightBorder.UsefullCount,3);
-//     ips200_show_string(0,ROW_15,"L_Count");     ips200_show_int(64,ROW_15,NewLeftBorder.Count,3);
-//     ips200_show_string(0,ROW_16,"R_Count");     ips200_show_int(64,ROW_16,NewRightBorder.Count,3);
-//     ips200_show_string(96,ROW_15,"L_Use");      ips200_show_int(144,ROW_15,NewLeftBorder.UsefullCount,3);
-//     ips200_show_string(96,ROW_16,"R_Use");      ips200_show_int(144,ROW_16,NewRightBorder.UsefullCount,3);
-// }
-// static void GUI_SetAngleLoop(void) // 直立�??设置界面
-// {
-//     ips200_show_string(0,ROW_3,"AngleDot");
-//     ips200_show_string(0,ROW_4,"Dot_Kp");   ips200_show_float(64,ROW_4,AngleDotPID.Kp,4,1);
-//     ips200_show_string(120,ROW_4,"Dot_Ki"); ips200_show_float(174,ROW_4,AngleDotPID.Ki,4,1);
-//     ips200_show_string(0,ROW_5,"Dot_In");       ips200_show_float(64,ROW_5,-Gyro.gyro_y,2,3);
-//     ips200_show_string(0,ROW_6,"Dot_Out");      ips200_show_float(64,ROW_6,AngleDotPID.Out,4,1);
-//     ips200_show_string(0,ROW_8,"Angle");
-//     ips200_show_string(0,ROW_9,"Ang_Kp");   ips200_show_float(64,ROW_9,AnglePID.Kp,1,4);
-//     ips200_show_string(120,ROW_9,"Ang_Kd"); ips200_show_float(174,ROW_9,AnglePID.Kd,1,4);
-//     ips200_show_string(0,ROW_10,"Ang_In");       ips200_show_float(64,ROW_10,SpeedPIDOutPwm+Gyro.pitch,4,1);
-//     ips200_show_string(0,ROW_11,"Ang_Out");     ips200_show_float(64,ROW_11,AnglePID.Out,1,4);
-//     ips200_show_string(0,ROW_13,"Speed");
-//     ips200_show_string(0,ROW_14,"Spd_Kp");  ips200_show_float(64,ROW_14,SpeedPID.Kp,1,4);
-//     ips200_show_string(120,ROW_14,"Spd_Kd");ips200_show_float(174,ROW_14,SpeedPID.Kd,1,4);
-//     ips200_show_string(0,ROW_15,"Spd_In");      ips200_show_float(64,ROW_15,Car_AimSpeed-Car_Speed,4,1);
-//     ips200_show_string(0,ROW_16,"Spd_Out");     ips200_show_float(64,ROW_16,SpeedPID.Out,1,4);
-//     ips200_show_string(120,ROW_15,"Car_Spd");   ips200_show_int(192,ROW_15,Left_Speed,4);//Car_Speed
-//     ips200_show_string(120,ROW_16,"SpdOut2");   ips200_show_int(192,ROW_16,Right_Speed,4);//SpeedPIDOutPwm
-//     ips200_show_string(0,ROW_18,"Pwm");         ips200_show_float(64,ROW_18,DirPwm,4,1);
-// }
-// static void GUI_SetDirLoop(void) // �??向环设置界面
-// {
-//     ips200_show_string(0,ROW_3,"Dir_In");
-//     ips200_show_string(0,ROW_4,"In_Kp");   ips200_show_float(64,ROW_4,DirAngleDotPID.Kp,4,1);
-//     ips200_show_string(120,ROW_4,"In_Kd"); ips200_show_float(174,ROW_4,DirAngleDotPID.Kd,4,1);
-//     ips200_show_string(0,ROW_8,"Dir_Out");
-//     ips200_show_string(0,ROW_9,"Out_Kp");   ips200_show_float(64,ROW_9,DirOutPID.Kp,4,1);
-//     ips200_show_string(120,ROW_9,"Out_Kd"); ips200_show_float(174,ROW_9,DirOutPID.Kd,4,1);
-//     ips200_show_string(0,ROW_18,"Pwm");         ips200_show_float(64,ROW_18,DirPwm,4,1);
-// }
-/*********************************************************************************************************************
-* END OF FILE
-*********************************************************************************************************************/
-/* ===== code/remote_lora.h ===== */
-/*
- * LORA3A22 遥控：CM7_1 接收，整理后写入双核共享区 remote 快照。
- * 串口引脚默认与 zf_device_lora3a22.h 一致（UART_1 / P04_0 / P04_1），可在包含驱动头之前重定义宏。
- */
 #ifndef CODE_REMOTE_LORA_H_
 #define CODE_REMOTE_LORA_H_
 #include "zf_common_typedef.h"
-/* 不直接包含 dualcore_shared.h，避免 step_detection→headfile→remote_lora 循环导致类型未完整 */
 struct dualcore_remote_to_ctrl;
-/* 摇杆中位为 0，绝对值裁剪上限（与遥控端量程一致，便于后续自定义映射） */
 #ifndef REMOTE_LORA_JOYSTICK_ABS_MAX
 #define REMOTE_LORA_JOYSTICK_ABS_MAX  (2000)
 #endif
-/* 验证用：左摇杆 left_y → 线速度用户指令的满偏幅值（±REMOTE_LORA_VALIDATE_SPEED_ABS_MAX） */
 #ifndef REMOTE_LORA_VALIDATE_SPEED_ABS_MAX
 #define REMOTE_LORA_VALIDATE_SPEED_ABS_MAX  (1500.0f)
 #endif
-/* 1：前进方向与摇杆相反时整体取反 */
 #ifndef REMOTE_LORA_VALIDATE_SPEED_INVERT
 #define REMOTE_LORA_VALIDATE_SPEED_INVERT  0
 #endif
-/* 右摇杆 right_x：目标偏航角速度满偏（°/s），与 control.c 中 STEER_RATE_TARGET_MAX_DPS 同量级便于实车调参 */
 #ifndef REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS
 #define REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS  (200.0f)
 #endif
-/* 右摇杆按下：lora3a22 协议为 key[1]（key0 左杆键、key1 右杆键、key2/key3 左右侧向键，见逐飞 E6_13_lora_remote_control_demo） */
 #ifndef REMOTE_LORA_KEY_INDEX_RIGHT_STICK
 #define REMOTE_LORA_KEY_INDEX_RIGHT_STICK  (1u)
 #endif
-/* 右杆键上升沿触发的原地自旋圈数与方向（spin_task_start；dir>0 为沿 yaw 正方向，默认 2 圈） */
 #ifndef REMOTE_LORA_SPIN_TURNS_VALIDATE
 #define REMOTE_LORA_SPIN_TURNS_VALIDATE  (2.0f)
 #endif
 #ifndef REMOTE_LORA_SPIN_DIR
 #define REMOTE_LORA_SPIN_DIR  (1)
 #endif
-/* 左上/左侧向键（逐飞协议 key2）：
- * - 录制中：切换待录元素类型；
- * - 非录制中：切换横滚平衡 on/off，语义同 dualcore DUALCORE_UI_CMD_ROLL_BALANCE_TOGGLE。
- */
 #ifndef REMOTE_LORA_KEY_INDEX_ROLL_BALANCE
 #define REMOTE_LORA_KEY_INDEX_ROLL_BALANCE  (2u)
 #endif
-/* 右上/右侧向键（逐飞 key3）：
- * - 录制中：单击保存当前元素点；
- * - 非录制中：触发跳跃，语义同 DUALCORE_UI_CMD_JUMP（须 jump_is_allowed 且当前未在跳）。
- */
 #ifndef REMOTE_LORA_KEY_INDEX_JUMP
 #define REMOTE_LORA_KEY_INDEX_JUMP  (3u)
 #endif
-/* 左边两路拨码：与逐飞 lora3a22 左边 switch_key[0/1] 一致；0/1 为协议里“上拉为 1/按下为 0”等逻辑，与实物箭头一致可改下标/取反 */
-/* 计划语义：非回放=1、回放档=0 → 沿 1→0 调 Nag_Begin_Replay。若你实物“停在上面=0、常态=1”，与计划一致。 */
-/* 若需改为 0→1 进回放，置 REMOTE_LORA_REPLAY_ON_SW0_RISING=1。首次联网先同步前态，不产假沿。 */
 #ifndef REMOTE_LORA_LEFT_SWITCH0_INDEX
 #define REMOTE_LORA_LEFT_SWITCH0_INDEX  (0u)
 #endif
@@ -3834,7 +2702,6 @@ struct dualcore_remote_to_ctrl;
 #ifndef REMOTE_LORA_REPLAY_ON_SW0_RISING
 #define REMOTE_LORA_REPLAY_ON_SW0_RISING  (0u)
 #endif
-/* MENU_INPUT_REMOTE_MENU_FIRST==1 时：switch_key 下标 REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX 与宏一致电平 = 板载按键/拨码调试 */
 #ifndef REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX
 #define REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX  (3u)
 #endif
@@ -3843,21 +2710,12 @@ struct dualcore_remote_to_ctrl;
 #endif
 void remote_lora_init(void);
 void remote_lora_update_from_driver_and_publish(void);
-/* 与 Menu.h 中 MENU_INPUT_REMOTE_MENU_FIRST 一致：1 表示遥控菜单/遥控数据对控制核生效 */
 uint8 remote_lora_is_remote_menu_enabled(void);
-/* 最近一次已发布快照（CM7_1 侧调试可读；主通路为 dualcore_remote_publish）；实参为 dualcore_remote_to_ctrl_t* */
 void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out);
 #if defined(CY_CORE_CM7_0)
-/* 验证用：CM7_0 读 remote；左拨码 0/1 录/停/回放见 REMOTE_LORA_LEFT_SWITCH* */
 void remote_lora_apply_validate_motor(void);
 #endif
-#endif /* CODE_REMOTE_LORA_H_ */
-/* ===== code/remote_lora.c ===== */
-/*********************************************************************************************************************
- * LORA 遥控（CM7_1）：依赖 zf_device_lora3a22 帧解析，汇总为 dualcore_remote_to_ctrl_t 经 dualcore_remote_publish 给 CM7_0。
- * 仅当 MENU_INPUT_REMOTE_MENU_FIRST==1 时 enabled=1 且携带实时轴/键/拨码；否则发布安全默认（键 0、拨码 1、摇杆 0）。
- * 摇杆含义与 CM7_0 侧应用：joystick[0..1] 左杆 x/y，[2..3] 右杆 x/y；偏航角速度由右杆 right_x 映射（见 remote_lora_apply_validate_motor）。
- *********************************************************************************************************************/
+#endif
 #include "dualcore_shared.h"
 #include "remote_lora.h"
 #include "Menu.h"
@@ -3866,7 +2724,6 @@ void remote_lora_apply_validate_motor(void);
 #if defined(CY_CORE_CM7_1)
 static dualcore_remote_to_ctrl_t s_last_published;
 static uint8 s_inited;
-/** 将单轴摇杆采样限幅到 ±REMOTE_LORA_JOYSTICK_ABS_MAX，与遥控端量程一致。 */
 static int16 remote_lora_clamp_axis(int16 v)
 {
     if (v > REMOTE_LORA_JOYSTICK_ABS_MAX)
@@ -3879,7 +2736,6 @@ static int16 remote_lora_clamp_axis(int16 v)
     }
     return v;
 }
-/** 遥控未在线或禁用时使用的安全默认：摇杆置 0、拨码置 1、按键置 0。 */
 static void remote_lora_apply_defaults(dualcore_remote_to_ctrl_t *s)
 {
     memset(s, 0, sizeof(*s));
@@ -3896,7 +2752,6 @@ static void remote_lora_apply_defaults(dualcore_remote_to_ctrl_t *s)
     s->switch_key[2] = 1u;
     s->switch_key[3] = 1u;
 }
-/** 初始化 LORA 驱动与上次发布快照；应在周期任务前调用一次。 */
 void remote_lora_init(void)
 {
     remote_lora_apply_defaults(&s_last_published);
@@ -3920,10 +2775,6 @@ void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out)
         *out = s_last_published;
     }
 }
-/**
- * 从 lora3a22 驱动取最新帧，填充 dualcore_remote_to_ctrl_t 并发布到双核共享区。
- * online=0 时仍发布 enabled 状态但摇杆为默认 0，CM7_0 侧应结合 online 做失控保护。
- */
 void remote_lora_update_from_driver_and_publish(void)
 {
     dualcore_remote_to_ctrl_t snap;
@@ -3953,17 +2804,14 @@ void remote_lora_update_from_driver_and_publish(void)
     snap.fresh = had_new_frame;
     if (snap.online != 0u)
     {
-        /* 与 lora3a22_uart_transfer 索引一致：0/1 左杆 x/y，2/3 右杆 x/y */
         snap.left_x = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[0]);
         snap.left_y = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[1]);
         snap.right_x = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[2]);
         snap.right_y = remote_lora_clamp_axis(lora3a22_uart_transfer.joystick[3]);
-        /* key0/1 左/右摇杆键，key2/3 左/右侧向键；CM7_0 应用层：key2 横滚开关、key3 跳跃（可改 remote_lora.h 下标宏） */
         snap.key[0] = lora3a22_uart_transfer.key[0] ? 1u : 0u;
         snap.key[1] = lora3a22_uart_transfer.key[1] ? 1u : 0u;
         snap.key[2] = lora3a22_uart_transfer.key[2] ? 1u : 0u;
         snap.key[3] = lora3a22_uart_transfer.key[3] ? 1u : 0u;
-        /* 左边 0/1 为左拨码 1/2；CM7_0 用 switch_key[0] 回放、switch_key[0]=1 时 [1] 录/停，见 remote_lora.h REMOTE_LORA_LEFT_SWITCH* */
         snap.switch_key[0] = lora3a22_uart_transfer.switch_key[0] ? 1u : 0u;
         snap.switch_key[1] = lora3a22_uart_transfer.switch_key[1] ? 1u : 0u;
         snap.switch_key[2] = lora3a22_uart_transfer.switch_key[2] ? 1u : 0u;
@@ -3971,7 +2819,6 @@ void remote_lora_update_from_driver_and_publish(void)
     }
     else
     {
-        /* 离线：保持默认键 0、拨码 1、摇杆 0 */
         remote_lora_apply_defaults(&snap);
         snap.enabled = 1u;
         snap.online = 0u;
@@ -3980,7 +2827,7 @@ void remote_lora_update_from_driver_and_publish(void)
     dualcore_remote_publish(&snap);
     s_last_published = snap;
 }
-#else /* !CY_CORE_CM7_1 */
+#else
 void remote_lora_init(void)
 {
 }
@@ -3995,21 +2842,7 @@ void remote_lora_get_last_published(dualcore_remote_to_ctrl_t *out)
 {
     (void)out;
 }
-#endif /* CY_CORE_CM7_1 */
-/* ===== code/remote_lora_apply.c ===== */
-/*********************************************************************************************************************
- * 遥控验证（仅 CM7_0 编译）：
- * - 左摇杆 left_y → motor_user_speed_cmd（±REMOTE_LORA_VALIDATE_SPEED_ABS_MAX）；
- * - 右摇杆 right_x → remote_lora_steer_rate_cmd_dps（目标偏航角速度 °/s，见 pid_ctrl_Run 内角速度环，松杆为 0）；
- * - 左杆按键 key[0] 上升沿翻转 Motor_Switch；
- * - 右摇杆按键（key[REMOTE_LORA_KEY_INDEX_RIGHT_STICK]）上升沿在满足门控时 spin_task_start，圈数见 REMOTE_LORA_SPIN_TURNS_VALIDATE（默认 2 圈）；
- * - 录制中：左上/侧向键 key[REMOTE_LORA_KEY_INDEX_ROLL_BALANCE] 切换待录元素类型；
- * - 录制中：右上/侧向键 key[REMOTE_LORA_KEY_INDEX_JUMP] 单击保存当前元素点；
- * - 非录制中：左上/侧向键切换横滚平衡 roll_balance_en，右上/侧向键触发跳跃；
- * - 左拨码：首帧只同步前态不判沿，避免首包/掉线重连假沿进回放；沿 1→0 → Nag_Begin_Replay（可改 REMOTE_LORA_REPLAY_ON_SW0_RISING）；[0]=1 时 [1] 录/停沿（见 remote_lora.h）；
- * - MENU_INPUT_REMOTE_MENU_FIRST==1：遥控拨码 4（switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX]）电平=REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL 时为板载调试，本函数不再映射摇杆/键/左拨码（仅拨码 4 仍被读入用于切换）。
- * - 失控锁存时禁止用遥控将电机从 OFF 置 ON。
- *********************************************************************************************************************/
+#endif
 #include "dualcore_shared.h"
 #include "Menu.h"
 #include "remote_lora.h"
@@ -4017,7 +2850,6 @@ void remote_lora_get_last_published(dualcore_remote_to_ctrl_t *out)
 #include "navigation.h"
 #include "small_driver_uart_control.h"
 #if defined(CY_CORE_CM7_0)
-/** 将遥控映射后的线速度用户指令限幅到 ±REMOTE_LORA_VALIDATE_SPEED_ABS_MAX（与导航基准同量级，防满偏过冲）。 */
 static float remote_lora_validate_clamp_speed(float v)
 {
     const float lim = REMOTE_LORA_VALIDATE_SPEED_ABS_MAX;
@@ -4031,7 +2863,6 @@ static float remote_lora_validate_clamp_speed(float v)
     }
     return v;
 }
-/** 将右杆横向给出的目标偏航角速度限幅到 ±REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS（与 STEER_RATE_TARGET_MAX_DPS 同量级）。 */
 static float remote_lora_clamp_steer_rate_dps(float w)
 {
     const float lim = REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS;
@@ -4045,10 +2876,6 @@ static float remote_lora_clamp_steer_rate_dps(float w)
     }
     return w;
 }
-/**
- * 从双核共享区拉取 LORA 遥控快照并写入电机/转向相关全局量（仅验证菜单/遥控使能时有效）。
- * 线速度：left_y；偏航角速度：right_x；自旋/侧向键/左拨码：见头文件与块内注释。
- */
 void remote_lora_apply_validate_motor(void)
 {
     dualcore_remote_to_ctrl_t r;
@@ -4058,9 +2885,9 @@ void remote_lora_apply_validate_motor(void)
     static uint8 s_prev_key_jump;
     static uint8 s_prev_left_sw0;
     static uint8 s_prev_left_sw1;
-    static uint8 s_left_dip_synced; /* 联网后首帧只同步前态，避免首包 0/1 与初值 1,1 误形成 1→0 而误进回放 */
-    float cmd;       /* 映射后的线速度用户指令，写入 motor_user_speed_cmd */
-    float rate_cmd;  /* 右杆 right_x 映射后的目标偏航角速度 (°/s) */
+    static uint8 s_left_dip_synced;
+    float cmd;
+    float rate_cmd;
     uint8 k0;
     uint8 rising;
     uint8 kr;
@@ -4091,7 +2918,7 @@ void remote_lora_apply_validate_motor(void)
     if ((r.enabled == 0u) || (r.online == 0u))
     {
         remote_lora_steer_snapshot_valid = 0u;
-        s_left_dip_synced = 0u; /* 掉线/禁遥控后重连需重新同步，否则会误认沿 */
+        s_left_dip_synced = 0u;
         return;
     }
     cmd = (float)r.left_y * (REMOTE_LORA_VALIDATE_SPEED_ABS_MAX / (float)REMOTE_LORA_JOYSTICK_ABS_MAX);
@@ -4099,7 +2926,6 @@ void remote_lora_apply_validate_motor(void)
     cmd = -cmd;
 #endif
     motor_user_speed_cmd = remote_lora_validate_clamp_speed(cmd);
-    /* 原左杆 left_x 已改为右杆 right_x 控制目标偏航角速度 */
     rate_cmd = (float)r.right_x * (REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS / (float)REMOTE_LORA_JOYSTICK_ABS_MAX);
     remote_lora_steer_rate_cmd_dps = remote_lora_clamp_steer_rate_dps(rate_cmd);
     remote_lora_steer_snapshot_valid = 1u;
@@ -4112,7 +2938,6 @@ void remote_lora_apply_validate_motor(void)
         uint8 next_sw = (uint8)((Motor_Switch == MOTOR_ON) ? MOTOR_OFF : MOTOR_ON);
         if ((next_sw == MOTOR_ON) && (Motor_Runaway_Latch != 0u))
         {
-            /* 失控锁存时禁止遥控重新上使能，清锁存后再用拨码/其它途径 */
         }
         else
         {
@@ -4141,7 +2966,6 @@ void remote_lora_apply_validate_motor(void)
         {
             if (nav_recording_active != 0u)
             {
-                /* 录制态临时复用左上/侧向键：切换下一条待录元素类型。 */
                 Nag_Cycle_Record_Event_Type();
             }
             else
@@ -4162,7 +2986,6 @@ void remote_lora_apply_validate_motor(void)
         {
             if (nav_recording_active != 0u)
             {
-                /* 录制态临时复用右上/侧向键：单击保存当前元素点。 */
                 Nag_Request_Event_Mark();
             }
             else if ((jump_is_allowed() != 0u) && (jump_flag == 0u))
@@ -4217,75 +3040,35 @@ void remote_lora_apply_validate_motor(void)
     }
 #endif
 }
-#endif /* CY_CORE_CM7_0 */
-/* ===== code/vofa.h ===== */
+#endif
 #ifndef _VOFA_H_
 #define _VOFA_H_
 #include "zf_common_headfile.h"
 void SendDataStreamToVOFA(uint32_t Count, float Data, ...);
-void ReadDataFromPc(void); /* �����ֽ� Menu_command �⣬֧�� V<��ֵ> ��չ֡����� vofa.c ��ע�� */
+void ReadDataFromPc(void);
 void SendDataToVofa(void);
-extern uint32 WirelessUart_ReadBuff_Count;   // ��ȡ���ߴ������ݳ���
-extern uint8 WirelessUart_ReadBuff_Data[64]; // ��ȡ���ߴ��ڻ�������
-extern uint8 Menu_command;                   // �˵�����ָ��
+extern uint32 WirelessUart_ReadBuff_Count;
+extern uint8 WirelessUart_ReadBuff_Data[64];
+extern uint8 Menu_command;
 extern float ReadBuf_Pid;
 #if defined(CY_CORE_CM7_1)
-/* ��˫�� CM7_1���� shared ctrl ���գ��� wireless_uart �� JustFloat���뱾���� wireless_uart_init�� */
 void vofa_send_nav_from_dualcore_snapshot(void);
-/*
- * VOFA �� 1 �� �ٶȵ��ԣ��˵� n ������ group==1����
- *   ch1 speed_target_effective  �ٶȻ�ʵ��Ŀ��
- *   ch2 car_speed               ��ǰʵ�⳵��
- */
 #define VOFA_GROUP_SPEED_DEBUG (1u)
-/*
- * VOFA �� 2 �� GPS+�ߵ��ںϵ��ԣ��˵� n ������ 2����
- *   ch1 fusion_x_m           �ں϶���λ��(m)
- *   ch2 fusion_y_m           �ںϱ���λ��(m)
- *   ch3 fusion_v_mps         �궨��ǰ���ٶ�(m/s)
- *   ch4 fusion_gps_residual_m  GPS ���ں�λ�òв�(m)��>3 ��������
- *   ch5 fusion_gps_weight    ��֡ GPS ��������
- *   ch6 fusion_gps_used      1=��֡ GPS ��������
- *   ��CM7_1 �� 2 ��չ��ch5/ch6 �ɻ�Ϊ fusion_origin_accepted / fusion_origin_rejected
- */
 #define VOFA_GROUP_FUSION_DEBUG (2u)
-/*
- * VOFA �� 3 �� ��̾�ƫ/�򻬣��˵� n / Config ������ 3����
- *   ch1 odo_wheel_left_cmps   ����ǰ���ٶ� cm/s
- *   ch2 odo_wheel_right_cmps  ����ǰ���ٶ� cm/s
- *   ch3 odo_gyro_z_dps        IMU Z ����ٶ� deg/s
- *   ch4 odo_vc_from_l_cmps    ����+gyro ���������ٶ� cm/s
- *   ch5 odo_vc_from_r_cmps    ����+gyro ���������ٶ� cm/s
- *   ch6 odo_corr_speed_cmps   ��ƫ�������ٶ� cm/s����̬�� dualcore odo_slip_state��0���� 1�� 2�� 3˫�ࣩ
- * ���ԣ�ֱ��/����� ch4��ch5�����ֿ�תʱһ��ƫ�롢ch6 Ӧ���� car_speed ��Ӧ������
- */
 #define VOFA_GROUP_ODO_SLIP_DEBUG (3u)
 #endif
 #endif
-/* ===== code/vofa.c ===== */
 #include "vofa.h"
 #include "init.h"
 #include <stdlib.h>
 #include <string.h>
 const uint8_t vofa_justfloat_frame_tail[4] = {0x00, 0x00, 0x80, 0x7f};
-#define Wired_Mode 1 // 0-有线模式    1-无线模式
+#define Wired_Mode 1
 float ReadBuf_Pid = 0;
-// 外部全局PWM参数变量
 extern int16 pwm_ph1;
 extern int16 pwm_ph2;
 extern int16 pwm_ph3;
 extern int16 pwm_ph4;
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     以一个数据justfloat格式发送到VOFA
-// 参数说明     uart_index_enum * UARTx     串口号
-// 参数说明     uint32_t Count              发送数据个数
-// 参数说明     float Data                  发送数据
-// 返回参数     void
-// 使用示例     SendDataStreamToVOFA(1,Car_AimSpeed);
-//             SendDataStreamToVOFA(3,data1,data2,data3);
-// 备注信息     V1.0.0  发送时数据需要强制转换float类型
-//             V1.0.1  修复写入有线串口的bug             2024年7月26日
-//-------------------------------------------------------------------------------------------------------------------
 void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
 {
     volatile float Temp = Data;
@@ -4312,32 +3095,11 @@ void SendDataStreamToVOFA(uint32_t Count, float Data, ...)
 #endif
     va_end(Args);
 }
-uint32 WirelessUart_ReadBuff_Count = 0;     // 读取无线串口接收数据长度
-uint8 WirelessUart_ReadBuff_Data[64] = {0}; // 读取无线串口接收数据
-uint8 Menu_command = 0;                     // 菜单控制指令
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     从电脑接收数据
-// 参数说明     void
-// 返回参数     void
-// 使用示例     ReadDataFromPc(WirelessUart_ReadBuff_Data,WirelessUart_ReadBuff_Count);
-// 备注信息     V1.0.0  发送时数据需要强制转换float类型
-//             V1.0.1  修复写入有线串口的bug             2024年7月26日
-//             V1.1.2  pid参数调节功能，需要加前缀a进行调节 2024年7月31日
-//             V1.1.3  利用串口控制pwm参数 2026年3月7日
-//                 p1+ ：左上增加10
-//                 p1- ：左上减少10
-//                 p2+ ：左下增加10
-//                 p2- ：左下减少10
-//                 p3+ ：右上增加10
-//                 p3- ：右上减少10
-//                 p4+ ：右下增加10
-//                 p4- ：右下减少10
-//                 使用前需要注释control.c中right_leg_control和left_leg_control的servo_control_table函数.
-//             V1.1.4  速度多字节帧 V<数值> 由 Menu.c:Menu_TryConsumePcMotorSpeedString 解析 2026年4月
-//-------------------------------------------------------------------------------------------------------------------
+uint32 WirelessUart_ReadBuff_Count = 0;
+uint8 WirelessUart_ReadBuff_Data[64] = {0};
+uint8 Menu_command = 0;
 void ReadDataFromPc()
 {
-// 有线模式下读取数据
 #if Wired_Mode
     WirelessUart_ReadBuff_Count = wireless_uart_read_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
     if (WirelessUart_ReadBuff_Count)
@@ -4353,14 +3115,10 @@ void ReadDataFromPc()
         if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
         {
             ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
-            //Flash.Flash_state = FLASH_READ;
-            //Flash.Flash_Error = FLASH_RUNNING;
         }
         if (WirelessUart_ReadBuff_Data[0] == 's')
         {
-            //Car_AimSpeed = (int16)atof(&WirelessUart_ReadBuff_Data[1]);
         }
-        // PWM参数控制指令解析
         if (WirelessUart_ReadBuff_Count >= 3) {
             if (WirelessUart_ReadBuff_Data[0] == 'p') {
                 switch (WirelessUart_ReadBuff_Data[1]) {
@@ -4393,18 +3151,16 @@ void ReadDataFromPc()
                         }
                         break;
                 }
-                // 指令处理完成，PWM参数已更新
             }
         }
-        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // 清除接收缓存
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
         WirelessUart_ReadBuff_Count = 0;
         }
     }
-#else // 在Debug模式下读取数据
+#else
     WirelessUart_ReadBuff_Count = debug_read_ring_buffer(WirelessUart_ReadBuff_Data, sizeof(WirelessUart_ReadBuff_Data));
     if (WirelessUart_ReadBuff_Count)
     {
-        // debug_send_buffer(WirelessUart_ReadBuff_Data,WirelessUart_ReadBuff_Count);
         debug_send_buffer(ReadPos, sizeof(ReadPos));
         if (Menu_TryConsumePcMotorSpeedString(WirelessUart_ReadBuff_Data, WirelessUart_ReadBuff_Count))
         {
@@ -4417,9 +3173,7 @@ void ReadDataFromPc()
         if (WirelessUart_ReadBuff_Data[0] >= '0' && WirelessUart_ReadBuff_Data[0] <= '9')
         {
             ReadBuf_Pid = atof((const char *)&WirelessUart_ReadBuff_Data[0]);
-            //Flash_Read_State = FLASH_RUNNING;
         }
-        // PWM参数控制指令解析
         if (WirelessUart_ReadBuff_Count >= 3) {
             if (WirelessUart_ReadBuff_Data[0] == 'p') {
                 switch (WirelessUart_ReadBuff_Data[1]) {
@@ -4452,36 +3206,20 @@ void ReadDataFromPc()
                         }
                         break;
                 }
-                // 指令处理完成，PWM参数已更新
             }
         }
-        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count); // 清除接收缓存
+        memset(WirelessUart_ReadBuff_Data, 0, WirelessUart_ReadBuff_Count);
         WirelessUart_ReadBuff_Count = 0;
         }
     }
 #endif
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     发送数据
-// 参数说明     void
-// 返回参数     void
-// 使用示例     SendDataToVofa();
-// 备注信息     V1.0.0
-//-------------------------------------------------------------------------------------------------------------------
 void SendDataToVofa()
 {
-    // SendDataStreamToVOFA(4,(float)Gyro.pitch,(float)0,(float)Left_Motor_Pwm,(float)Gyro.gyro_y);
 }
 #if defined(CY_CORE_CM7_1)
 #include "dualcore_shared.h"
 #include "navigation.h"
-/*-------------------------------------------------------------------------------------------------------------------
- * 函数简介     双核模式下在 CM7_1 将姿态/速度/融合调试帧发到 VOFA（无线 JustFloat）
- * 前置条件     CM7_0 主循环已周期性调用 dualcore_ctrl_to_ui_publish()；本核 all_init_cm7_1_ui 已 wireless_uart_init
- * 分组说明     nag_vofa_group % NAG_VOFA_GROUP_COUNT；菜单 n / DUALCORE_UI_CMD_NAG_VOFA_GROUP_NEXT 循环切组。
- *              0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑（详见 vofa.h）。
- * 调用关系     SendDataStreamToVOFA 内部仍写 vofa_justfloat_frame_tail 作为帧尾
- *-------------------------------------------------------------------------------------------------------------------*/
 void vofa_send_nav_from_dualcore_snapshot(void)
 {
   dualcore_ctrl_to_ui_t c;
@@ -4517,4 +3255,4 @@ void vofa_send_nav_from_dualcore_snapshot(void)
     break;
   }
 }
-#endif /* CY_CORE_CM7_1 */
+#endif

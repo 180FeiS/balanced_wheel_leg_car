@@ -1,7 +1,3 @@
-/*
- * 轮腿式平衡车姿态与运动控制软件 — 硬实时 ISR 入口（软著 01 专用摘录）
- * 自 cm7_0_isr.c 抽取 1ms/5ms/20ms 控制节拍。
- */
 #include "zf_common_headfile.h"
 void pit0_ch0_isr(void)
 {

@@ -1,6 +1,3 @@
-/*
- * 运动控制核初始化摘录（自 init.c）
- */
 #include "zf_common_headfile.h"
 void all_init_cm7_0_control(void)
 {

@@ -1,16 +1,3 @@
-/*
- * nav_fusion.c — GPS + IMU/编码器 二维松耦合融合
- *
- * 实车验证建议（按顺序）：
- * 1. 静止 30s：fusion_x/y 基本不变，gps_residual_m 反映 GPS 抖动。
- * 2. 直线 5~10m：标定 NAV_FUSION_SPEED_SCALE，融合里程与卷尺一致。
- * 3. GPS 单点：融合 GPS 导航到点误差应小于纯 GPS。
- * 4. 惯导长距离 + 元素停车：NAG_USE_FUSION_MILEAGE 开启后 Run_index 漂移减小。
- * 5. 发车原点：KEY3 后静止采集 50 个有效 GPS 点平均建 origin（见 NAV_FUSION_ORIGIN_*）。
- * 6. 融合惯导录制/回放：原点完成后锁定发车 yaw 直行 5m，COG 标定北向偏角，首段路径旋转后恢复 GPS 修正。
- *
- * VOFA：菜单 n 切到组 2（VOFA_GROUP_FUSION_DEBUG）观察 fusion_x/y、gps_residual_m 等。
- */
 #include "zf_common_headfile.h"
 #include "nav_fusion.h"
 #include "control.h"
@@ -18,8 +5,6 @@
 #include <string.h>
 #if NAV_FUSION_ENABLE
 #ifndef NAV_FUSION_SPEED_SCALE_USER
-/* 默认与惯导里程标定一致：Nag_Speed_To_Mileage_Scale 为 cm/s，此处换算为 m/s */
-#undef NAV_FUSION_SPEED_SCALE
 #define NAV_FUSION_SPEED_SCALE (Nag_Speed_To_Mileage_Scale / 100.0f)
 #endif
 static NavFusionState g_fusion;
@@ -187,13 +172,12 @@ static void NavFusion_TickHeadingCalibTimeout(void)
     g_heading_calib.state = NAV_FUSION_CALIB_FAILED;
     g_heading_calib.failed_pulse = 1u;
 }
-#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
+#endif
 #if NAV_FUSION_ORIGIN_ENABLE
 static void NavFusion_OriginAvgReset(void)
 {
     memset(&g_origin_avg, 0, sizeof(g_origin_avg));
 }
-/* 样本到临时参考点（运行均值）的平面距离，m；不依赖 g_origin_lat/lon */
 static float NavFusion_DistanceToRefM(double lat, double lon, double ref_lat, double ref_lon)
 {
     double ref_lat_rad;
@@ -266,7 +250,7 @@ static void NavFusion_TickOriginTimeout(void)
     g_origin_avg.active = 0u;
     g_origin_avg.failed_pulse = 1u;
 }
-#endif /* NAV_FUSION_ORIGIN_ENABLE */
+#endif
 void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m)
 {
     double origin_lat_rad;
@@ -395,7 +379,6 @@ void NavFusion_Predict1ms(float yaw_deg, float speed_src)
     yaw_rad = NAV_FUSION_DEG_TO_RAD(g_fusion.yaw_deg);
     sin_yaw = sinf(yaw_rad);
     cos_yaw = cosf(yaw_rad);
-    /* 与 my_gps 局地平面一致：x 东、y 北；yaw 0° 为北时 dx≈sin(yaw), dy≈cos(yaw) */
     g_fusion.x_m += v_mps * sin_yaw * NAV_FUSION_DT_S;
     g_fusion.y_m += v_mps * cos_yaw * NAV_FUSION_DT_S;
 }
@@ -438,7 +421,6 @@ void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellit
         return;
     }
 #if NAV_FUSION_ORIGIN_ENABLE
-    /* 原点采集中：禁止 auto-init 与 GPS 修正，避免 origin 未建立时 fusion 被拉动 */
     if (NavFusion_IsOriginCalibrating() != 0u)
     {
         return;
@@ -462,7 +444,6 @@ void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellit
     if (g_fusion.valid == 0u)
     {
 #if NAV_FUSION_ORIGIN_ENABLE
-        /* 已启用多点原点平均时，禁止首帧自动建原点，须等 FeedOriginSample 完成 */
         return;
 #else
         (void)NavFusion_InitFromGps(lat, lon, 0.0f);
@@ -508,7 +489,6 @@ uint8 NavFusion_IsValid(void)
     }
     if (g_gps_timeout_ms > NAV_FUSION_GPS_TIMEOUT_MS)
     {
-        /* 超时后仍可用惯导预测，但标记本周期未用 GPS */
         return 1u;
     }
     return 1u;
@@ -694,7 +674,7 @@ uint8 NavFusion_ConsumeOriginDonePulse(void)
     g_origin_avg.origin_done_pulse = 0u;
     return 1u;
 }
-#endif /* NAV_FUSION_ORIGIN_ENABLE */
+#endif
 #if NAV_FUSION_HEADING_CALIB_ENABLE
 void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg)
 {
@@ -858,7 +838,7 @@ uint8 NavFusion_ConsumeHeadingCalibFailure(void)
     g_heading_calib.failed_pulse = 0u;
     return 1u;
 }
-#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
+#endif
 #if NAV_FUSION_ENABLE && !NAV_FUSION_ORIGIN_ENABLE
 void NavFusion_BeginOriginAverage(float yaw_deg) { (void)yaw_deg; }
 uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used)
@@ -904,7 +884,7 @@ uint8 NavFusion_GetHeadingCalibState(void) { return NAV_FUSION_CALIB_IDLE; }
 uint8 NavFusion_ConsumeHeadingCalibDonePulse(void) { return 0u; }
 uint8 NavFusion_ConsumeHeadingCalibFailure(void) { return 0u; }
 #endif
-#else /* !NAV_FUSION_ENABLE */
+#else
 void NavFusion_Reset(void) {}
 uint8 NavFusion_InitFromGps(double lat, double lon, float yaw_deg)
 {
@@ -983,4 +963,4 @@ float NavFusion_GetHeadingImuRefDeg(void) { return 0.0f; }
 uint8 NavFusion_GetHeadingCalibState(void) { return NAV_FUSION_CALIB_IDLE; }
 uint8 NavFusion_ConsumeHeadingCalibDonePulse(void) { return 0u; }
 uint8 NavFusion_ConsumeHeadingCalibFailure(void) { return 0u; }
-#endif /* NAV_FUSION_ENABLE */
+#endif

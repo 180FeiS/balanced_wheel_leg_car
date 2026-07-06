@@ -1,6 +1,3 @@
-/*********************************************************************************************************************
- * 双核共享区定义与缓存维护（两核各编一份，CM7_0 带初值，CM7_1 __no_init）
- *********************************************************************************************************************/
 #include "dualcore_shared.h"
 #include "cachel1_armv7.h"
 #include "Menu.h"
@@ -363,7 +360,6 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     Nag_Vofa_Group = (uint8)((Nag_Vofa_Group + 1u) % NAG_VOFA_GROUP_COUNT);
     break;
   case DUALCORE_UI_CMD_SPIN_START:
-    /* arg_u32: dir as int8 符号扩展在发送端保证 */
     spin_task_start(s->arg_f32, (int8)s->arg_u32);
     break;
   case DUALCORE_UI_CMD_STEER_REL_DEG:
@@ -481,7 +477,7 @@ void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out)
   dualcore_shared_dcache_invalidate(&g_dualcore_blob.remote, sizeof(g_dualcore_blob.remote));
   *out = g_dualcore_blob.remote;
 }
-#endif /* CY_CORE_CM7_0 */
+#endif
 #if defined(CY_CORE_CM7_1)
 void dualcore_ctrl_to_ui_pull(dualcore_ctrl_to_ui_t *out)
 {
@@ -559,7 +555,7 @@ void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
   v->bridge_detect_exit = detect_exit;
   v->bridge_detect_side = detect_side;
   v->bridge_frame_seq = frame_seq;
-  v->vision_guidance_mode = 2u; /* IMAGE_VISION_MODE_MIDLINE */
+  v->vision_guidance_mode = 2u;
   v->seq++;
   __DSB();
   dualcore_shared_dcache_clean(v, sizeof(*v));
@@ -600,12 +596,11 @@ void dualcore_white_blob_publish(float center_err, uint8 track_valid, uint32 fra
 {
   dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
   dualcore_shared_dcache_invalidate(v, sizeof(*v));
-  /* 白块模式：仅 blob 通道有效，vision_guidance_mode=1 供 CM7_0 选 apply 路径 */
   v->blob_center_err = center_err;
   v->blob_track_valid = track_valid;
   v->blob_frame_fresh = 1u;
   v->blob_frame_seq = frame_seq;
-  v->vision_guidance_mode = 1u; /* IMAGE_VISION_MODE_BLOB */
+  v->vision_guidance_mode = 1u;
   v->seq++;
   __DSB();
   dualcore_shared_dcache_clean(v, sizeof(*v));
@@ -641,4 +636,4 @@ void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in)
   __DSB();
   dualcore_shared_dcache_clean(r, sizeof(*r));
 }
-#endif /* CY_CORE_CM7_1 */
+#endif

@@ -1,124 +1,51 @@
-/* ===== code/navigation.h ===== */
-/*
- * nagivation.h
- *
- *  Created on: 2024年10月16日
- *      Author: Monst
- */
 #ifndef _NAVIGATION_H_
 #define _NAVIGATION_H_
-//*********************用户宏定义****************************//
-#define MaxSize 500    //flash存储数组页数
-#define Read_MaxSize 10000//导航读取数组，1w个应该是够了
-//存储范围 <0 - 47>
-#define Nag_End_Page 1      //flash结束页数
-#define Nag_Start_Page 45   //flash开始页数
-/* 速度积分式里程计参数：
- * 1. Nag_Set_mileage 表示每隔多少“距离单位”记录/回放一次 yaw，当前按 cm 理解；
- * 2. Nag_Speed_Source 为当前选用的前向速度源，先继续使用 car_speed（左右轮 RPM 平均）；
- * 3. Nag_Speed_To_Mileage_Scale = 2π·WHEEL_RADIUS_CM/60，将 RPM 换算为 cm/s；换轮改 WHEEL_RADIUS_CM；
- * 4. Nag_Sample_Dt 必须与 Nag_System() 的真实调用周期严格一致。
- *    当前 Nag_System() 固定在 pit0_ch0_isr 的 1ms 中断里跑，因此这里必须是 0.001s。
- *    若 car_speed 非 RPM 或有减速比，改半径后仍建议卷尺短距离实测微调。
- */
-#define WHEEL_RADIUS_CM 3.73f             //驱动轮半径（cm）；3.64 为卡尺值，60cm 实车微调 +2.5%
-#define Nag_Set_mileage 2.0f              //每隔 2cm 记录一次 yaw
-#define Nag_Prev 200                      //保留的历史/预读缓存长度
-#define Nag_Yaw euler_angle.yaw           //航向角度取偏航角
-#define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
-#define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
-#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
-#define Nag_Speed_Deadband 1.0f           //速度死区，抑制静止噪声
-#define Nag_Reissue_Error 0.5f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
-/*
- * 纯惯导里程纠偏（打滑/单轮空转）：
- * 1. 仅在 Nag_GetMileageStep() 走 car_speed 积分路径时启用；融合位移有效时不介入；
- * 2. 策略：瞬时保护 -> 状态确认 -> 回溯纠偏；不处理台阶开环跳跃腾空；
- * 3. 判据：左右轮速度 + gyro_z 重建中心速度一致性；轮距为左右驱动轮中心横向间距（cm）。
- */
+#define MaxSize 500
+#define Read_MaxSize 10000
+#define Nag_End_Page 1
+#define Nag_Start_Page 45
+#define WHEEL_RADIUS_CM 3.73f
+#define Nag_Set_mileage 2.0f
+#define Nag_Prev 200
+#define Nag_Yaw euler_angle.yaw
+#define Nag_Sample_Dt 0.001f
+#define Nag_Speed_Source car_speed
+#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)
+#define Nag_Speed_Deadband 1.0f
+#define Nag_Reissue_Error 0.5f
 #define Nag_OdoSlip_Enable 1u
-/* 轮距（cm）：左右驱动轮滚动中心线间距；宽胎以轮中面测量，外八/内八明显时用圆弧实车微调 */
 #define Nag_Wheel_Track_Cm 16.0f
-/*
- * 左右反推中心速度一致性阈值（cm/s）。
- * 调大：更少触发保护/打滑，但短时空转可能漏检；调小：更敏感，正常弯道易误报。
- */
 #define Nag_OdoSlip_Consistency_Th_Cmps 60.0f
-/* 单拍瞬时保护：候选中心速度相对上一拍可信速度的最大允许跳变（cm/s） */
 #define Nag_OdoSlip_Instant_Slew_Max_Cmps 120.0f
-/* 进入/退出打滑态连续计数（1ms/次）；调大进入更稳、退出更慢 */
 #define Nag_OdoSlip_Enter_Count 10u
 #define Nag_OdoSlip_Exit_Count 25u
-/* 短历史窗口（ms），用于确认后回溯扣账 */
 #define Nag_OdoSlip_History_Len 15u
-/* 单次回溯补扣上限（cm），防止异常数据一次拉回过多 Run_index */
 #define Nag_OdoSlip_Rollback_Max_Cm 6.0f
-/*
- * 惯导回放融合里程辅助（nav_fusion）：
- * 1=Run_index 推进优先用融合位移(cm)，长距离/元素停车后漂移更小；0=纯 car_speed 积分。
- * 录制/回放 KEY 流程不变；融合模式下先 GPS 原点平均，再锁定发车 yaw 直行 5m 标定北向偏角。
- * 纯惯导（g_menu_nav_fusion_enable=0 或 NAG_USE_FUSION_MILEAGE=0）不受影响。
- */
 #define NAG_USE_FUSION_MILEAGE 1u
-/* 速度调试旁路：
- * 1. 置 1 后，即使导航未进入回放态，也允许速度环直接使用 motor_user_speed_cmd；
- * 2. 仅用于直道阶跃调 PID，比赛/正式回放前务必改回 0；
- * 3. 打开后 Nag_GetControlSpeedTarget() 会绕过 Nag_SystemRun_Index==3 的门控。
- */
 #define Nag_Debug_Speed_Bypass_Enable 0u
-/* 惯导录制态遥控速度（Nag_GetControlSpeedTarget 内联门控，非全局旁路）：
- * 1. 需 MENU_INPUT_REMOTE_MENU_FIRST==1、Nag_SystemRun_Index==1 且 End_f==0、LORA 在线（remote_lora_steer_snapshot_valid）；
- * 2. 速度环目标直接跟随遥控 left_y 映射的 motor_user_speed_cmd，掉线立即停车；
- * 3. 与 Nag_Debug_Speed_Bypass_Enable 独立，正式录制可用、调试旁路仍保持关闭。
- */
-#define Nag_AdaptiveLookahead_Enable 1u  /* 0=关闭下列速度自适应前瞻与弯道限速；1=启用 Nag_Lookahead_* / Nag_Curve_* */
-/* 速度自适应前瞻参数（仅当 Nag_AdaptiveLookahead_Enable==1 时参与 Nag_UpdatePreviewAndSpeedTarget 计算）：
- * 1. Run_index 代表“已经沿轨迹推进到的里程点”；
- * 2. Prospect_index 代表“真正用于转向控制的预瞄点”；
- * 3. 低速时前瞻短，高速时前瞻长；若前瞻过大容易切弯过早，过小则高速左右摆头明显。
- */
+#define Nag_AdaptiveLookahead_Enable 1u
 #define Nag_Lookahead_Base_Points 3u
-#define Nag_Lookahead_Speed_Gain 0.010f     // 前向速度 -> 额外前瞻点增益（速度越快前瞻越远）
-#define Nag_Lookahead_Max_Points 24u        // 前瞻点上限，避免高速时前瞻过大导致切弯过早
-#define Nag_Curve_Lookahead_Extra 10u       // 弯道强度估计时额外向前看的点数（启用自适应前瞻时有效）
-/* 基于“前方 yaw 变化量”的简单弯道强度估计（仅当 Nag_AdaptiveLookahead_Enable==1 时使用）。
- * 当前先不把 curvature 持久化到 flash，而是直接用 Nav_read[] 前后点的 yaw 差来限速。
- */
-#define Nag_Curve_Threshold_Straight 8.0f   // 进入“普通弯道”判定阈值（deg）
-#define Nag_Curve_Threshold_Sharp 16.0f     // 进入“急弯”判定阈值（deg）
-#define Nag_Speed_Ratio_Curve 0.9f         // 普通弯道目标速度倍率（基于 motor_user_speed_cmd）
-#define Nag_Speed_Ratio_Sharp 0.8f         // 急弯目标速度倍率（基于 motor_user_speed_cmd）
-#define Nag_Event_Speed_Ratio 0.35f         // 元素执行期间速度倍率上限（未切入自定义元素逻辑时的保护）
-/* 元素调速总开关与距离换算：
- * 1. 提前加/减速距离均以 cm 配置，运行时由 Nag_DistanceToPoints() 按 Nag_Set_mileage 换算成导航点数；
- * 2. 实际比较仍使用 enter_index - Run_index 这类索引差，标定时只需关心物理距离；
- * 3. 元素前预减速、元素后预加速：进入 PreDecel / PreAccel 距离窗口后立即设为目标速度（非线性渐变）；
- * 4. 调速链挂在 Nag_GetControlSpeedTarget() / Nag_ApplyEventSpeedAdjustments()；
- * 5. 调试建议观察 VOFA 组 1：speed_target_effective / car_speed；组 3：里程纠偏/打滑（菜单 n 切组）。
- */
-#define Nag_EventSpeed_Enable 1u               // 元素调速总开关：1=开启，0=关闭
-/* SPIN / 折返进出口 / ENTER_CONES：Launch 页可调的运行时参数（默认值见 *_DEFAULT） */
+#define Nag_Lookahead_Speed_Gain 0.010f
+#define Nag_Lookahead_Max_Points 24u
+#define Nag_Curve_Lookahead_Extra 10u
+#define Nag_Curve_Threshold_Straight 8.0f
+#define Nag_Curve_Threshold_Sharp 16.0f
+#define Nag_Speed_Ratio_Curve 0.9f
+#define Nag_Speed_Ratio_Sharp 0.8f
+#define Nag_Event_Speed_Ratio 0.35f
+#define Nag_EventSpeed_Enable 1u
 #define Nag_Spin_Target_Speed_Default 1.0f
 #define Nag_Spin_PreDecel_Dist_cm_Default 150.0f
 #define Nag_Spin_Rate_Max_Dps_Default 200.0f
 extern float nag_spin_target_speed;
 extern float nag_spin_pre_decel_dist_cm;
-#define Nag_Spin_PreAccel_Dist_cm 0.0f        // 自旋完成后恢复速度的提前加速距离（Launch 页不调节）
-/*
- * Spin 触发区域（cm）：不是预减速距离，仅决定“允许提前触发自旋元素”的物理范围。
- * 当 Run_index 距前方未消费 Spin 的 enter_index <= 该距离时，可进入 Spin 元素态；
- * 等待减速期 Run_index 仍按里程推进；自旋完成后从起转前锁存的 Spin_Resume_RunIndex 恢复，
- * 不按录制 enter_index 或 enter_index+1 跳点。Event_Consumed 防止提前/滞后后再次触发同一点。
- * 停稳判定仍由 Nag_Hook_Spin_Run() 在元素内完成；预减速继续用 nag_spin_pre_decel_dist_cm。
- */
+#define Nag_Spin_PreAccel_Dist_cm 0.0f
 #define Nag_Spin_Trigger_Window_cm 30.0f
-/* 折返入弯：Launch 可调 */
 #define Nag_EnterTurn_Target_Speed_Default 220.0f
 #define Nag_EnterTurn_PreDecel_Dist_cm_Default 0.0f
 extern float nag_enter_turn_target_speed;
 extern float nag_enter_turn_pre_decel_dist_cm;
-/* 折返出弯：Launch 可调（语义同 EXIT_CONES） */
-#define Nag_ExitTurn_Recovery_Speed_Default 0.0f   /* 0=恢复基础导航速度 */
+#define Nag_ExitTurn_Recovery_Speed_Default 0.0f
 #define Nag_ExitTurn_PreAccel_Dist_cm_Default 0.0f
 extern float nag_exit_turn_recovery_speed;
 extern float nag_exit_turn_pre_accel_dist_cm;
@@ -126,22 +53,16 @@ extern float nag_exit_turn_pre_accel_dist_cm;
 #define Nag_EnterCones_PreDecel_Dist_cm_Default 50.0f
 extern float nag_enter_cones_target_speed;
 extern float nag_enter_cones_pre_decel_dist_cm;
-/* EXIT_CONES：锥桶出口恢复速度与提前加速距离（cm） */
-#define Nag_ExitCones_Recovery_Speed 0.0f       // 0=恢复到基础导航速度；>0 则恢复到该固定速度
-#define Nag_ExitCones_PreAccel_Dist_cm 20.0f    // 接近锥桶出口前开始恢复/加速的距离
-/* 单边桥进/出（ENTER/EXIT_SINGLE_BRIDGE）：BridgeIn 立即白块进桥；BridgeOut 仅里程接回锚点 */
-#define Nag_EnterBridge_Target_Speed_Default 500.0f   // 桥进目标速度（Launch/Flash 可调）
-#define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f // 桥进前预减速距离（cm）
-#define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
-#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出标记：恢复腿长
-#define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
-/** 宽限后 track_valid=0 连续该时间（ms）确认出桥；1ms ISR 读快照，不依赖 fresh */
+#define Nag_ExitCones_Recovery_Speed 0.0f
+#define Nag_ExitCones_PreAccel_Dist_cm 20.0f
+#define Nag_EnterBridge_Target_Speed_Default 500.0f
+#define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f
+#define Nag_EnterBridge_Leg_Long 5.5f
+#define Nag_ExitBridge_Leg_Long 3.5f
+#define Nag_ExitBridge_Recovery_Speed 0.0f
 #define BRIDGE_BLOB_LOST_EXIT_MS        250u
-/** 进桥后该时间内禁止出桥判定（ms），给 CM7_1 启动 blob 与腿高步进留时间 */
 #define BRIDGE_ENTER_GRACE_MS           400u
-/** 进桥宽限后该时间仍没有 CM7_1 白块新帧，则退出桥区，避免视觉任务关闭时卡死 */
 #define BRIDGE_BLOB_NO_FRAME_EXIT_MS    1000u
-/** 单边桥白块中心误差 -> yaw 偏移，放在导航元素内消费，避免主循环抢 fresh */
 #define Nag_BridgeBlob_Yaw_K_Pixel      0.22f
 #define Nag_BridgeBlob_Yaw_Max_Offset   30.0f
 #define Nag_BridgeBlob_Yaw_Deadband     0.1f
@@ -149,60 +70,38 @@ extern float nag_enter_bridge_target_speed;
 extern float nag_enter_bridge_pre_decel_dist_cm;
 #define Nag_Bump_Target_Speed 220.0f
 #define Nag_Bump_PreDecel_Dist_cm 0.0f
-/*
- * 台阶双点录制（惯导回放）：
- * 1) KEY4 切 EnterStair，上台阶前打点（Ein）；
- * 2) 三级跳稳定后 KEY4 切 ExitStair 打点（Eout）；
- * 3) 回放：ENTER~EXIT 间 flash 路径不推进 Run_index；EXIT 完成后从 Eout+1 接回惯导。
- * 见 Nag_FindPairedExitStairMarker / Nag_ComputeStairResumeIndex（navigation.c）。
- */
-/* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 前回溯 yaw 均值；见 Nag_Hook_EnterStair_* */
-#define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
-#define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
-#define Nag_EnterStair_Yaw_Lookback_cm 20.0f     // 锁航向：enter_index 向前该距离内 Nav_read yaw 圆均值
-#define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f  // 进入台阶预减速默认（cm）；Launch/Flash 可调
+#define Nag_EnterStair_Target_Speed 300.0f
+#define Nag_EnterStair_Leg_Long 5.5f
+#define Nag_EnterStair_Yaw_Lookback_cm 20.0f
+#define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f
 extern float nag_enter_stair_pre_decel_dist_cm;
-#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 lookback 均值）
-/* 退出台阶元素（EXIT_STAIR）：三次跳跃完成后软件链式切入；见 Nag_Hook_ExitStair_* */
-#define Nag_ExitStair_Leg_Long 3.5f              // 退出后恢复腿长
-#define Nag_Stair_Jump_Exit_Count 3u             // 进入台阶内完成该次数跳跃后切 EXIT
-#define Nag_HeadingHold_ExitStair_Enable 0u      // 退出后立即交还惯导 yaw
-/* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
- * 1. yaw 轨迹仍放在页 2~45；
- * 2. Save_index 仍放在页 1；
- * 3. 元素表单独放在 Nag_Event_Page，避免和导航元数据页混在一起；
- * 4. 事件页头的 Nag_Event_Version 与固件不一致时整块表不装载（枚举 type 语义变更时需升版并重录）。
- */
+#define Nag_HeadingHold_EnterStair_Enable 1u
+#define Nag_ExitStair_Leg_Long 3.5f
+#define Nag_Stair_Jump_Exit_Count 3u
+#define Nag_HeadingHold_ExitStair_Enable 0u
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
-#define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 5u            // v5：SINGLE_BRIDGE 拆为 ENTER/EXIT_SINGLE_BRIDGE；旧事件表需重录
-/* Run Launch 参数页（页 47）：
- * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
- * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel；
- * v8：v7 + bridge_in speed/decel；v9：v8 + Nag_Vofa_Group @ [18]；
- * v10：v9 + g_menu_nav_fusion_enable @ [19]。
- */
+#define Nag_Event_Magic 0x4E414745u
+#define Nag_Event_Version 5u
 #define Nag_Run_Launch_Speed_Page 47u
-#define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
-#define Nag_Run_Launch_Speed_Version 1u          /* 旧版：仅 speed */
-#define Nag_Run_Launch_Params_Version 2u         /* v2：7 个 float */
-#define Nag_Run_Launch_Params_Version_V3 3u      /* v3：9 个 float */
-#define Nag_Run_Launch_Params_Version_V4 4u      /* v4：10 个 float */
-#define Nag_Run_Launch_Params_Version_V5 5u      /* v5：10 float + input mode */
-#define Nag_Run_Launch_Params_Version_V6 6u      /* v6：v5 + vofa enable */
-#define Nag_Run_Launch_Params_Version_V7 7u      /* v7：v6 + enter_stair pre_decel */
-#define Nag_Run_Launch_Params_Version_V8 8u      /* v8：v7 + bridge_in speed/decel */
-#define Nag_Run_Launch_Params_Version_V9 9u      /* v9：v8 + vofa debug group */
-#define Nag_Run_Launch_Params_Version_V10 10u    /* v10：v9 + nav fusion enable */
+#define Nag_Run_Launch_Speed_Magic 0x524C5350u
+#define Nag_Run_Launch_Speed_Version 1u
+#define Nag_Run_Launch_Params_Version 2u
+#define Nag_Run_Launch_Params_Version_V3 3u
+#define Nag_Run_Launch_Params_Version_V4 4u
+#define Nag_Run_Launch_Params_Version_V5 5u
+#define Nag_Run_Launch_Params_Version_V6 6u
+#define Nag_Run_Launch_Params_Version_V7 7u
+#define Nag_Run_Launch_Params_Version_V8 8u
+#define Nag_Run_Launch_Params_Version_V9 9u
+#define Nag_Run_Launch_Params_Version_V10 10u
 #define Nag_Run_Launch_Param_Count 13u
-#define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
-#define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
-#define Nag_Run_Launch_Config_Word_Count_V7 13u  /* v7：11 float + 2 config word */
-#define Nag_Run_Launch_Config_Word_Count_V8 15u  /* v8：13 float + 2 config word */
-#define Nag_Run_Launch_Config_Word_Count_V9 16u  /* v9：v8 + Nag_Vofa_Group @ [18] */
-#define Nag_Run_Launch_Config_Word_Count 17u     /* v10：v9 + g_menu_nav_fusion_enable @ [19] */
-/* Launch 页字段索引（与 flash 顺序一致） */
+#define Nag_Run_Launch_Config_Word_Count_V5 11u
+#define Nag_Run_Launch_Config_Word_Count_V6 12u
+#define Nag_Run_Launch_Config_Word_Count_V7 13u
+#define Nag_Run_Launch_Config_Word_Count_V8 15u
+#define Nag_Run_Launch_Config_Word_Count_V9 16u
+#define Nag_Run_Launch_Config_Word_Count 17u
 #define Nag_Launch_Field_Base_Spd 0u
 #define Nag_Launch_Field_Spin_Spd 1u
 #define Nag_Launch_Field_Spin_Dec 2u
@@ -214,13 +113,12 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Launch_Field_Cone_Dec 8u
 #define Nag_Launch_Field_Spin_Rate 9u
 #define Nag_Launch_Field_Stair_Dec 10u
-#define Nag_Launch_Field_BridgeIn_Spd 11u   /* 单边桥进目标速度 */
-#define Nag_Launch_Field_BridgeIn_Dec 12u   /* 单边桥进预减速距离（cm） */
+#define Nag_Launch_Field_BridgeIn_Spd 11u
+#define Nag_Launch_Field_BridgeIn_Dec 12u
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
 void Nag_LaunchParamAdjust(uint8 field_index, float delta);
 void Nag_LaunchParamApplyDefaults(void);
-/* CM7_1 不链接 navigation.c，Launch 菜单步进判断放头文件内联 */
 static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
 {
     return (uint8)((field_index == Nag_Launch_Field_Base_Spd) ||
@@ -246,39 +144,14 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
     }
     return 10.0f;
 }
-/* 自转元素示范参数：
- * 这组参数只是给默认的 Nag_Hook_Spin_* 一个“能跑通模板”的最小接法，
- * 后续你可以把它改成来自菜单、事件参数表，或完全替换成自己的实现。
- */
 #define Nag_Spin_Demo_Turns 2.0f
 #define Nag_Spin_Demo_Dir 1
-#define Nag_Spin_Stop_Speed_Threshold 30.0f // 当前速度低于该值时视为进入低速区
-#define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
-/*
- * Spin 分阶段策略（实现见 Nag_Spin_ShouldTrackInsYaw / Run_Nag_GPS / Nag_Hook_Spin_Run）：
- * - 等待减速期：Run_index 与 Angle_Run 仍按里程/前瞻推进；
- * - spin_task_start 起转后：冻结 Run_index，锁存 Spin_Resume_RunIndex，融合里程快照同步；
- * - 自旋完成：从 Spin_Resume_RunIndex 接回惯导，Event_Consumed 防重复触发；
- * - 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制。
- */
-/* 元素航向保持配置：
- * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw；
- * 2. ISR 会在 steer_yaw_request_pending 消费前，按需重新登记该固定目标；
- * 3. 自旋元素：等待期由 Nag_Run 继续跟踪 Angle_Run；起转后 spin_enable 接管，见 Nag_HeadingHold_Spin_Enable 说明；
- * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
- */
-#define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
-#define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
-#define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
-#define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
-//********************************************************//
-/* 元素类型枚举：
- * 与 flash 事件表每条记录的 type 字节一致；Nag_Cycle_Record_Event_Type() 在 0..COUNT-1 间循环。
- * 折返/锥桶进/出口：惯导路径上的分段标记；区段调速见对应 Launch 参数或宏。
- */
-/* GPS 路点统一元素（Normal=0，惯导 Spin~StairOut 后移一位；END 仅末点自动标记）：
- * u32yuansu[] / gps_current_yuansu 存此枚举；执行时 Nav_UnifiedToInsEvent() 映射到 Nag_Event_Type。
- */
+#define Nag_Spin_Stop_Speed_Threshold 30.0f
+#define Nag_Spin_Stop_Stable_Count 15u
+#define Nag_HeadingHold_Reissue_Error 2.0f
+#define Nag_HeadingHold_Spin_Enable 0u
+#define Nag_HeadingHold_EnterTurn_Enable 0u
+#define Nag_HeadingHold_Bump_Enable 0u
 typedef enum
 {
     NAV_ELEM_NORMAL = 0,
@@ -348,19 +221,18 @@ static inline const char *Nav_GetUnifiedElementName(uint8 unified)
 }
 typedef enum
 {
-       NAG_EVENT_TYPE_SPIN = 0,              // 原地自旋元素
-       NAG_EVENT_TYPE_ENTER_TURNAROUND = 1,  // 折返入弯标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_EXIT_TURNAROUND = 2,   // 折返出弯标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_ENTER_CONES = 3,       // 进入锥桶标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
-       NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE = 5, // 单边桥进：惯导路径标记，leg=5.5，开横滚平衡
-       NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE = 6,  // 单边桥出：惯导路径标记，leg=3.5，关横滚，恢复基准速度
-       NAG_EVENT_TYPE_BUMP = 7,              // 减速带/颠簸元素
-       NAG_EVENT_TYPE_ENTER_STAIR = 8,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
-       NAG_EVENT_TYPE_EXIT_STAIR = 9,        // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
-       NAG_EVENT_TYPE_COUNT = 10,            // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_SPIN = 0,
+       NAG_EVENT_TYPE_ENTER_TURNAROUND = 1,
+       NAG_EVENT_TYPE_EXIT_TURNAROUND = 2,
+       NAG_EVENT_TYPE_ENTER_CONES = 3,
+       NAG_EVENT_TYPE_EXIT_CONES = 4,
+       NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE = 5,
+       NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE = 6,
+       NAG_EVENT_TYPE_BUMP = 7,
+       NAG_EVENT_TYPE_ENTER_STAIR = 8,
+       NAG_EVENT_TYPE_EXIT_STAIR = 9,
+       NAG_EVENT_TYPE_COUNT = 10,
 } Nag_Event_Type;
-/* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
 static inline const char *Nag_GetEventTypeName(uint8 event_type)
 {
     switch (event_type)
@@ -378,153 +250,142 @@ static inline const char *Nag_GetEventTypeName(uint8 event_type)
         default: return "Unknown";
     }
 }
-/* 元素状态机枚举（全局一条状态机）：
- * 由各元素共用的 Nag_Element_StateMachine() 在回放、Event_Active 期间每周期调用；
- * Start 返回 false 时可长期停在 ENTERED，直至人工恢复或重写钩子。
- */
 typedef enum
 {
-       NAG_EVENT_STATE_IDLE = 0,      // 空闲态：当前没有元素接管（Event_Active=0）
-       NAG_EVENT_STATE_ENTERED = 1,    // 已到达 enter_index，已执行一次 Nag_Element_Start
-       NAG_EVENT_STATE_RUNNING = 2,   // Start 已为 true：周期 Nag_Element_Run，直到 IsDone
-       NAG_EVENT_STATE_DONE = 3,      // IsDone：下一拍 Nag_Notify_Event_Done() 恢复惯导
-       NAG_EVENT_STATE_ABORT = 4,     // 中止：Nag_Element_Stop 清理后由调用方收尾
+       NAG_EVENT_STATE_IDLE = 0,
+       NAG_EVENT_STATE_ENTERED = 1,
+       NAG_EVENT_STATE_RUNNING = 2,
+       NAG_EVENT_STATE_DONE = 3,
+       NAG_EVENT_STATE_ABORT = 4,
 } Nag_Event_State;
 typedef struct
 {
-       uint16 enter_index;   //回放触发点；单点录制时与 exit_index 相同
-       uint16 exit_index;    //恢复索引；单点录制时与 enter_index 相同，旧双点录制可大于 enter_index
-       uint8 type;           //元素类型，当前主要用于调试显示/人工分辨
-       uint8 valid;          //1 表示这一条元素段有效
+       uint16 enter_index;
+       uint16 exit_index;
+       uint8 type;
+       uint8 valid;
 } NagEvent;
 typedef struct{
-       float Final_Out; //导航输出
-       float Mileage_All;   //里程计累加
-       float Mileage_Step;  //本周期位移增量
-       float Mileage_Debug_Total; //调试用累计总路程
-       float Speed_Forward; //当前用于积分的前向速度
-       float Curve_Strength; //前方弯道强度（由前方 yaw 变化量估算）
-       float Target_Speed; //导航根据路况计算出的原始目标速度
-       float Angle_Run; //取偏航角
-       float Requested_Target_Yaw; //最近一次下发给 steer 的目标航向
-       bool Nag_Stop_f; //走到终点flag
-       uint8 Target_Request_Valid; //目标航向是否已下发
-       uint8 Flash_read_f;//走到终点读取flag
-       uint16 size; //导航数组大小，通过计数
+       float Final_Out;
+       float Mileage_All;
+       float Mileage_Step;
+       float Mileage_Debug_Total;
+       float Speed_Forward;
+       float Curve_Strength;
+       float Target_Speed;
+       float Angle_Run;
+       float Requested_Target_Yaw;
+       bool Nag_Stop_f;
+       uint8 Target_Request_Valid;
+       uint8 Flash_read_f;
+       uint16 size;
        uint16 Run_index;
        uint16 Save_count;
-       uint16 Save_index;//保存flag
-       uint16 Prospect_index; //当前真正用于控制的前瞻点索引
-       uint16 Active_Event_Enter; //当前元素触发点，仅供调试查看
-       uint16 Active_Event_Exit; //当前元素恢复索引，仅供调试查看（单点与 enter 相同）
+       uint16 Save_index;
+       uint16 Prospect_index;
+       uint16 Active_Event_Enter;
+       uint16 Active_Event_Exit;
        uint8 Save_state;
-       uint8 End_f;//终点flag
-       //flash相关参数
-       uint8 Flash_page_index;//flash页索引
-       uint8 Flash_Save_Page_Index;//flash保存页索引
-       uint8 Nag_SystemRun_Index;   //导航执行索引
-       uint8 Event_Active; //1表示当前已切出惯导，元素逻辑正在接管
-       uint8 Event_Count; //当前已经录到多少个元素段
-       uint8 Event_Record_Pending; //保留字段，单点录制不再使用，始终为 0
-       uint8 Event_Record_Type; //录制阶段当前准备写入的元素类型
-       uint8 Event_Active_Index; //回放阶段当前正在执行的元素编号
-       uint8 Event_State; //元素状态机当前状态
-       uint8 Event_Start_Latched; //1表示当前元素的 Start 钩子已经执行过
-       uint8 Event_Done_Latched; //1表示当前元素报告完成，等待导航恢复
-       uint8 Event_Active_Type; //回放阶段当前元素类型，供调试观察
-       uint16 Event_Start_RunIndex; //当前元素开始接管时对应的 Run_index
-       uint16 Event_Trigger_RunIndex; //本次元素进入时的 Run_index（调试用；Spin 恢复不依赖此字段）
-       uint8 Event_Triggered_In_Window; //1=在 Spin 触发区域内提前触发；0=精确命中 enter_index
-       uint8 Event_Consumed[Nag_Event_Max]; //本轮回放各事件是否已执行，防止窗口触发后再次命中同一点
-       float Spin_Saved_SetSpeed; //自旋元素接管前保存的全局速度档位
-       uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
-       uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
-       uint16 Spin_Resume_RunIndex; //Spin 起转前锁存的路径索引，自旋完成后从此处继续惯导
-       uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 motor_user_speed_cmd，退出时需恢复
-       float Stair_Saved_Leg_Long; //进入台阶前备份的 leg_long，Stop/Done 时恢复
-       float Stair_Saved_SetSpeed; //进入台阶前备份的 motor_user_speed_cmd，Stop/Done 时恢复
-       float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
-       uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
-       uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
-       uint16 Stair_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Ein；0xFFFF=无效 */
-       float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
-       uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
-       uint8 Bridge_Zone_Active;      // 1=桥上白块引导中（进桥确认～出桥确认）
-       uint8 Bridge_Detect_Arm;       // 1=桥上，CM7_1 跑白块 detect（同 Zone_Active）
-       uint8 Bridge_Heading_Lock;     // 保留字段；新方案不再置位，Abort 时仍清理
-       uint8 Bridge_Expected;         // 保留字段；新方案不再置位，Abort 时仍清理
-       uint8 Bridge_Exit_Beep_Done;   // 本段桥已响出桥蜂鸣
-       float Bridge_Locked_Yaw;       // 保留字段；新方案不再使用 IMU 锁航
-       uint16 Bridge_Exit_Run_Index;  // 进桥时缓存配对 BridgeOut enter_index；0xFFFF=未配对
-       uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
-       uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
-       uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
-       uint8 HeadingHold_Event_Allowed; //1表示当前元素类型配置允许启用航向保持
-       float HeadingHold_Target_Yaw; //当前锁定的绝对航向目标，默认取进入元素瞬间的 euler_angle.yaw
-       /* 里程纠偏：瞬时保护 + 打滑确认 + 回溯扣账（详见 Nag_OdoSlip_* 宏） */
-       float Odo_Wheel_Left_Cmps;    //左轮前向线速度（cm/s），供 VOFA/调试
-       float Odo_Wheel_Right_Cmps;   //右轮前向线速度（cm/s）
-       float Odo_Gyro_Z_Dps;         //IMU Z 轴角速度（deg/s）
-       float Odo_Vc_From_L_Cmps;     //由左轮+gyro_z 反推的中心速度
-       float Odo_Vc_From_R_Cmps;     //由右轮+gyro_z 反推的中心速度
-       float Odo_Corrected_Speed_Cmps; //本拍纠偏后中心速度
-       float Odo_Raw_Step_Cm;        //未保护的本拍原始步长
-       float Odo_Protected_Step_Cm;  //瞬时保护后的本拍步长
-       float Odo_Last_Trust_Speed_Cmps; //最近可信中心速度
-       float Odo_Rollback_Pending_Cm;   //待补扣里程（cm）
-       float Odo_Rollback_Applied_Cm;   //累计已补扣（cm），调试用
-       float Odo_History_Raw[Nag_OdoSlip_History_Len];  //短窗原始步长
-       float Odo_History_Prot[Nag_OdoSlip_History_Len]; //短窗保护步长
-       uint8 Odo_Slip_State;         //Nag_OdoSlip_State 枚举值
-       uint8 Odo_Slip_Enter_Count;     //进入打滑计数
-       uint8 Odo_Slip_Exit_Count;      //退出打滑计数
-       uint8 Odo_History_Idx;          //历史环写指针
-       //临时未使用参数
-       int Prev_mile[Nag_Prev]; //前包
+       uint8 End_f;
+       uint8 Flash_page_index;
+       uint8 Flash_Save_Page_Index;
+       uint8 Nag_SystemRun_Index;
+       uint8 Event_Active;
+       uint8 Event_Count;
+       uint8 Event_Record_Pending;
+       uint8 Event_Record_Type;
+       uint8 Event_Active_Index;
+       uint8 Event_State;
+       uint8 Event_Start_Latched;
+       uint8 Event_Done_Latched;
+       uint8 Event_Active_Type;
+       uint16 Event_Start_RunIndex;
+       uint16 Event_Trigger_RunIndex;
+       uint8 Event_Triggered_In_Window;
+       uint8 Event_Consumed[Nag_Event_Max];
+       float Spin_Saved_SetSpeed;
+       uint16 Spin_Stop_Stable_Count;
+       uint8 Spin_Task_Started;
+       uint16 Spin_Resume_RunIndex;
+       uint8 Spin_Speed_Latched;
+       float Stair_Saved_Leg_Long;
+       float Stair_Saved_SetSpeed;
+       float Stair_Lookback_Yaw;
+       uint8 Stair_Jump_Completed_Count;
+       uint8 Stair_Chain_To_Exit;
+       uint16 Stair_Paired_Enter_Index;
+       float Bridge_Saved_Leg_Long;
+       uint8 Bridge_Saved_RollBalance;
+       uint8 Bridge_Zone_Active;
+       uint8 Bridge_Detect_Arm;
+       uint8 Bridge_Heading_Lock;
+       uint8 Bridge_Expected;
+       uint8 Bridge_Exit_Beep_Done;
+       float Bridge_Locked_Yaw;
+       uint16 Bridge_Exit_Run_Index;
+       uint8 HeadingHold_Enable;
+       uint8 HeadingHold_Request_Armed;
+       uint8 HeadingHold_Target_Latched;
+       uint8 HeadingHold_Event_Allowed;
+       float HeadingHold_Target_Yaw;
+       float Odo_Wheel_Left_Cmps;
+       float Odo_Wheel_Right_Cmps;
+       float Odo_Gyro_Z_Dps;
+       float Odo_Vc_From_L_Cmps;
+       float Odo_Vc_From_R_Cmps;
+       float Odo_Corrected_Speed_Cmps;
+       float Odo_Raw_Step_Cm;
+       float Odo_Protected_Step_Cm;
+       float Odo_Last_Trust_Speed_Cmps;
+       float Odo_Rollback_Pending_Cm;
+       float Odo_Rollback_Applied_Cm;
+       float Odo_History_Raw[Nag_OdoSlip_History_Len];
+       float Odo_History_Prot[Nag_OdoSlip_History_Len];
+       uint8 Odo_Slip_State;
+       uint8 Odo_Slip_Enter_Count;
+       uint8 Odo_Slip_Exit_Count;
+       uint8 Odo_History_Idx;
+       int Prev_mile[Nag_Prev];
 }Nag;
-/* 里程纠偏打滑状态 */
 typedef enum
 {
        NAG_ODO_SLIP_NORMAL = 0u,
-       NAG_ODO_SLIP_LEFT = 1u,   /* 左轮疑似空转，优先信右轮重建速度 */
-       NAG_ODO_SLIP_RIGHT = 2u,  /* 右轮疑似空转，优先信左轮重建速度 */
-       NAG_ODO_SLIP_BOTH = 3u,   /* 双侧不可信，保守限速/冻结 */
+       NAG_ODO_SLIP_LEFT = 1u,
+       NAG_ODO_SLIP_RIGHT = 2u,
+       NAG_ODO_SLIP_BOTH = 3u,
 } Nag_OdoSlip_State;
-extern Nag N;   //导航相关的结构体，用户开放参数
-extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
+extern Nag N;
+extern int32 Nav_read[Read_MaxSize];
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
-extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
-/* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑 */
+extern uint8 Nag_Vofa_Group;
 #define NAG_VOFA_GROUP_COUNT (4u)
-void Nag_OdoSlip_ResetState(void); /* 清零里程纠偏运行时态；Init_Nag/回放开始时调用 */
-void Nag_OdoSlip_ApplyPendingRollback(void); /* 将待补扣里程写回 Mileage_All/Run_index */
+void Nag_OdoSlip_ResetState(void);
+void Nag_OdoSlip_ApplyPendingRollback(void);
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,
     NAV_HEADING_MODE_GPS = 1u,
 } NavHeadingMode;
 extern uint8 nav_heading_mode;
-void Nag_Run(); //偏航角控制总函数
-uint8 Nag_BridgeDetectShouldArm(void); /* 1=Bridge_Zone_Active，供 CM7_1 白块门控 */
-void Nag_BridgeDetectUpdate(void);     /* 桥区白块 yaw + 新帧复位无帧超时 */
+void Nag_Run();
+uint8 Nag_BridgeDetectShouldArm(void);
+void Nag_BridgeDetectUpdate(void);
 void Nag_BridgeTimeoutTick1ms(void);
-void Run_Nag_GPS();//偏航角读取
-void NagFlashRead();   //Flash读取目标点数组
-void Run_Nag_Save();    //偏航角读取保存
-void Nag_Read();    //偏航角读取总函数
-//****************************//
-void Init_Nag();    //偏航角初始化，flash缓冲区初始化，索引初始化
-void Nag_Begin_Record(void); //开始录制前复位运行态
-void Nag_Begin_Replay(void); //开始复现前复位运行态
-/* 原点平均采集完成后调用：flash 已就绪且融合 valid 时进入 index=3 并赋速 */
+void Run_Nag_GPS();
+void NagFlashRead();
+void Run_Nag_Save();
+void Nag_Read();
+void Init_Nag();
+void Nag_Begin_Record(void);
+void Nag_Begin_Replay(void);
 void Nag_CompleteReplayAfterOrigin(void);
-void Nag_Request_Stop_Record(void); //录制结束请求
-void Nag_Request_Event_Mark(void); /* 录制：单击在当前 Save_index 保存一条有效元素事件 */
-void Nag_Cycle_Record_Event_Type(void); /* 录制：N.Event_Record_Type 加一模 NAG_EVENT_TYPE_COUNT */
-void Nag_Notify_Event_Done(void); /* 元素完成：恢复 Run_index 并清 Event_Active，继续惯导前瞻 */
-void Nag_NotifyStairJumpDone(void); /* jump_control 时序正常结束时调用；ENTER_STAIR 内计数 */
-void Nag_Element_Abort(void); //异常/手动中止当前元素，清理状态并停留在当前元素态
-float Nag_GetDebugReadYaw(void); //安全读取当前回放目标 yaw
-float Nag_GetControlSpeedTarget(void); //给速度环的目标速度，叠加弯道限速、元素区段调速与提前加减速
+void Nag_Request_Stop_Record(void);
+void Nag_Request_Event_Mark(void);
+void Nag_Cycle_Record_Event_Type(void);
+void Nag_Notify_Event_Done(void);
+void Nag_NotifyStairJumpDone(void);
+void Nag_Element_Abort(void);
+float Nag_GetDebugReadYaw(void);
+float Nag_GetControlSpeedTarget(void);
 bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
                                     float *target_speed,
                                     float *pre_decel_dist_cm,
@@ -532,14 +393,13 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
 float GPS_ApplyEventSpeedAdjustments(float nav_speed);
 void Nag_EventPrepareEnter(uint8 event_type);
 void Nag_EventForceReset(void);
-uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
-bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
-float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标
-bool Nag_Element_Start(uint8 event_type); /* event_type：N.Event_Active_Type；true 则进入 RUNNING */
+uint16 Nag_GetDebugProspectIndex(void);
+bool Nag_HeadingHold_ShouldRequest(void);
+float Nag_HeadingHold_GetTargetYaw(void);
+bool Nag_Element_Start(uint8 event_type);
 void Nag_Element_Run(uint8 event_type);
-bool Nag_Element_IsDone(uint8 event_type); /* true：本周期转入 DONE 并随后 Nag_Notify_Event_Done */
-void Nag_Element_Stop(uint8 event_type);   /* 中止/完成清理：先退出锁航再调具体 Stop */
-/* 折返进/出口：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导 */
+bool Nag_Element_IsDone(uint8 event_type);
+void Nag_Element_Stop(uint8 event_type);
 bool Nag_Hook_EnterTurn_Start(void);
 void Nag_Hook_EnterTurn_Run(void);
 bool Nag_Hook_EnterTurn_IsDone(void);
@@ -552,7 +412,6 @@ bool Nag_Hook_Spin_Start(void);
 void Nag_Hook_Spin_Run(void);
 bool Nag_Hook_Spin_IsDone(void);
 void Nag_Hook_Spin_Stop(void);
-/* 单边桥进/出：惯导路径标记（同锥桶），Start 置真、首拍 IsDone 真；桥进设腿长/横滚，区段调速见 Nag_ApplyBridgeZoneSpeed */
 bool Nag_Hook_EnterBridge_Start(void);
 void Nag_Hook_EnterBridge_Run(void);
 bool Nag_Hook_EnterBridge_IsDone(void);
@@ -574,7 +433,6 @@ bool Nag_Hook_ExitStair_Start(void);
 void Nag_Hook_ExitStair_Run(void);
 bool Nag_Hook_ExitStair_IsDone(void);
 void Nag_Hook_ExitStair_Stop(void);
-/* 锥桶：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导，供后续按 Run_index/事件表做区段限速 */
 bool Nag_Hook_EnterCones_Start(void);
 void Nag_Hook_EnterCones_Run(void);
 bool Nag_Hook_EnterCones_IsDone(void);
@@ -583,17 +441,8 @@ bool Nag_Hook_ExitCones_Start(void);
 void Nag_Hook_ExitCones_Run(void);
 bool Nag_Hook_ExitCones_IsDone(void);
 void Nag_Hook_ExitCones_Stop(void);
-void Nag_System();  //偏航角函数的封装，包装进中断小
-#endif /* _NAVIGATION_H_ */
-/* ===== code/navigation.c ===== */
-/*
- * navigation.c
- *
- *  Created on: 2024年10月16日
- *      Author: Monst
- *
- *
- */
+void Nag_System();
+#endif
 #include "zf_common_headfile.h"
 #include "navigation.h"
 #include "nav_fusion.h"
@@ -609,8 +458,8 @@ void Nag_System();  //偏航角函数的封装，包装进中断小
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points);
 static uint16 Nag_DistanceToPoints(float distance_cm);
 static uint16 s_bridge_blob_lost_ms;
-static uint16 s_bridge_enter_grace_ms;   /* 进桥宽限计时（ms），Nag_BridgeTimeoutTick1ms 递增 */
-static uint16 s_bridge_blob_no_frame_ms; /* 进桥后无 CM7_1 白块新帧保护计时 */
+static uint16 s_bridge_enter_grace_ms;
+static uint16 s_bridge_blob_no_frame_ms;
 static bool Nag_GetActiveBridgeZone(uint16 run_index,
                                     uint16 *enter_index,
                                     uint16 *exit_index,
@@ -619,16 +468,14 @@ static void Nag_UpdatePreviewAndSpeedTarget(void);
 static void Nag_BridgeConfirmEnter(void);
 static void Nag_BridgeConfirmExit(uint8 allow_beep);
 static void Nag_BridgeApplyBlobYaw(float center_err, uint8 track_valid);
-int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
+int32 Nav_read[Read_MaxSize];
 Nag N;
 uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
-/* 惯导回放：flash 读完置 1；与原点采集均完成后才进入 index=3 */
 static uint8 g_nag_replay_flash_ready = 0u;
 #endif
-/* Launch 页可调：无元素速度仍用 control.c 的 run_launch_speed */
 float nag_spin_target_speed = Nag_Spin_Target_Speed_Default;
 float nag_spin_pre_decel_dist_cm = Nag_Spin_PreDecel_Dist_cm_Default;
 float nag_enter_turn_target_speed = Nag_EnterTurn_Target_Speed_Default;
@@ -757,10 +604,6 @@ static void Nag_HeadingHold_Enable(float target_yaw)
     N.HeadingHold_Target_Yaw = target_yaw;
     N.HeadingHold_Target_Latched = 1u;
     N.HeadingHold_Enable = 1u;
-    /* 这里不直接反复调用 steer_set_target_yaw()。
-     * 统一通过 ISR 前置登记请求，再走现有 pending -> consume 链路，
-     * 可以继续复用 spin_enable 的互斥保护，避免普通转向与自旋直接抢控制权。
-     */
     N.HeadingHold_Request_Armed = 1u;
 }
 static void Nag_HeadingHold_Disable(void)
@@ -774,25 +617,18 @@ static void Nag_HeadingHold_Disable(void)
 }
 static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
 {
-    /* event_type：切入时刻的 N.Event_Active_Type（与 flash 表中 type 一致）。 */
     N.HeadingHold_Event_Allowed = Nag_GetHeadingHoldConfig(event_type) ? 1u : 0u;
     if (!N.HeadingHold_Event_Allowed)
     {
         Nag_HeadingHold_Disable();
         return;
     }
-    /* ENTER_STAIR：锁航向目标在 Nag_Hook_EnterStair_Start 内按 enter_index 前 lookback 圆均值设置。 */
     if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
     {
         return;
     }
-    /* 其它元素：锁定进入瞬间的实测 yaw。 */
     Nag_HeadingHold_Enable((float)euler_angle.yaw);
 }
-/*
- * Spin 等待期（已 Event_Active 但尚未 spin_task_start）：继续惯导路径 yaw 跟踪。
- * 仅 spin_enable==1 起转后由 spin_cmd 接管，避免减速/刹停阶段无航向闭环而乱走。
- */
 static uint8 Nag_Spin_ShouldTrackInsYaw(void)
 {
     return (uint8)(N.Event_Active &&
@@ -805,9 +641,6 @@ void Nag_EventPrepareEnter(uint8 event_type)
     N.Target_Request_Valid = 0u;
     steer_yaw_request_pending = 0u;
     steer_yaw_delayed_by_spin = 0u;
-    /* 折返/锥桶：沿路惯导，不 steer_task_stop。Spin 等待期需继续跟踪 Angle_Run，也不 stop。
-     * ENTER_STAIR 等接管元素仍 stop，避免与锁航向抢转向。
-     */
     if (event_type != NAG_EVENT_TYPE_ENTER_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_EXIT_TURNAROUND &&
         event_type != NAG_EVENT_TYPE_ENTER_CONES &&
@@ -819,7 +652,6 @@ void Nag_EventPrepareEnter(uint8 event_type)
     {
         steer_task_stop();
     }
-    /* Spin 等待期仍推进 Run_index；融合里程快照改在起转瞬间同步，见 Nag_Hook_Spin_Run()。 */
     Nag_HeadingHold_OnEventEnter(event_type);
 }
 static void Nag_HeadingHold_OnEventExit(void)
@@ -838,15 +670,6 @@ static void Nag_Spin_RestoreSetSpeed(void)
     N.Spin_Stop_Stable_Count = 0;
     N.Spin_Task_Started = 0;
 }
-/* 下面这一组 Nag_Hook_* 默认都提供“空实现”：
- * 1. Start 默认返回 false，表示该元素还没有真正接入具体动作；
- * 2. Run/Stop 默认空操作；
- * 3. IsDone 默认 false，表示不会自动完成。
- *
- * 这样当前版本可以先把统一元素状态机、录点、切入、恢复、调试量全部跑通，
- * 后续你只需要把对应元素的 Start/Run/IsDone/Stop 改成自己的逻辑即可。
- */
-/* 折返进/出口：单点路径标记；区段调速由 Nag_ApplyTurnaroundZoneSpeed() 处理。 */
 bool Nag_Hook_EnterTurn_Start(void) { return true; }
 void Nag_Hook_EnterTurn_Run(void) {}
 bool Nag_Hook_EnterTurn_IsDone(void) { return true; }
@@ -855,12 +678,6 @@ bool Nag_Hook_ExitTurn_Start(void) { return true; }
 void Nag_Hook_ExitTurn_Run(void) {}
 bool Nag_Hook_ExitTurn_IsDone(void) { return true; }
 void Nag_Hook_ExitTurn_Stop(void) {}
-/* 自转元素接法：
- * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
- * 2. Run：只有当前速度连续多拍低于阈值后，才真正启动 spin_task_start()；
- * 3. IsDone：只有自旋真正启动后才读取 spin_done，避免等待阶段误判完成；
- * 4. Stop：无论正常结束还是异常中止，都统一恢复被接管前的速度档位。
- */
 bool Nag_Hook_Spin_Start(void)
 {
     N.Spin_Saved_SetSpeed = motor_user_speed_cmd;
@@ -873,7 +690,6 @@ bool Nag_Hook_Spin_Start(void)
 }
 void Nag_Hook_Spin_Run(void)
 {
-    /* 等待期 Run_index 仍推进；此处用实时速度源判定停稳，起转后索引才冻结。 */
     float abs_speed = fabsf((float)Nag_Speed_Source);
     if (N.Spin_Task_Started)
     {
@@ -895,13 +711,9 @@ void Nag_Hook_Spin_Run(void)
     {
         return;
     }
-    /* 自旋真正启动前先解除“保持进入元素航向”。
-     * 否则普通转向可能继续把车头往锁定方向拉，和 spin_task_start() 抢同一套差速控制。
-     */
     Nag_HeadingHold_Disable();
     N.Spin_Resume_RunIndex = N.Run_index;
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
-    /* 起转瞬间刷新融合里程快照，自旋期间位移不计入路径索引。 */
     NavFusion_SyncMileageSnapshot();
 #endif
     spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
@@ -923,9 +735,6 @@ bool Nag_Hook_Bump_Start(void) { return false; }
 void Nag_Hook_Bump_Run(void) {}
 bool Nag_Hook_Bump_IsDone(void) { return false; }
 void Nag_Hook_Bump_Stop(void) {}
-/* 锥桶进/出口：单点路径标记；区段调速由 Nag_ApplyConeZoneSpeed() 按 Run_index 与事件表配对处理，
- * 不依赖 Event_Active 窗口。Start 立刻 true，首拍 IsDone 即 true，尽快恢复惯导前瞻。
- */
 bool Nag_Hook_EnterCones_Start(void) { return true; }
 void Nag_Hook_EnterCones_Run(void) {}
 bool Nag_Hook_EnterCones_IsDone(void) { return true; }
@@ -934,11 +743,6 @@ bool Nag_Hook_ExitCones_Start(void) { return true; }
 void Nag_Hook_ExitCones_Run(void) {}
 bool Nag_Hook_ExitCones_IsDone(void) { return true; }
 void Nag_Hook_ExitCones_Stop(void) {}
-/*
- * 单边桥进/出（白块引导）：
- * - BridgeIn：首拍立即进桥（蜂鸣、横滚、冻结里程、CM7_1 白块寻迹）
- * - BridgeOut：仅录制锚点；回放由白块丢失在 Nag_BridgeConfirmExit 接回 Run_index
- */
 bool Nag_Hook_EnterBridge_Start(void)
 {
     N.Bridge_Saved_Leg_Long = leg_long;
@@ -950,13 +754,9 @@ void Nag_Hook_EnterBridge_Run(void) {}
 bool Nag_Hook_EnterBridge_IsDone(void) { return true; }
 void Nag_Hook_EnterBridge_Stop(void)
 {
-    /* 标记元素首拍即 IsDone；leg/roll 在 Nag_BridgeConfirmEnter 设置，Stop 不恢复。
-     * 仅 Nag_Element_Abort() 在桥区中途恢复备份值。
-     */
 }
 bool Nag_Hook_ExitBridge_Start(void)
 {
-    /* 回放时 Run_index 不会自然到达 BridgeOut（桥区冻结里程）；接回已在 Nag_BridgeConfirmExit 完成 */
     return true;
 }
 void Nag_Hook_ExitBridge_Run(void) {}
@@ -1008,7 +808,6 @@ static void Nag_BridgeConfirmExit(uint8 allow_beep)
         leg_long = Nag_ExitBridge_Leg_Long;
     }
     roll_balance_en = N.Bridge_Saved_RollBalance;
-    /* 里程接回：跳到 BridgeOut 录制点，清零段内 Mileage_All，再接惯导前瞻 yaw */
     if ((N.Bridge_Exit_Run_Index != NAG_BRIDGE_EXIT_INDEX_INVALID) &&
         (N.Bridge_Exit_Run_Index > N.Run_index))
     {
@@ -1086,7 +885,6 @@ void Nag_BridgeTimeoutTick1ms(void)
         s_bridge_blob_no_frame_ms = 0u;
         return;
     }
-    /* 桥区每 ms 锁定腿长与横滚，防止主循环误出桥或遥控键短暂改写 */
     leg_long = Nag_EnterBridge_Leg_Long;
     roll_balance_en = 1u;
     if (s_bridge_enter_grace_ms < BRIDGE_ENTER_GRACE_MS)
@@ -1135,7 +933,6 @@ void Nag_BridgeDetectUpdate(void)
         return;
     }
     dualcore_white_blob_pull(&center_err, &track_valid, &fresh);
-    /* 桥区方向控制只看当前白块快照；fresh 仅用于无帧超时复位。 */
     Nag_BridgeApplyBlobYaw(center_err, track_valid);
     if (fresh == 0u)
     {
@@ -1143,11 +940,6 @@ void Nag_BridgeDetectUpdate(void)
     }
     s_bridge_blob_no_frame_ms = 0u;
 }
-/*
- * 计算 anchor_index 向前 lookback_cm 范围内 Nav_read[] 存储 yaw 的圆均值（deg）。
- * Nav_read 每 Nag_Set_mileage（2cm）一点，yaw 存为 int32×100。
- * 点数不足或 anchor==0 时回退为 anchor 点 yaw 或当前 euler_angle.yaw。
- */
 float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
 {
     uint16 point_count = 0u;
@@ -1199,14 +991,6 @@ float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
     avg_yaw = atan2f(sum_sin, sum_cos) * 57.2957795f;
     return avg_yaw;
 }
-/*
- * 进入台阶元素：
- * - 锁 enter_index 前 Nag_EnterStair_Yaw_Lookback_cm 的 yaw 圆均值；
- * - 固定速度 Nag_EnterStair_Target_Speed、腿长 Nag_EnterStair_Leg_Long；
- * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
- * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
- * IsDone：三次 jump_control 正常结束后链式切入 EXIT_STAIR。
- */
 bool Nag_Hook_EnterStair_Start(void)
 {
     uint16 enter_index = 0u;
@@ -1298,10 +1082,6 @@ static void Nag_ActivateChainedExitStair(void)
     N.Stair_Chain_To_Exit = 0u;
     Nag_EventPrepareEnter(NAG_EVENT_TYPE_EXIT_STAIR);
 }
-/*
- * 退出台阶元素：ENTER_STAIR 三次跳跃完成后软件链式切入。
- * 恢复进入前基准速度与腿长 3.5；首拍 IsDone 接回惯导前瞻。
- */
 bool Nag_Hook_ExitStair_Start(void)
 {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
@@ -1325,11 +1105,6 @@ void Nag_Hook_ExitStair_Stop(void)
 }
 bool Nag_Element_Start(uint8 event_type)
 {
-    /* 统一 Start 分发：
-     * event_type：N.Event_Active_Type，与 Nag_Event_Type / 事件表 flash 的 type 一致。
-     * - 返回 true：已进入 RUNNING；
-     * - 返回 false：停留在 ENTERED（可 KEY4 / 串口 v 手动恢复）。
-     */
     switch (event_type)
     {
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_Start();
@@ -1347,7 +1122,6 @@ bool Nag_Element_Start(uint8 event_type)
 }
 void Nag_Element_Run(uint8 event_type)
 {
-    /* 统一 Run 分发：元素处于 RUNNING 态时，每拍都会调到这里。 */
     switch (event_type)
     {
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: Nag_Hook_EnterTurn_Run(); break;
@@ -1365,10 +1139,6 @@ void Nag_Element_Run(uint8 event_type)
 }
 bool Nag_Element_IsDone(uint8 event_type)
 {
-    /* 统一完成判定：
-     * 建议由你自己的元素逻辑在合适时机置位完成条件，
-     * 状态机一旦检测到 true，就会自动恢复惯导。
-     */
     switch (event_type)
     {
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: return Nag_Hook_EnterTurn_IsDone();
@@ -1386,9 +1156,6 @@ bool Nag_Element_IsDone(uint8 event_type)
 }
 void Nag_Element_Stop(uint8 event_type)
 {
-    /* 统一 Stop 分发：
-     * 用于异常/人工中止元素，给每个元素一个清理现场的出口。
-     */
     Nag_HeadingHold_OnEventExit();
     switch (event_type)
     {
@@ -1437,7 +1204,7 @@ static float Nag_GetCurveStrengthAt(uint16 base_index)
     yaw_far = (float)(Nav_read[far_index] / 100.0f);
     return fabsf((float)ange_deviation1(yaw_far, yaw_now));
 }
-#endif /* Nag_AdaptiveLookahead_Enable */
+#endif
 static void Nag_UpdatePreviewAndSpeedTarget(void)
 {
     uint16 max_index = 0;
@@ -1514,11 +1281,6 @@ void Nag_EventForceReset(void)
 }
 static void Nag_Element_StateMachine(void)
 {
-    /* 回放中 Event_Active=1 时每 1ms 由 Nag_System() 调用。
-     * ENTERED：首开 Event_Start_Latched 后调 Nag_Element_Start；true→RUNNING。
-     * RUNNING：Nag_Element_Run + IsDone；true→DONE。
-     * DONE：Nag_Notify_Event_Done() 恢复 Run_index 并清 Active。
-     */
     uint8 event_index = N.Event_Active_Index;
     uint8 event_type = N.Event_Active_Type;
     if (!N.Event_Active)
@@ -1548,9 +1310,6 @@ static void Nag_Element_StateMachine(void)
                 }
                 else
                 {
-                    /* 默认空钩子返回 false，表示该元素尚未接入具体逻辑。
-                     * 这时保留在 ENTERED，等待用户后续补钩子或用 KEY4 / 串口 v 手动恢复。
-                     */
                 }
             }
             break;
@@ -1589,10 +1348,6 @@ static uint8 Nag_FindEventByEnterIndex(uint16 run_index)
     }
     return 0xFFu;
 }
-/*
- * 查找前方最近、尚未消费的 Spin，且 Run_index 已进入其触发区域（距 enter_index <= 窗口点数）。
- * 仅用于 Spin；折返/锥桶等标记元素仍要求精确命中 enter_index。
- */
 static uint8 Nag_FindSpinEventInTriggerWindow(uint16 run_index, uint16 *dist_points)
 {
     uint8 event_index = 0;
@@ -1682,7 +1437,6 @@ static uint8 Nag_FindNextEventAhead(uint16 run_index, uint16 *dist_points)
     }
     return best_index;
 }
-/* 将物理距离（cm）换算为导航点数；distance<=0 返回 0，否则至少 1 点。 */
 static uint16 Nag_DistanceToPoints(float distance_cm)
 {
     float points_f = 0.0f;
@@ -1699,9 +1453,6 @@ static uint16 Nag_DistanceToPoints(float distance_cm)
     }
     return points;
 }
-/*
- * 双点录制：找 Ein 之后最近的 EXIT_STAIR 标记索引 Eout（不依赖 Event_Consumed）。
- */
 static uint16 Nag_FindPairedExitStairMarker(uint16 enter_stair_marker)
 {
     uint8 event_index = 0u;
@@ -1727,7 +1478,6 @@ static uint16 Nag_FindPairedExitStairMarker(uint16 enter_stair_marker)
     }
     return best_marker;
 }
-/* EXIT_STAIR 完成后：从 Eout+1 接回；链式 EXIT 用锁存的 Ein 查表；无 EXIT 标记则 fallback Ein+1。 */
 static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_index)
 {
     uint16 exit_marker;
@@ -1764,10 +1514,6 @@ static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_
     return resume_index;
 }
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_HEADING_CALIB_ENABLE
-/*
- * 融合回放：录制时 index=1 会把北向标定直行段写入 flash，回放标定在 index=2 不推进 Run_index。
- * 进入 index=3 前按标定距离预跳索引，与录制路径起点对齐；纯惯导/未标定不调用。
- */
 static void Nag_SkipReplayRunIndexForFusionHeadingCalib(void)
 {
     uint16 skip_points;
@@ -1802,7 +1548,6 @@ static void Nag_SkipReplayRunIndexForFusionHeadingCalib(void)
     N.Mileage_All = 0.0f;
 }
 #endif
-/* 事件调速配置：target_speed=元素目标速度；pre_decel/pre_accel 为 cm，0 表示关闭。 */
 bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
                                     float *target_speed,
                                     float *pre_decel_dist_cm,
@@ -1859,7 +1604,6 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             return false;
     }
 }
-/* 查找当前 Run_index 所处锥桶区间：最近已过的 ENTER_CONES 与之后第一个 EXIT_CONES 配对。 */
 static bool Nag_GetActiveConeZone(uint16 run_index,
                                   uint16 *enter_index,
                                   uint16 *exit_index,
@@ -1908,10 +1652,8 @@ static bool Nag_GetActiveConeZone(uint16 run_index,
             return true;
         }
     }
-    /* 无配对 EXIT：从 ENTER 起至路径末端视为锥桶区间。 */
     return true;
 }
-/* 查找当前 Run_index 所处折返区间：最近已过的 ENTER_TURNAROUND 与之后第一个 EXIT_TURNAROUND 配对。 */
 static bool Nag_GetActiveTurnaroundZone(uint16 run_index,
                                         uint16 *enter_index,
                                         uint16 *exit_index,
@@ -1962,7 +1704,6 @@ static bool Nag_GetActiveTurnaroundZone(uint16 run_index,
     }
     return true;
 }
-/* 查找当前 Run_index 所处单边桥区间：最近已过的 ENTER_SINGLE_BRIDGE 与之后第一个 EXIT_SINGLE_BRIDGE 配对。 */
 static bool Nag_GetActiveBridgeZone(uint16 run_index,
                                     uint16 *enter_index,
                                     uint16 *exit_index,
@@ -2013,7 +1754,6 @@ static bool Nag_GetActiveBridgeZone(uint16 run_index,
     }
     return true;
 }
-/* 查找前方指定类型最近事件；dist_points 为 enter_index - run_index。 */
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points)
 {
     uint8 event_index = 0;
@@ -2046,7 +1786,6 @@ static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 
     }
     return best_index;
 }
-/* 查找刚经过且仍在 post-accel 窗口内的 SPIN 等事件（折返/锥桶标记由区段逻辑处理）。 */
 static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
                                                    uint16 *dist_since_pass,
                                                    float *target_speed,
@@ -2080,7 +1819,6 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
         {
             continue;
         }
-        /* 折返/锥桶/单边桥标记由区段逻辑处理，不走元素后恢复。 */
         if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
@@ -2128,7 +1866,6 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
     }
     return best_index;
 }
-/* 将 nav_speed 限制在 [0, cap] 范围内。 */
 static float Nag_ClampSpeedCap(float nav_speed, float cap)
 {
     if (cap <= 0.0f)
@@ -2141,7 +1878,6 @@ static float Nag_ClampSpeedCap(float nav_speed, float cap)
     }
     return nav_speed;
 }
-/* 锥桶区段调速：入口预减速、区间内维持、出口预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyConeZoneSpeed(float nav_speed)
 {
     uint16 enter_index = 0;
@@ -2163,7 +1899,6 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
     }
     if (!Nag_GetActiveConeZone(N.Run_index, &enter_index, &exit_index, &exit_event_index))
     {
-        /* 尚未进入锥桶区：进入预减速距离后立即限速到锥桶目标速度。 */
         enter_evt = Nag_FindNextEventOfType(N.Run_index,
                                             NAG_EVENT_TYPE_ENTER_CONES,
                                             &dist_to_enter);
@@ -2177,26 +1912,21 @@ static float Nag_ApplyConeZoneSpeed(float nav_speed)
     {
         return nav_speed;
     }
-    /* 已过出口：立即恢复到 nav_speed。 */
     if (exit_index != 0xFFFFu && N.Run_index >= exit_index)
     {
         return nav_speed;
     }
-    /* 无配对 EXIT：从 ENTER 起至路径末端维持锥桶速度。 */
     if (exit_index == 0xFFFFu)
     {
         return Nag_ClampSpeedCap(nav_speed, cone_target);
     }
     dist_to_exit = (uint16)(exit_index - N.Run_index);
-    /* 出口前 pre_accel 窗口：进入距离后立即恢复到 recovery_speed。 */
     if (pre_accel_points > 0u && dist_to_exit <= pre_accel_points)
     {
         return recovery_speed;
     }
-    /* 锥桶区间内：维持锥桶目标速度。 */
     return Nag_ClampSpeedCap(nav_speed, cone_target);
 }
-/* 折返区段调速：入弯前预减速、区间内维持、出弯前预加速恢复。 */
 static float Nag_ApplyTurnaroundZoneSpeed(float nav_speed)
 {
     uint16 enter_index = 0;
@@ -2246,10 +1976,6 @@ static float Nag_ApplyTurnaroundZoneSpeed(float nav_speed)
     }
     return Nag_ClampSpeedCap(nav_speed, turn_target);
 }
-/*
- * 单边桥区段调速（惯导）：桥进前预减速、桥进～桥出区间内维持 Launch 目标速度；
- * 过 exit_index 后立即恢复 nav_speed（基准速度，无出口 pre_accel）。
- */
 static float Nag_ApplyBridgeZoneSpeed(float nav_speed)
 {
     uint16 enter_index = 0;
@@ -2285,7 +2011,6 @@ static float Nag_ApplyBridgeZoneSpeed(float nav_speed)
     }
     return Nag_ClampSpeedCap(nav_speed, bridge_target);
 }
-/* 非区段标记元素：元素前预减速 + 元素后预加速恢复（进入距离窗口后立即设目标速度）。 */
 static float Nag_ApplyGenericEventSpeed(float nav_speed)
 {
     uint16 dist_points = 0;
@@ -2297,7 +2022,6 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
     float pre_decel_dist = 0.0f;
     float pre_accel_dist = 0.0f;
     float adjusted = nav_speed;
-    /* 元素后预加速：进入 pre_accel 窗口后立即恢复到 nav_speed。 */
     passed_event = Nag_FindRecentPassedEventForPostAccel(N.Run_index,
                                                          NULL,
                                                          &target_speed,
@@ -2306,7 +2030,6 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
     {
         adjusted = nav_speed;
     }
-    /* 元素前预减速：进入 pre_decel 窗口后立即设为目标速度。 */
     next_event = Nag_FindNextEventAhead(N.Run_index, &dist_points);
     if (next_event == 0xFFu || next_event >= N.Event_Count)
     {
@@ -2343,7 +2066,6 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
     }
     return Nag_ClampSpeedCap(adjusted, target_speed);
 }
-/* 统一事件调速入口：锥桶区段优先，再叠加通用元素前/后调速。 */
 static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 {
 #if !Nag_EventSpeed_Enable
@@ -2364,10 +2086,6 @@ static float Nag_ApplyEventSpeedAdjustments(float nav_speed)
 }
 static void Nag_TryEnterEvent(void)
 {
-    /* 惯导回放：精确命中 enter_index，或 Spin 进入触发区域时切入元素态。
-     * 等待减速期 Run_index 仍推进；自旋完成后从 Spin_Resume_RunIndex 恢复，并置 Event_Consumed
-     * 防止提前/滞后再次经过同一录制点时重复触发。
-     */
     uint8 event_index = 0;
     if (N.Event_Active)
     {
@@ -2386,10 +2104,6 @@ static void Nag_TryEnterEvent(void)
     }
 }
 #if Nag_OdoSlip_Enable
-/*
- * 编码器速度 -> 前向线速度（cm/s）。
- * 符号与 speed 环一致：左轮取 -receive_left，右轮取 +receive_right。
- */
 static float Nag_OdoEncToCmps(float enc_speed)
 {
     return enc_speed * Nag_Speed_To_Mileage_Scale;
@@ -2432,9 +2146,6 @@ static float Nag_OdoSlip_ClampSlew(float target_cmps, float reference_cmps)
     }
     return target_cmps;
 }
-/*
- * 第一层：瞬时保护。不一致时优先信更稳定的一侧，并对步长做 slew 限幅。
- */
 static float Nag_OdoSlip_InstantProtectSpeed(float vc_l, float vc_r, uint8 *suspect_left, uint8 *suspect_right)
 {
     float diff = 0.0f;
@@ -2487,9 +2198,6 @@ static float Nag_OdoSlip_InstantProtectSpeed(float vc_l, float vc_r, uint8 *susp
     v_corr = Nag_OdoSlip_ClampSlew(v_corr, trust_ref);
     return v_corr;
 }
-/*
- * 第二层：状态确认。连续若干 ms 异常后进入左/右/双侧打滑态。
- */
 static void Nag_OdoSlip_UpdateState(uint8 suspect_left, uint8 suspect_right, float vc_l, float vc_r)
 {
     uint8 prev_state = N.Odo_Slip_State;
@@ -2533,7 +2241,6 @@ static void Nag_OdoSlip_UpdateState(uint8 suspect_left, uint8 suspect_right, flo
     {
         if (prev_state == NAG_ODO_SLIP_NORMAL)
         {
-            /* 第三层：刚确认打滑，对短窗内多推进的里程排队补扣 */
             N.Odo_Rollback_Pending_Cm += Nag_OdoSlip_SumHistoryExcess();
         }
         N.Odo_Slip_State = target_state;
@@ -2556,9 +2263,6 @@ static float Nag_OdoSlip_StateSpeed(float instant_cmps)
             return instant_cmps;
     }
 }
-/*
- * 里程纠偏主入口：更新检测态并返回本拍应积分的步长（cm）。
- */
 static float Nag_GetCorrectedMileageStepCm(float raw_speed_enc)
 {
     float w_radps = 0.0f;
@@ -2646,7 +2350,7 @@ void Nag_OdoSlip_ApplyPendingRollback(void)
         N.Mileage_All += Nag_Set_mileage;
     }
 }
-#endif /* Nag_OdoSlip_Enable */
+#endif
 #if !Nag_OdoSlip_Enable
 void Nag_OdoSlip_ResetState(void)
 {
@@ -2674,12 +2378,6 @@ static float Nag_GetMileageStep(void)
         }
     }
 #endif
-    /* 这里仍然采用 car_speed 积分距离，先在不引入编码器增量的前提下把导航打通。
-     * 关键约束：
-     * 1. Nag_Sample_Dt 必须与 Nag_System() 的真实调用周期一致；
-     * 2. Nag_Speed_To_Mileage_Scale 表示“当前速度单位 -> cm/s”的换算系数；
-     * 3. 只要改了导航周期、速度单位或轮径减速比，就必须重标定这个系数。
-     */
     N.Speed_Forward = speed_forward;
     if (fabsf(speed_forward) < Nag_Speed_Deadband)
     {
@@ -2848,7 +2546,6 @@ static float GPS_ApplyConeZoneSpeed(float nav_speed)
     }
     return nav_speed;
 }
-/* GPS 单边桥区段调速：语义同 Nag_ApplyBridgeZoneSpeed()，按路点 u32yuansu 配对。 */
 static float GPS_ApplyBridgeZoneSpeed(float nav_speed)
 {
     uint8 i = 0u;
@@ -2943,12 +2640,6 @@ uint16 Nag_GetDebugProspectIndex(void)
 {
     return N.Prospect_index;
 }
-/* 速度目标合成（由 pid_ctrl_Run 每 20ms 读取一次）：
- * - motor_user_speed_cmd：用户层基准（串口 V、菜单/遥控/双核命令等）；
- * - N.Target_Speed：导航前瞻 + 弯道强度算出的建议上限；
- * - Nag_ApplyEventSpeedAdjustments()：按事件表与 Run_index 叠加区段调速、提前加减速；
- * - 元素激活期（Event_Active）：SPIN 等使用配置目标速度，折返/锥桶标记仍走区段逻辑。
- */
 float Nag_GetControlSpeedTarget(void)
 {
     float nav_speed = N.Target_Speed;
@@ -2956,7 +2647,6 @@ float Nag_GetControlSpeedTarget(void)
     float event_target = 0.0f;
     float pre_decel_dist = 0.0f;
     float pre_accel_dist = 0.0f;
-    /* GPS 点导航：叠加元素区段调速与预减速，到点/保护停车仍由 GPS_PointNav_Run 负责。 */
     if (nav_heading_mode == NAV_HEADING_MODE_GPS)
     {
         if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
@@ -3016,7 +2706,6 @@ float Nag_GetControlSpeedTarget(void)
     {
         return 0.0f;
     }
-    /* 惯导录制 + 遥控在线：速度遥控映射的 环直接使用motor_user_speed_cmd；掉线立即停车 */
     if (g_menu_input_remote_first != 0u &&
         nav_heading_mode == NAV_HEADING_MODE_INS &&
         N.Nag_SystemRun_Index == 1u && N.End_f == 0u &&
@@ -3025,7 +2714,6 @@ float Nag_GetControlSpeedTarget(void)
         return ((float)motor_user_speed_cmd < 0.0f) ? -abs_user_speed : abs_user_speed;
     }
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_HEADING_CALIB_ENABLE
-    /* 融合回放准备态：北向标定直行 5m 期间用 Launch 速度，航向由 NavFusion 锁定；纯惯导不进入 */
     if (NavFusion_IsRuntimeEnabled() != 0u &&
         NavFusion_IsHeadingCalibrating() != 0u &&
         N.Nag_SystemRun_Index == 2u)
@@ -3064,7 +2752,6 @@ float Nag_GetControlSpeedTarget(void)
             case NAG_EVENT_TYPE_EXIT_CONES:
             case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE:
             case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE:
-                /* 路径标记瞬时完成，区段调速由 Nag_ApplyEventSpeedAdjustments 按 Run_index 处理。 */
                 nav_speed = Nag_ApplyEventSpeedAdjustments(nav_speed);
                 break;
             case NAG_EVENT_TYPE_SPIN:
@@ -3100,35 +2787,21 @@ float Nag_GetControlSpeedTarget(void)
     }
     return nav_speed;
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     读取偏航角的里程函数
-// 参数说明     读取偏航角的里程函数，通过切换N.End_f来切换里程
-// 返回参数     void
-// 使用示例     用户自行调用
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void Nag_Read()
 {
         switch(N.End_f)
         {
-            case 0:Run_Nag_Save();  //默认执行保存
+            case 0:Run_Nag_Save();
                 break;
             case 1:;
-                    flash_Nag_Write();  //写入最后一页，确保falsh存储
+                    flash_Nag_Write();
                     N.End_f++;
                     break;
-            case 2://Buzzer_check(500);   //蜂鸣器确认执行
-                    N.End_f++;  //结束里程
+            case 2:
+                    N.End_f++;
                     break;
         }
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     计算导航偏航角
-// 参数说明     N.Final_Out为最终生成的偏航角
-// 返回参数     void
-// 使用示例     用户自行调用
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void Nag_Run()
 {
     float yaw_err = 0.0f;
@@ -3138,15 +2811,8 @@ void Nag_Run()
         N.Target_Request_Valid = 0u;
         return;
     }
-    /* 回放态总流程：
-     * 1. 先根据里程推进 Run_index；
-     * 2. 再按速度得到前瞻点 Prospect_index，控制目标使用前瞻点 yaw；
-     * 3. 非 Spin 元素 active 后冻结 Run_index；Spin 等待期仍推进索引与前瞻；
-     * 4. Spin 起转后冻结索引；等待期仍跟踪 Angle_Run，spin_enable 期间释放航向；
-     * 5. Spin 完成后从 Spin_Resume_RunIndex 接回；其他元素由 Nag_Notify_Event_Done() 恢复。
-     */
-    Run_Nag_GPS();  //偏航角读取函数
-    if(N.Nag_Stop_f) //终点停止
+    Run_Nag_GPS();
+    if(N.Nag_Stop_f)
     {
         N.Final_Out = 0;
         N.Target_Request_Valid = 0;
@@ -3158,13 +2824,11 @@ void Nag_Run()
     if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw() &&
         N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR)
     {
-        /* 非 Spin 等待态 / 非 EXIT：ENTER_STAIR 等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
         N.Final_Out = 0.0f;
         return;
     }
     if (N.Bridge_Zone_Active != 0u)
     {
-        /* 桥区航向由 Nag_BridgeDetectUpdate 的白块修正接管，惯导不发 steer */
         N.Final_Out = 0.0f;
         N.Target_Request_Valid = 0u;
         return;
@@ -3185,13 +2849,6 @@ void Nag_Run()
         steer_request_target_yaw(N.Angle_Run);
     }
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     偏航角保存
-// 参数说明     读取YAW存储flash写入
-// 返回参数     void
-// 使用示例     用户自行调用
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void Run_Nag_Save()
 {
     N.Mileage_All += Nag_GetMileageStep();
@@ -3199,29 +2856,21 @@ void Run_Nag_Save()
 #if Nag_OdoSlip_Enable
     Nag_OdoSlip_ApplyPendingRollback();
 #endif
-    while(N.Mileage_All >= Nag_Set_mileage)    //当里程超过设定值时
+    while(N.Mileage_All >= Nag_Set_mileage)
     {
-       if(N.size >= MaxSize)//当数组超过一页的flash大小时，写入一次，防止重复写入
+       if(N.size >= MaxSize)
        {
            flash_Nag_Write();
-           N.size=0;   //将数组大小为0，下一次从新开始取
-           N.Flash_page_index--;   //flash页索引减小
-           zf_assert(N.Flash_page_index > Nag_End_Page);//防止越界保护
+           N.size=0;
+           N.Flash_page_index--;
+           zf_assert(N.Flash_page_index > Nag_End_Page);
        }
-       int32 Save=(int32)(Nag_Yaw*100); //取偏航角放大100倍，避免使用Float类型存储
-       flash_union_buffer[N.size++].int32_type = Save;  //将偏航角写入缓冲区
+       int32 Save=(int32)(Nag_Yaw*100);
+       flash_union_buffer[N.size++].int32_type = Save;
        N.Save_index++;
-       N.Mileage_All -= Nag_Set_mileage;//里程计累加//保存到flash
+       N.Mileage_All -= Nag_Set_mileage;
     }
 }
-// 偏航角读取
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     偏航角读取
-// 参数说明     读取flash存储YAW
-// 返回参数     void
-// 使用示例     用户自行调用
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void Run_Nag_GPS()
 {
     uint16 max_run_index = 0;
@@ -3235,15 +2884,12 @@ void Run_Nag_GPS()
     {
         if (!Nag_Spin_ShouldTrackInsYaw())
         {
-            /* 非 Spin 等待态：ENTER/EXIT_STAIR 等冻结 Run_index。 */
             N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
             return;
         }
-        /* Spin 等待期：仍按里程推进 Run_index。 */
     }
     if (N.Bridge_Zone_Active != 0u)
     {
-        /* 桥区白块引导：冻结 Run_index；出桥时在 Nag_BridgeConfirmExit 对齐 BridgeOut 索引 */
         Nag_UpdatePreviewAndSpeedTarget();
         N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
         return;
@@ -3261,8 +2907,8 @@ void Run_Nag_GPS()
             N.Nag_Stop_f = 1;
             return;
         }
-        N.Run_index++;//增加需要跑的圈数，直接从后往前，值为0.
-        N.Mileage_All -= Nag_Set_mileage;//里程计累加//保存到flash
+        N.Run_index++;
+        N.Mileage_All -= Nag_Set_mileage;
     }
     if (!N.Event_Active)
     {
@@ -3271,12 +2917,6 @@ void Run_Nag_GPS()
     Nag_UpdatePreviewAndSpeedTarget();
     N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     导航参数初始化
-// 返回参数     void
-// 使用示例     导航执行前开始
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void Init_Nag()
 {
     memset(&N, 0, sizeof(N));
@@ -3299,7 +2939,6 @@ void Nag_Begin_Record(void)
     steer_yaw_delayed_by_spin = 0;
     steer_task_stop();
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
-    /* 融合惯导录制：先静止 GPS 原点平均，再锁定发车 yaw 直行 5m 标定北向偏角；纯惯导开关关闭时不进入 */
     if (NavFusion_IsRuntimeEnabled() != 0u)
     {
         NavFusion_BeginOriginAverage((float)euler_angle.yaw);
@@ -3310,7 +2949,6 @@ void Nag_Begin_Record(void)
 #endif
     N.Nag_SystemRun_Index = 1;
 }
-/* 进入回放准备态：索引置 2，待 NagFlashRead() 读完 flash 且（若启用）原点平均完成后进入 3。 */
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
 static void Nag_TryEnterReplayRun(void)
 {
@@ -3318,7 +2956,6 @@ static void Nag_TryEnterReplayRun(void)
     {
         return;
     }
-    /* 纯惯导（融合运行时关）：不等待 GPS 原点/北向标定，flash 读完即进入 index=3 */
     if (NavFusion_IsRuntimeEnabled() == 0u)
     {
         motor_user_speed_cmd = run_launch_speed;
@@ -3335,7 +2972,6 @@ static void Nag_TryEnterReplayRun(void)
     if (NavFusion_IsHeadingCalibSessionActive() != 0u &&
         NavFusion_IsHeadingCalibReady() == 0u)
     {
-        /* 融合回放：北向标定直行 5m 期间用 Launch 速度，标定完成后再进 index=3 */
         motor_user_speed_cmd = run_launch_speed;
         N.Target_Speed = fabsf((float)motor_user_speed_cmd);
         Nag_UpdatePreviewAndSpeedTarget();
@@ -3476,7 +3112,6 @@ void Nag_Notify_Event_Done(void)
     {
         enter_index = Nag_Event_Table[event_index].enter_index;
         N.Stair_Paired_Enter_Index = enter_index;
-        /* 链式切 EXIT 前保持 Ein，不推到 Ein+1。 */
         resume_index = N.Run_index;
     }
     else if (event_type == NAG_EVENT_TYPE_EXIT_STAIR)
@@ -3494,17 +3129,14 @@ void Nag_Notify_Event_Done(void)
         exit_index = Nag_Event_Table[event_index].exit_index;
         if (event_type == NAG_EVENT_TYPE_SPIN)
         {
-            /* 从起转前锁存的实际路径索引恢复，不按录制 enter_index 或 enter_index+1 跳点。 */
             resume_index = (N.Spin_Task_Started != 0u) ? N.Spin_Resume_RunIndex : N.Run_index;
         }
         else if (exit_index > enter_index)
         {
-            /* 旧双点录制：从 exit 索引接回惯导。 */
             resume_index = exit_index;
         }
         else
         {
-            /* 单点精确触发：推进到触发点之后，避免再次命中同一 enter_index。 */
             resume_index = (uint16)(enter_index + 1u);
             if (N.Save_index >= 2u)
             {
@@ -3524,7 +3156,6 @@ void Nag_Notify_Event_Done(void)
         event_type == NAG_EVENT_TYPE_EXIT_STAIR)
     {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
-        /* 丢弃元素期融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
         NavFusion_SyncMileageSnapshot();
 #endif
     }
@@ -3556,7 +3187,6 @@ void Nag_Element_Abort(void)
     {
         return;
     }
-    /* 桥区中途 Abort：恢复进入桥前备份并清桥区状态。 */
     if (N.Bridge_Zone_Active != 0u || N.Bridge_Heading_Lock != 0u || N.Bridge_Expected != 0u)
     {
         if (N.Bridge_Saved_Leg_Long > 0.01f)
@@ -3580,15 +3210,6 @@ void Nag_Element_Abort(void)
     N.Target_Request_Valid = 0;
     steer_task_stop();
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     封装执行函数
-// 参数说明     index           索引
-// 参数说明     type            类型值
-// 返回参数     void
-// 使用示例     在中断里调用
-// 备注信息     当前固定在 pit0_ch0_isr 的 1ms 中断里调用一次；请勿同时在主循环/5ms 软任务里重复调用。
-//             Nag_SystemRun_Index==2 时 switch 无分支，不执行 Nag_Run；速度门控由 Nag_GetControlSpeedTarget 在索引!=3 时返回 0。
-//-------------------------------------------------------------------------------------------------------------------
 void Nag_System(){
     Nag_BridgeTimeoutTick1ms();
     if (N.Event_Active)
@@ -3605,20 +3226,12 @@ void Nag_System(){
     }
     switch(N.Nag_SystemRun_Index)
     {
-       case 1 : Nag_Read();    //1是读取
+       case 1 : Nag_Read();
             break;
       case 3: Nag_Run();
             break;
     }
 }
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     第一次自动读取，只读取一次
-// 参数说明     index           索引
-// 参数说明     type            类型值
-// 返回参数     void
-// 使用示例     在主循环直接调用，demo中直接显示
-// 备注信息
-//-------------------------------------------------------------------------------------------------------------------
 void NagFlashRead(){
   if(N.Save_state) return;
   N.Flash_page_index = Nag_Start_Page;
@@ -3632,11 +3245,11 @@ void NagFlashRead(){
         break;
     }
     int temp_index=index-(MaxSize*page_trun);
-    if(temp_index >= MaxSize)    //当超过设定的flsh大小时
+    if(temp_index >= MaxSize)
     {
-        N.Flash_page_index--;   //页索引减小
+        N.Flash_page_index--;
         page_trun++;
-        flash_Nag_Read(); //重新读取
+        flash_Nag_Read();
         temp_index=index-(MaxSize*page_trun);
     }
      Nav_read[index]= flash_union_buffer[temp_index].int32_type;
@@ -3654,7 +3267,6 @@ void NagFlashRead(){
   if (N.Nag_SystemRun_Index == 2u)
   {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
-    /* 融合模式：原点/北向标定完成前不赋速；纯惯导仍用 Launch 速度 */
     if (NavFusion_IsRuntimeEnabled() != 0u)
     {
         motor_user_speed_cmd = 0.0f;
@@ -3682,13 +3294,8 @@ void NagFlashRead(){
   N.Nag_SystemRun_Index++;
 #endif
 }
-/* ===== interfaces/navigation_port.h ===== */
 #ifndef CODE_INTERFACES_NAVIGATION_PORT_H_
 #define CODE_INTERFACES_NAVIGATION_PORT_H_
-/*
- * 惯导导航软件对外 API（供运动控制/视觉/人机交互调用）。
- * 软著 02 主归属 navigation.c；其他模块仅保留本头文件。
- */
 #include "zf_common_typedef.h"
 void Init_Nag(void);
 void Nag_System(void);

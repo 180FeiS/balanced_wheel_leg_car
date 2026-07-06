@@ -1,7 +1,3 @@
-/*********************************************************************************************************************
- * @file    single_bridge.c
- * @brief   单边桥：灰度差比和寻边 + 中线合成/误差 + IPS200 三线叠加。
- *********************************************************************************************************************/
 #include "zf_common_headfile.h"
 #include "image.h"
 #include "single_bridge.h"
@@ -183,7 +179,6 @@ float single_bridge_center_error(int prospect_start)
 }
 uint8 single_bridge_track_valid(uint8 min_rows)
 {
-    /* valid_row_count 与 end_line 共同决定中线是否可用于控车/切换判定 */
     if (s_last_valid_row_count_raw < min_rows)
     {
         return 0u;
@@ -278,11 +273,9 @@ void single_bridge_detect_update(single_bridge_detect_t *out, uint8 on_bridge)
     s_last_pin_right = (uint8)(pin_right_rows >= (int)SINGLE_BRIDGE_MIN_PIN_ROWS);
     if (s_last_pin_right && !s_last_pin_left)
     {
-        /* 右贴边 → 左桥 */
     }
     else if (s_last_pin_left && !s_last_pin_right)
     {
-        /* 左贴边 → 右桥 */
     }
     if (!on_bridge)
     {
@@ -371,7 +364,6 @@ void single_bridge_gray_diff_track(int bw_threshold, single_bridge_track_t *out)
         th = SINGLE_BRIDGE_DIFF_TH_DEFAULT;
     }
     hd_threshold = th;
-    /* 灰度差比和寻左右边 → 中线 → center_err；供中线模式与 Debug 页 */
     image_photo_compress(mt9v03x_image[0]);
     hd_whitemax(th);
     single_bridge_compute_midline();
