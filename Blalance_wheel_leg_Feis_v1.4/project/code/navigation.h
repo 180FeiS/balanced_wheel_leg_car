@@ -155,12 +155,22 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_ExitCones_Recovery_Speed 0.0f       // 0=恢复到基础导航速度；>0 则恢复到该固定速度
 #define Nag_ExitCones_PreAccel_Dist_cm 20.0f    // 接近锥桶出口前开始恢复/加速的距离
 
-/* 单边桥进/出（ENTER/EXIT_SINGLE_BRIDGE）：与锥桶相同为惯导路径标记；区段调速见 Launch 参数 */
+/* 单边桥进/出（ENTER/EXIT_SINGLE_BRIDGE）：BridgeIn 立即白块进桥；BridgeOut 仅里程接回锚点 */
 #define Nag_EnterBridge_Target_Speed_Default 500.0f   // 桥进目标速度（Launch/Flash 可调）
 #define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f // 桥进前预减速距离（cm）
 #define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
 #define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出标记：恢复腿长
 #define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
+/** 桥区白块 track_valid=0 连续该帧数后确认出桥（仅计 CM7_1 新帧 fresh==1） */
+#define BRIDGE_BLOB_LOST_EXIT_DEBOUNCE  6u
+/** 进桥后该时间内禁止出桥判定（ms），给 CM7_1 启动 blob 与腿高步进留时间 */
+#define BRIDGE_ENTER_GRACE_MS           400u
+/** 进桥宽限后该时间仍没有 CM7_1 白块新帧，则退出桥区，避免视觉任务关闭时卡死 */
+#define BRIDGE_BLOB_NO_FRAME_EXIT_MS    1000u
+/** 单边桥白块中心误差 -> yaw 偏移，放在导航元素内消费，避免主循环抢 fresh */
+#define Nag_BridgeBlob_Yaw_K_Pixel      0.22f
+#define Nag_BridgeBlob_Yaw_Max_Offset   30.0f
+#define Nag_BridgeBlob_Yaw_Deadband     0.1f
 extern float nag_enter_bridge_target_speed;
 extern float nag_enter_bridge_pre_decel_dist_cm;
 
@@ -491,12 +501,13 @@ typedef struct{
        uint16 Stair_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Ein；0xFFFF=无效 */
        float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
        uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
-       uint8 Bridge_Zone_Active;      // 1=视觉/兜底确认进桥未出桥
-       uint8 Bridge_Detect_Arm;       // 1=预区或桥上，CM7_1 跑 detect
-       uint8 Bridge_Heading_Lock;     // 1=桥上锁 IMU 航向
-       uint8 Bridge_Expected;         // 1=已过 BridgeIn 路点，等待视觉确认
+       uint8 Bridge_Zone_Active;      // 1=桥上白块引导中（进桥确认～出桥确认）
+       uint8 Bridge_Detect_Arm;       // 1=桥上，CM7_1 跑白块 detect（同 Zone_Active）
+       uint8 Bridge_Heading_Lock;     // 保留字段；新方案不再置位，Abort 时仍清理
+       uint8 Bridge_Expected;         // 保留字段；新方案不再置位，Abort 时仍清理
        uint8 Bridge_Exit_Beep_Done;   // 本段桥已响出桥蜂鸣
-       float Bridge_Locked_Yaw;       // 进桥确认瞬间 IMU yaw
+       float Bridge_Locked_Yaw;       // 保留字段；新方案不再使用 IMU 锁航
+       uint16 Bridge_Exit_Run_Index;  // 进桥时缓存配对 BridgeOut enter_index；0xFFFF=未配对
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -549,8 +560,8 @@ typedef enum {
 } NavHeadingMode;
 extern uint8 nav_heading_mode;
 void Nag_Run(); //偏航角控制总函数
-uint8 Nag_BridgeDetectShouldArm(void);
-void Nag_BridgeDetectUpdate(void);
+uint8 Nag_BridgeDetectShouldArm(void); /* 1=Bridge_Zone_Active，供 CM7_1 白块门控 */
+void Nag_BridgeDetectUpdate(void);     /* 桥区白块丢失 debounce 后 Nag_BridgeConfirmExit */
 void Nag_BridgeTimeoutTick1ms(void);
 void Run_Nag_GPS();//偏航角读取
 

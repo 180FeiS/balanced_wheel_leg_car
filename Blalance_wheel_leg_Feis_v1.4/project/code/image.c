@@ -846,22 +846,17 @@ void image_camera_auto_exposure(void)
 }
 
 /*--------------------------------------------------------------------------------------------------------------------
- * 上半 ROI 最大白连通域引导 + 白块/中线主循环状态机（CM7_1 检测，CM7_0 主循环 apply_yaw）
+ * 白连通域检测（桥区/验证共用）与验证状态机（CM7_1 检测，CM7_0 验证 apply_yaw）
  *-------------------------------------------------------------------------------------------------------------------*/
 
-#if defined(CY_CORE_CM7_1)
+#if defined(CY_CORE_CM7_1) && IMAGE_WHITE_BLOB_ANY_ENABLE
 
-#include "single_bridge.h"
 #include "dualcore_shared.h"
 
 /** BFS 队列容量：全幅可用区约 50×78 像素，留余量 */
 #define IMAGE_WHITE_BLOB_Q_MAX  (4096)
 
 static uint8 s_blob_visited[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W];
-
-static uint8 s_vision_mode = IMAGE_VISION_MODE_BLOB;
-static uint8 s_switch_debounce = 0u;
-static uint8 s_midline_lost_debounce = 0u;
 
 static uint8 image_white_blob_in_roi(int row, int col, int row_end, int col_lo, int col_hi)
 {
@@ -1099,6 +1094,17 @@ void image_white_blob_detect(image_white_blob_result_t *out)
     }
 }
 
+#endif /* CY_CORE_CM7_1 && IMAGE_WHITE_BLOB_ANY_ENABLE */
+
+#if defined(CY_CORE_CM7_1) && IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+
+#include "single_bridge.h"
+#include "dualcore_shared.h"
+
+static uint8 s_vision_mode = IMAGE_VISION_MODE_BLOB;
+static uint8 s_switch_debounce = 0u;
+static uint8 s_midline_lost_debounce = 0u;
+
 /** 白块下探到中下部且面积足够大，满足切换中线模式条件（单帧） */
 static uint8 image_white_blob_ready_for_midline(const image_white_blob_result_t *blob)
 {
@@ -1220,9 +1226,32 @@ void image_vision_guidance_process_frame(int bw_threshold)
     }
 }
 
-#endif /* CY_CORE_CM7_1 */
+#endif /* CY_CORE_CM7_1 && IMAGE_WHITE_BLOB_VALIDATE_ENABLE */
 
-#if defined(CY_CORE_CM7_0) && IMAGE_WHITE_BLOB_ENABLE
+#if defined(CY_CORE_CM7_1) && IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+
+#include "dualcore_shared.h"
+
+/**
+ * 单边桥回放：每帧最大白连通域 → dualcore blob 通道（全程 BLOB，不切中线）。
+ * 调用方须在 mt9v03x_finish_flag 置位后调用，并在本函数返回前清零 finish_flag。
+ */
+void image_bridge_blob_process_frame(int bw_threshold)
+{
+    static uint32 s_bridge_blob_frame_seq;
+    image_white_blob_result_t blob;
+
+    (void)bw_threshold;
+
+    image_white_blob_detect(&blob);
+    s_bridge_blob_frame_seq++;
+    dualcore_white_blob_publish(blob.center_err, blob.track_valid, s_bridge_blob_frame_seq);
+    dualcore_bridge_vision_publish_inactive();
+}
+
+#endif /* CY_CORE_CM7_1 && IMAGE_BRIDGE_WHITE_BLOB_ENABLE */
+
+#if defined(CY_CORE_CM7_0) && IMAGE_WHITE_BLOB_VALIDATE_ENABLE
 
 #include "control.h"
 #include "navigation.h"
@@ -1242,10 +1271,11 @@ static float image_vision_guidance_clipf(float v, float lo, float hi)
     return v;
 }
 
-/** 主循环 yaw 修正公共路径：center_err 来自 blob 或 bridge 通道 */
+/** 主循环 yaw 修正：center_err(像素) → 绝对航向目标偏移，经 steer_request_target_yaw 交给 1ms 航向双环 */
 static void image_vision_guidance_apply_yaw_from_err(float center_err, uint8 track_valid, uint8 fresh)
 {
-    float delta_yaw_deg;
+    float target_offset_deg;
+    float target_yaw_deg;
 
     if (fresh == 0u || track_valid == 0u)
     {
@@ -1255,20 +1285,23 @@ static void image_vision_guidance_apply_yaw_from_err(float center_err, uint8 tra
     {
         return;
     }
-    /* 惯导回放执行态由 Nag 发 steer_request，避免与视觉引导抢航向 */
-    if (N.Nag_SystemRun_Index == 3u)
+    /* 回放态默认禁视觉 yaw；桥区白块引导时 Bridge_Zone_Active 放行 */
+    if (N.Nag_SystemRun_Index == 3u && N.Bridge_Zone_Active == 0u)
     {
         return;
     }
 
-    delta_yaw_deg = center_err * IMAGE_WHITE_BLOB_YAW_KP;
-    delta_yaw_deg = image_vision_guidance_clipf(delta_yaw_deg,
-                                                -IMAGE_WHITE_BLOB_YAW_MAX_DELTA,
-                                                IMAGE_WHITE_BLOB_YAW_MAX_DELTA);
-    if (fabsf(delta_yaw_deg) >= IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG)
+    target_offset_deg = center_err * IMAGE_WHITE_BLOB_YAW_K_PIXEL;
+    target_offset_deg = image_vision_guidance_clipf(target_offset_deg,
+                                                    -IMAGE_WHITE_BLOB_YAW_MAX_OFFSET_DEG,
+                                                    IMAGE_WHITE_BLOB_YAW_MAX_OFFSET_DEG);
+    if (fabsf(target_offset_deg) < IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG)
     {
-        steer_request_relative_yaw(delta_yaw_deg);
+        return;
     }
+
+    target_yaw_deg = (float)euler_angle.yaw + target_offset_deg;
+    steer_request_target_yaw(target_yaw_deg);
 }
 
 void image_white_blob_apply_yaw(void)
@@ -1305,4 +1338,4 @@ void image_vision_guidance_apply_yaw(void)
     }
 }
 
-#endif /* CY_CORE_CM7_0 && IMAGE_WHITE_BLOB_ENABLE */
+#endif /* CY_CORE_CM7_0 && IMAGE_WHITE_BLOB_VALIDATE_ENABLE */

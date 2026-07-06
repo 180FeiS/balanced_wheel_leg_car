@@ -1,35 +1,35 @@
 /*********************************************************************************************************************
-* CYT4BB Opensourec Library ¼´£¨ CYT4BB ¿ªÔ´¿â£©ÊÇÒ»¸ö»ùÓÚ¹Ù·½ SDK ½Ó¿ÚµÄµÚÈı·½¿ªÔ´¿â
-* Copyright (c) 2022 SEEKFREE Öğ·É¿Æ¼¼
+* CYT4BB Opensourec Library å³ï¼ˆ CYT4BB å¼€æºåº“ï¼‰æ˜¯ä¸€ä¸ªåŸºäºå®˜æ–¹ SDK æ¥å£çš„ç¬¬ä¸‰æ–¹å¼€æºåº“
+* Copyright (c) 2022 SEEKFREE é€é£ç§‘æŠ€
 *
-* ±¾ÎÄ¼şÊÇ CYT4BB ¿ªÔ´¿âµÄÒ»²¿·Ö
+* æœ¬æ–‡ä»¶æ˜¯ CYT4BB å¼€æºåº“çš„ä¸€éƒ¨åˆ†
 *
-* CYT4BB ¿ªÔ´¿â ÊÇÃâ·ÑÈí¼ş
-* Äú¿ÉÒÔ¸ù¾İ×ÔÓÉÈí¼ş»ù½ğ»á·¢²¼µÄ GPL£¨GNU General Public License£¬¼´ GNUÍ¨ÓÃ¹«¹²Ğí¿ÉÖ¤£©µÄÌõ¿î
-* ¼´ GPL µÄµÚ3°æ£¨¼´ GPL3.0£©»ò£¨ÄúÑ¡ÔñµÄ£©ÈÎºÎºóÀ´µÄ°æ±¾£¬ÖØĞÂ·¢²¼ºÍ/»òĞŞ¸ÄËü
+* CYT4BB å¼€æºåº“ æ˜¯å…è´¹è½¯ä»¶
+* æ‚¨å¯ä»¥æ ¹æ®è‡ªç”±è½¯ä»¶åŸºé‡‘ä¼šå‘å¸ƒçš„ GPLï¼ˆGNU General Public Licenseï¼Œå³ GNUé€šç”¨å…¬å…±è®¸å¯è¯ï¼‰çš„æ¡æ¬¾
+* å³ GPL çš„ç¬¬3ç‰ˆï¼ˆå³ GPL3.0ï¼‰æˆ–ï¼ˆæ‚¨é€‰æ‹©çš„ï¼‰ä»»ä½•åæ¥çš„ç‰ˆæœ¬ï¼Œé‡æ–°å‘å¸ƒå’Œ/æˆ–ä¿®æ”¹å®ƒ
 *
-* ±¾¿ªÔ´¿âµÄ·¢²¼ÊÇÏ£ÍûËüÄÜ·¢»Ó×÷ÓÃ£¬µ«²¢Î´¶ÔÆä×÷ÈÎºÎµÄ±£Ö¤
-* ÉõÖÁÃ»ÓĞÒşº¬µÄÊÊÏúĞÔ»òÊÊºÏÌØ¶¨ÓÃÍ¾µÄ±£Ö¤
-* ¸ü¶àÏ¸½ÚÇë²Î¼û GPL
+* æœ¬å¼€æºåº“çš„å‘å¸ƒæ˜¯å¸Œæœ›å®ƒèƒ½å‘æŒ¥ä½œç”¨ï¼Œä½†å¹¶æœªå¯¹å…¶ä½œä»»ä½•çš„ä¿è¯
+* ç”šè‡³æ²¡æœ‰éšå«çš„é€‚é”€æ€§æˆ–é€‚åˆç‰¹å®šç”¨é€”çš„ä¿è¯
+* æ›´å¤šç»†èŠ‚è¯·å‚è§ GPL
 *
-* ÄúÓ¦¸ÃÔÚÊÕµ½±¾¿ªÔ´¿âµÄÍ¬Ê±ÊÕµ½Ò»·İ GPL µÄ¸±±¾
-* Èç¹ûÃ»ÓĞ£¬Çë²ÎÔÄ<https://www.gnu.org/licenses/>
+* æ‚¨åº”è¯¥åœ¨æ”¶åˆ°æœ¬å¼€æºåº“çš„åŒæ—¶æ”¶åˆ°ä¸€ä»½ GPL çš„å‰¯æœ¬
+* å¦‚æœæ²¡æœ‰ï¼Œè¯·å‚é˜…<https://www.gnu.org/licenses/>
 *
-* ¶îÍâ×¢Ã÷£º
-* ±¾¿ªÔ´¿âÊ¹ÓÃ GPL3.0 ¿ªÔ´Ğí¿ÉÖ¤Ğ­Òé ÒÔÉÏĞí¿ÉÉêÃ÷ÎªÒëÎÄ°æ±¾
-* Ğí¿ÉÉêÃ÷Ó¢ÎÄ°æÔÚ libraries/doc ÎÄ¼ş¼ĞÏÂµÄ GPL3_permission_statement.txt ÎÄ¼şÖĞ
-* Ğí¿ÉÖ¤¸±±¾ÔÚ libraries ÎÄ¼ş¼ĞÏÂ ¼´¸ÃÎÄ¼ş¼ĞÏÂµÄ LICENSE ÎÄ¼ş
-* »¶Ó­¸÷Î»Ê¹ÓÃ²¢´«²¥±¾³ÌĞò µ«ĞŞ¸ÄÄÚÈİÊ±±ØĞë±£ÁôÖğ·É¿Æ¼¼µÄ°æÈ¨ÉùÃ÷£¨¼´±¾ÉùÃ÷£©
+* é¢å¤–æ³¨æ˜ï¼š
+* æœ¬å¼€æºåº“ä½¿ç”¨ GPL3.0 å¼€æºè®¸å¯è¯åè®® ä»¥ä¸Šè®¸å¯ç”³æ˜ä¸ºè¯‘æ–‡ç‰ˆæœ¬
+* è®¸å¯ç”³æ˜è‹±æ–‡ç‰ˆåœ¨ libraries/doc æ–‡ä»¶å¤¹ä¸‹çš„ GPL3_permission_statement.txt æ–‡ä»¶ä¸­
+* è®¸å¯è¯å‰¯æœ¬åœ¨ libraries æ–‡ä»¶å¤¹ä¸‹ å³è¯¥æ–‡ä»¶å¤¹ä¸‹çš„ LICENSE æ–‡ä»¶
+* æ¬¢è¿å„ä½ä½¿ç”¨å¹¶ä¼ æ’­æœ¬ç¨‹åº ä½†ä¿®æ”¹å†…å®¹æ—¶å¿…é¡»ä¿ç•™é€é£ç§‘æŠ€çš„ç‰ˆæƒå£°æ˜ï¼ˆå³æœ¬å£°æ˜ï¼‰
 *
-* ÎÄ¼şÃû³Æ          main_cm7_1
-* ¹«Ë¾Ãû³Æ          ³É¶¼Öğ·É¿Æ¼¼ÓĞÏŞ¹«Ë¾
-* °æ±¾ĞÅÏ¢          ²é¿´ libraries/doc ÎÄ¼ş¼ĞÄÚ version ÎÄ¼ş °æ±¾ËµÃ÷
-* ¿ª·¢»·¾³          IAR 9.40.1
-* ÊÊÓÃÆ½Ì¨          CYT4BB
-* µêÆÌÁ´½Ó          https://seekfree.taobao.com/
+* æ–‡ä»¶åç§°          main_cm7_1
+* å…¬å¸åç§°          æˆéƒ½é€é£ç§‘æŠ€æœ‰é™å…¬å¸
+* ç‰ˆæœ¬ä¿¡æ¯          æŸ¥çœ‹ libraries/doc æ–‡ä»¶å¤¹å†… version æ–‡ä»¶ ç‰ˆæœ¬è¯´æ˜
+* å¼€å‘ç¯å¢ƒ          IAR 9.40.1
+* é€‚ç”¨å¹³å°          CYT4BB
+* åº—é“ºé“¾æ¥          https://seekfree.taobao.com/
 *
-* ĞŞ¸Ä¼ÇÂ¼
-* ÈÕÆÚ              ×÷Õß                ±¸×¢
+* ä¿®æ”¹è®°å½•
+* æ—¥æœŸ              ä½œè€…                å¤‡æ³¨
 * 2024-1-4       pudding            first version
 ********************************************************************************************************************/
 
@@ -41,13 +41,18 @@
 #include "dualcore_shared.h"
 #include "single_bridge.h"
 
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+/** æ¡¥åŒºä¸Šå‡æ²¿ï¼šè¿›æ¡¥æ—¶å¤ä½å®¤å¤– BLOB/MIDLINE éªŒè¯çŠ¶æ€æœº */
+static uint8 s_bridge_zone_prev = 0u;
+#endif
+
 /*-------------------------------------------------------------------------------------------------------------------
- * CM7_1 Ö÷Ñ­»·Ã¿È¦×î¶à·¢Ò»Ö¡ VOFA£¨JustFloat ¾­ wireless_uart£©¡£
- * - ÎŞÏßÄ£¿é½öÔÚ±¾ºË³õÊ¼»¯(all_init_cm7_1_ui¡úwireless_uart_init)£¬¹ÊÉÏ·¢¼¯ÖĞÔÚ´Ë´¦¡£
- * - STEP_DEBUG_USE_VOFA==1£ºÌ¨½×µ÷ÊÔ 6 Â·(step_debug_send_to_vofa)£»==0£ºË«ºË¿ìÕÕ(vofa_send_nav_from_dualcore_snapshot)¡£
- * - ¿ìÕÕ·Ö×éÓÉ Nag_Vofa_Group ¾ö¶¨£¨²Ëµ¥ n / ÉÏÎ»»úÇĞ×é£©£¬¹² NAG_VOFA_GROUP_COUNT ×é£º
- *   0=IMU ×ËÌ¬£¬1=ËÙ¶ÈÄ¿±ê/Êµ²â£¬2=GPS+¹ßµ¼ÈÚºÏ£¨¼û vofa.h£©¡£
- * - µ¼º½¿ìÕÕÀ´×Ô CM7_0 dualcore_ctrl_to_ui_publish£»Óë±¾ÂÖ step_detect Ö®¼ä¿ÉÄÜ²îÒ»ÅÄÖ÷Ñ­»·£¬ÊôÕı³£¡£
+ * CM7_1 ä¸»å¾ªç¯æ¯åœˆæœ€å¤šå‘ä¸€å¸§ VOFAï¼ˆJustFloat ç» wireless_uartï¼‰ã€‚
+ * - æ— çº¿æ¨¡å—ä»…åœ¨æœ¬æ ¸åˆå§‹åŒ–(all_init_cm7_1_uiâ†’wireless_uart_init)ï¼Œæ•…ä¸Šå‘é›†ä¸­åœ¨æ­¤å¤„ã€‚
+ * - STEP_DEBUG_USE_VOFA==1ï¼šå°é˜¶è°ƒè¯• 6 è·¯(step_debug_send_to_vofa)ï¼›==0ï¼šåŒæ ¸å¿«ç…§(vofa_send_nav_from_dualcore_snapshot)ã€‚
+ * - å¿«ç…§åˆ†ç»„ç”± Nag_Vofa_Group å†³å®šï¼ˆèœå• n / ä¸Šä½æœºåˆ‡ç»„ï¼‰ï¼Œå…± NAG_VOFA_GROUP_COUNT ç»„ï¼š
+ *   0=IMU å§¿æ€ï¼Œ1=é€Ÿåº¦ç›®æ ‡/å®æµ‹ï¼Œ2=GPS+æƒ¯å¯¼èåˆï¼ˆè§ vofa.hï¼‰ã€‚
+ * - å¯¼èˆªå¿«ç…§æ¥è‡ª CM7_0 dualcore_ctrl_to_ui_publishï¼›ä¸æœ¬è½® step_detect ä¹‹é—´å¯èƒ½å·®ä¸€æ‹ä¸»å¾ªç¯ï¼Œå±æ­£å¸¸ã€‚
  *-------------------------------------------------------------------------------------------------------------------*/
 static void cm71_vofa_main_loop_tx_dispatch(void)
 {
@@ -58,23 +63,23 @@ static void cm71_vofa_main_loop_tx_dispatch(void)
 #endif
 }
 
-// ´ò¿ªĞÂµÄ¹¤³Ì»òÕß¹¤³ÌÒÆ¶¯ÁËÎ»ÖÃÎñ±ØÖ´ĞĞÒÔÏÂ²Ù×÷
-// µÚÒ»²½ ¹Ø±ÕÉÏÃæËùÓĞ´ò¿ªµÄÎÄ¼ş
-// µÚ¶ş²½ project->clean  µÈ´ıÏÂ·½½ø¶ÈÌõ×ßÍê
+// æ‰“å¼€æ–°çš„å·¥ç¨‹æˆ–è€…å·¥ç¨‹ç§»åŠ¨äº†ä½ç½®åŠ¡å¿…æ‰§è¡Œä»¥ä¸‹æ“ä½œ
+// ç¬¬ä¸€æ­¥ å…³é—­ä¸Šé¢æ‰€æœ‰æ‰“å¼€çš„æ–‡ä»¶
+// ç¬¬äºŒæ­¥ project->clean  ç­‰å¾…ä¸‹æ–¹è¿›åº¦æ¡èµ°å®Œ
 
 
-// **************************** ´úÂëÇøÓò ****************************
+// **************************** ä»£ç åŒºåŸŸ ****************************
 
 int main(void)
 {
-    clock_init(SYSTEM_CLOCK_250M); 	// Ê±ÖÓÅäÖÃ¼°ÏµÍ³³õÊ¼»¯<Îñ±Ø±£Áô>
-    debug_info_init();                  // µ÷ÊÔ´®¿ÚĞÅÏ¢³õÊ¼»¯
+    clock_init(SYSTEM_CLOCK_250M); 	// æ—¶é’Ÿé…ç½®åŠç³»ç»Ÿåˆå§‹åŒ–<åŠ¡å¿…ä¿ç•™>
+    debug_info_init();                  // è°ƒè¯•ä¸²å£ä¿¡æ¯åˆå§‹åŒ–
 
     all_init_cm7_1_ui();
-    /* LORA Ä¬ÈÏ UART_1 Óë wireless_uart Í¬¿Ú£ººó³õÊ¼»¯¸²¸Ç RX »Øµ÷£»·ÖÂ·Ê±Çë¸Ä zf_device_lora3a22.h ºê */
+    /* LORA é»˜è®¤ UART_1 ä¸ wireless_uart åŒå£ï¼šååˆå§‹åŒ–è¦†ç›– RX å›è°ƒï¼›åˆ†è·¯æ—¶è¯·æ”¹ zf_device_lora3a22.h å® */
     remote_lora_init();
 
-    /* °åÔØ¼üÉ¨ÃèÓë menu_key_capture_event ÔÚ cm7_1_isr pit0_ch2(10ms) ÖĞ£¬´Ë´¦Ö»Ïû·Ñ¶ÓÁĞ²¢Ë¢ĞÂ²Ëµ¥/½çÃæ¡£ */
+    /* æ¿è½½é”®æ‰«æä¸ menu_key_capture_event åœ¨ cm7_1_isr pit0_ch2(10ms) ä¸­ï¼Œæ­¤å¤„åªæ¶ˆè´¹é˜Ÿåˆ—å¹¶åˆ·æ–°èœå•/ç•Œé¢ã€‚ */
     while(true)
     {
         dualcore_ctrl_to_ui_t ctrl;
@@ -82,23 +87,64 @@ int main(void)
         Menu_UpdateImageAeArm();
         dualcore_ctrl_to_ui_pull(&ctrl);
         ui_pull_ctrl_snapshot();
-        /* Ì¨½×¼ì²â£º½ö¹ßµ¼ ENTER_STAIR ¼¤»îÊ±ÅÜ£»Image ²Ëµ¥ AE Ä£Ê½ÈÔ¶ÀÕ¼ÉãÏñÍ· */
+        /* å°é˜¶æ£€æµ‹ï¼šä»…æƒ¯å¯¼ ENTER_STAIR æ¿€æ´»æ—¶è·‘ï¼›Image èœå• AE æ¨¡å¼ä»ç‹¬å æ‘„åƒå¤´ */
         if (!MenuIsImageSectionPage() && (ctrl.stair_enter_active != 0u))
         {
             step_detect();
             step_visual_jump_after_step();
-#if IMAGE_WHITE_BLOB_ENABLE
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
             image_vision_guidance_reset();
 #endif
         }
-#if IMAGE_WHITE_BLOB_ENABLE
+        /* å•è¾¹æ¡¥å…ƒç´ ï¼šbridge_zone_active æ—¶ä»…ç™½å—å¯»è¿¹ï¼ˆIMAGE_BRIDGE_WHITE_BLOB_ENABLEï¼‰ */
+        else if (!MenuIsImageSectionPage() && (ctrl.bridge_zone_active != 0u))
+        {
+#if IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+            if (s_bridge_zone_prev == 0u)
+            {
+                image_vision_guidance_reset();
+            }
+            s_bridge_zone_prev = 1u;
+#endif
+
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                image_bridge_blob_process_frame(hd_threshold);
+            }
+#else
+            static uint32 bridge_frame_seq;
+            single_bridge_track_t track;
+            single_bridge_detect_t detect;
+
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                single_bridge_gray_diff_track(hd_threshold, &track);
+                single_bridge_detect_update(&detect, ctrl.bridge_zone_active);
+                bridge_frame_seq++;
+                dualcore_bridge_vision_publish_detect(track.center_err,
+                                                        track.track_valid,
+                                                        detect.road_w_avg,
+                                                        detect.pin_left,
+                                                        detect.pin_right,
+                                                        detect.enter_ready,
+                                                        detect.exit_ready,
+                                                        detect.enter_confirmed,
+                                                        detect.exit_confirmed,
+                                                        (uint8)detect.side,
+                                                        bridge_frame_seq);
+            }
+#endif
+        }
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
         /*
-         * ÊÒÍâÑéÖ¤ÊÓ¾õ×´Ì¬»ú£¨Ì¨½×Ö®ºó¡¢¹ßµ¼ bridge_detect_arm Ö®Ç°£©£º
-         * - WHITE_BLOB£ºÉÏ°ëÇø×î´ó°×Á¬Í¨Óò ¡ú dualcore blob Í¨µÀ
-         * - MIDLINE£ºsingle_bridge ×óÓÒÖĞÑ°Ïß ¡ú dualcore bridge Í¨µÀ
-         * ÇĞ»»/»ØÍËÂß¼­¼û image_vision_guidance_process_frame()¡£
+         * å®¤å¤–éªŒè¯è§†è§‰çŠ¶æ€æœºï¼ˆä»…éå›æ”¾æ€ index!=3ï¼‰ï¼š
+         * - WHITE_BLOBï¼šä¸ŠåŠåŒºæœ€å¤§ç™½è¿é€šåŸŸ â†’ dualcore blob é€šé“
+         * - MIDLINEï¼šsingle_bridge å·¦å³ä¸­å¯»çº¿ â†’ dualcore bridge é€šé“
          */
-        else if (!MenuIsImageSectionPage())
+        else if (!MenuIsImageSectionPage() && (ctrl.nag_system_run_index != 3u))
         {
             if (mt9v03x_finish_flag != 0u)
             {
@@ -107,7 +153,8 @@ int main(void)
             }
         }
 #endif
-        /* µ¥±ßÇÅÊÓ¾õ£ºÔ¤Çø arm »òÇÅÉÏ detect£»IMAGE_WHITE_BLOB_ENABLE=0 Ê±ÆôÓÃ */
+#if !IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+        /* æ—§å•è¾¹æ¡¥è§†è§‰ï¼šæ¡¥åŒºç™½å—å…³æ—¶ bridge_detect_arm èµ° single_bridge */
         else if (!MenuIsImageSectionPage() && (ctrl.bridge_detect_arm != 0u))
         {
             static uint32 bridge_frame_seq;
@@ -133,13 +180,22 @@ int main(void)
                                                         bridge_frame_seq);
             }
         }
+#endif
         else if (!MenuIsImageSectionPage())
         {
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+            s_bridge_zone_prev = 0u;
+#endif
             single_bridge_detect_reset();
             dualcore_bridge_vision_publish_inactive();
-#if IMAGE_WHITE_BLOB_ENABLE
+#if IMAGE_WHITE_BLOB_ANY_ENABLE
             dualcore_white_blob_publish_inactive();
-            image_vision_guidance_reset();
+#endif
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+            if (ctrl.nag_system_run_index != 3u)
+            {
+                image_vision_guidance_reset();
+            }
 #endif
         }
         image_ae_session_poll();
@@ -159,4 +215,4 @@ int main(void)
     }
 }
 
-// **************************** ´úÂëÇøÓò ****************************
+// **************************** ä»£ç åŒºåŸŸ ****************************

@@ -235,8 +235,8 @@ int main(void)
     remote_lora_apply_validate_motor();
     Nag_BridgeDetectUpdate();
     dualcore_ctrl_to_ui_publish();
-#if IMAGE_WHITE_BLOB_ENABLE
-    /* 按 dualcore vision_guidance_mode 选择白块或中线 yaw 修正（主循环验证） */
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+    /* 室外验证：按 vision_guidance_mode 选择白块或中线 yaw；桥区正式路径走 Nag_BridgeDetectUpdate */
     image_vision_guidance_apply_yaw();
 #endif
 #endif

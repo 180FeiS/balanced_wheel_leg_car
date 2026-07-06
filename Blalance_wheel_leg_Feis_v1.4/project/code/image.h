@@ -104,12 +104,29 @@ uint8   image_ae_session_consume_done_and_save(void);
 void    image_camera_auto_exposure  (void);
 
 /*--------------------------------------------------------------------------------------------------------------------
- * 上半 ROI 最大白连通域引导（室外验证：朝远处白色目标区修正 yaw，进入后可切 single_bridge 中线）
+ * 白连通域：IMAGE_BRIDGE_WHITE_BLOB_ENABLE=桥区元素内寻迹；
+ *           IMAGE_WHITE_BLOB_VALIDATE_ENABLE=室外验证状态机（默认关）。
  *-------------------------------------------------------------------------------------------------------------------*/
 
-/** 1=启用白连通域检测与 yaw 引导；验证期常开，正式比赛改 0 */
+/** 1=单边桥元素内白块检测与 yaw（经 navigation Nag_BridgeDetectUpdate）；正式回放默认开 */
+#ifndef IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+#define IMAGE_BRIDGE_WHITE_BLOB_ENABLE  1u
+#endif
+
+/** 1=室外验证：非回放态白块/中线状态机 + CM7_0 apply_yaw；比赛默认关 */
+#ifndef IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+#define IMAGE_WHITE_BLOB_VALIDATE_ENABLE  0u
+#endif
+
+/** 兼容旧宏：置 1 等价于仅打开 VALIDATE（不再同时打开桥区路径） */
 #ifndef IMAGE_WHITE_BLOB_ENABLE
-#define IMAGE_WHITE_BLOB_ENABLE         1u
+#define IMAGE_WHITE_BLOB_ENABLE         IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+#endif
+
+#if (IMAGE_BRIDGE_WHITE_BLOB_ENABLE || IMAGE_WHITE_BLOB_VALIDATE_ENABLE)
+#define IMAGE_WHITE_BLOB_ANY_ENABLE     1u
+#else
+#define IMAGE_WHITE_BLOB_ANY_ENABLE     0u
 #endif
 
 /** 连通域扫描行范围 [START, END)：近底留 10 行给车体/畸变 */
@@ -134,14 +151,22 @@ void    image_camera_auto_exposure  (void);
 /** 白块→中线：上述条件连续满足的帧数，防抖 */
 #define IMAGE_WHITE_BLOB_SWITCH_DEBOUNCE    4u
 
-/** 横向误差 → 每帧相对 yaw 增量（deg），方向反了可改符号；中线模式复用 */
-#define IMAGE_WHITE_BLOB_YAW_KP           0.06f
+/**
+ * 像素横向误差 → 目标航向偏移（deg/px）。
+ * 旧方案用 steer_request_relative_yaw(小增量)，且 STEER_ANGLE_SETTLE_DEG=3° 时几乎立刻 steer_finish，转向极慢。
+ * 现改为：target_yaw = 当前 yaw + clip(center_err * K_PIXEL, ±MAX_OFFSET)，持续追白块中心。
+ */
+#define IMAGE_WHITE_BLOB_YAW_K_PIXEL        0.22f
 
-/** 单帧 yaw 修正上限（deg），防止猛打方向 */
-#define IMAGE_WHITE_BLOB_YAW_MAX_DELTA    2.5f
+/** 相对当前航向的最大目标偏角（deg），大偏差时允许更快转向 */
+#define IMAGE_WHITE_BLOB_YAW_MAX_OFFSET_DEG 30.0f
 
-/** yaw 死区（deg），抑制抖动 */
-#define IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG 0.3f
+/** 兼容旧名：增量上限（若仍走 relative 路径时使用） */
+#define IMAGE_WHITE_BLOB_YAW_KP           IMAGE_WHITE_BLOB_YAW_K_PIXEL
+#define IMAGE_WHITE_BLOB_YAW_MAX_DELTA    IMAGE_WHITE_BLOB_YAW_MAX_OFFSET_DEG
+
+/** yaw 死区（deg），|目标偏角|低于此则不更新航向请求 */
+#define IMAGE_WHITE_BLOB_YAW_DEADBAND_DEG 0.1f
 
 /** dualcore vision_guidance_mode 取值：白块目标引导 */
 #define IMAGE_VISION_MODE_BLOB            1u
@@ -161,10 +186,20 @@ typedef struct
     uint8 track_valid;  /**< 1=area>=MIN_AREA 且检测成功 */
 } image_white_blob_result_t;
 
+#if IMAGE_WHITE_BLOB_ANY_ENABLE
 /** CM7_1：压缩→二值化→全幅可用区最大白连通域；需先有新帧 mt9v03x_image */
 void image_white_blob_detect(image_white_blob_result_t *out);
+#endif
 
-#if IMAGE_WHITE_BLOB_ENABLE
+#if IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+/**
+ * CM7_1 单边桥回放专用：仅白块寻迹，不经 BLOB↔MIDLINE 状态机。
+ * 由 dualcore ctrl.bridge_zone_active 门控；bw_threshold 保留接口，检测内部用大津阈值。
+ */
+void image_bridge_blob_process_frame(int bw_threshold);
+#endif
+
+#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
 /**
  * CM7_1 主循环：白块/中线状态机（每帧调用一次，调用方须已置 mt9v03x_finish_flag=0）。
  * bw_threshold：中线模式传给 single_bridge_gray_diff_track 的差比和阈值。

@@ -90,7 +90,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->stair_enter_active = (uint8)((N.Event_Active != 0u) &&
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
   c->bridge_zone_active = N.Bridge_Zone_Active;
-  c->bridge_detect_arm = Nag_BridgeDetectShouldArm();
+  c->bridge_detect_arm = N.Bridge_Zone_Active;
   c->odo_wheel_left_cmps = N.Odo_Wheel_Left_Cmps;
   c->odo_wheel_right_cmps = N.Odo_Wheel_Right_Cmps;
   c->odo_gyro_z_dps = N.Odo_Gyro_Z_Dps;

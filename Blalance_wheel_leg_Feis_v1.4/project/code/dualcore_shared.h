@@ -187,9 +187,9 @@ typedef struct
   uint8 fusion_calib_failed;
   /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
   uint8 stair_enter_active;
-  /* 1=惯导 BridgeIn～BridgeOut；CM7_1 仅此时跑 single_bridge 并 publish 视觉误差 */
+  /* 1=桥上白块引导中（BridgeIn 确认～白块丢失出桥） */
   uint8 bridge_zone_active;
-  /* 1=桥预区或桥上：CM7_1 跑寻边+detect */
+  /* 1=同 bridge_zone_active；CM7_1 跑 image_bridge_blob_process_frame */
   uint8 bridge_detect_arm;
   /*
    * VOFA 组 3 — 里程纠偏/打滑（navigation.c Nag_OdoSlip_*）：
