@@ -1001,6 +1001,10 @@ void image_white_blob_detect(image_white_blob_result_t *out)
     uint8 track_valid = 0u;
     float center_err = 0.0f;
     int th;
+    int gray_sum = 0;
+    int gray_count = 0;
+    int mean_gray = 0;
+    int roi_pixels = 0;
 
     if (row_end > (int)IMAGE_COMPRESS_H)
     {
@@ -1013,6 +1017,18 @@ void image_white_blob_detect(image_white_blob_result_t *out)
     }
 
     image_photo_compress(mt9v03x_image[0]);
+
+    for (row = IMAGE_WHITE_BLOB_ROI_ROW_START; row < row_end; row++)
+    {
+        for (col = col_lo; col < col_hi; col++)
+        {
+            gray_sum += (int)image_two_value[row][col];
+            gray_count++;
+        }
+    }
+    mean_gray = (gray_count > 0) ? (gray_sum / gray_count) : 0;
+    roi_pixels = gray_count;
+
     Threshold = (int)image_otsu_on_process_buf();
     th = Threshold + IMAGE_WHITE_BLOB_THRESH_OFFSET;
     if (th < 0)
@@ -1076,6 +1092,20 @@ void image_white_blob_detect(image_white_blob_result_t *out)
         best_cx = best_sum_x / best_area;
         best_cy = best_sum_y / best_area;
         center_err = (float)(((int)IMAGE_COMPRESS_W / 2) - best_cx);
+    }
+
+    if (mean_gray < IMAGE_WHITE_BLOB_MIN_MEAN_GRAY)
+    {
+        track_valid = 0u;
+        best_area = 0;
+        center_err = 0.0f;
+    }
+    else if ((roi_pixels > 0) && (best_area > (roi_pixels * 4) / 5))
+    {
+        /* 连通域占 ROI 过大，多为暗场 Otsu 整幅误分割 */
+        track_valid = 0u;
+        best_area = 0;
+        center_err = 0.0f;
     }
 
     Cammer_Err = center_err;

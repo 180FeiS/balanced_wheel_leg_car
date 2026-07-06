@@ -346,6 +346,14 @@ void dualcore_white_blob_pull(float *center_err, uint8 *track_valid, uint8 *fres
   }
 }
 
+uint8 dualcore_white_blob_read_track_valid(void)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+  return v->blob_track_valid;
+}
+
 uint8 dualcore_vision_guidance_pull_mode(void)
 {
   dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;

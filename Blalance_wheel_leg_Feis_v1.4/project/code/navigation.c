@@ -23,7 +23,7 @@
 
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points);
 static uint16 Nag_DistanceToPoints(float distance_cm);
-static uint8 s_bridge_blob_lost_debounce;
+static uint16 s_bridge_blob_lost_ms;
 static uint16 s_bridge_enter_grace_ms;   /* 进桥宽限计时（ms），Nag_BridgeTimeoutTick1ms 递增 */
 static uint16 s_bridge_blob_no_frame_ms; /* 进桥后无 CM7_1 白块新帧保护计时 */
 
@@ -444,7 +444,7 @@ static void Nag_BridgeConfirmEnter(void)
     {
         N.Bridge_Exit_Run_Index = exit_index;
     }
-    s_bridge_blob_lost_debounce = 0u;
+    s_bridge_blob_lost_ms = 0u;
     s_bridge_enter_grace_ms = 0u;
     s_bridge_blob_no_frame_ms = 0u;
     N.Target_Request_Valid = 0u;
@@ -483,7 +483,7 @@ static void Nag_BridgeConfirmExit(uint8 allow_beep)
     N.Bridge_Saved_Leg_Long = 0.0f;
     N.Bridge_Saved_RollBalance = 0u;
     N.Bridge_Exit_Run_Index = NAG_BRIDGE_EXIT_INDEX_INVALID;
-    s_bridge_blob_lost_debounce = 0u;
+    s_bridge_blob_lost_ms = 0u;
     s_bridge_enter_grace_ms = 0u;
     s_bridge_blob_no_frame_ms = 0u;
 
@@ -552,6 +552,7 @@ void Nag_BridgeTimeoutTick1ms(void)
     if (N.Bridge_Zone_Active == 0u)
     {
         s_bridge_enter_grace_ms = 0u;
+        s_bridge_blob_lost_ms = 0u;
         s_bridge_blob_no_frame_ms = 0u;
         return;
     }
@@ -564,13 +565,33 @@ void Nag_BridgeTimeoutTick1ms(void)
     {
         s_bridge_enter_grace_ms++;
     }
-    else if (s_bridge_blob_no_frame_ms < BRIDGE_BLOB_NO_FRAME_EXIT_MS)
-    {
-        s_bridge_blob_no_frame_ms++;
-    }
     else
     {
-        Nag_BridgeConfirmExit(1u);
+        uint8 track_valid = dualcore_white_blob_read_track_valid();
+
+        if (track_valid != 0u)
+        {
+            s_bridge_blob_lost_ms = 0u;
+        }
+        else if (s_bridge_blob_lost_ms < 0xFFFFu)
+        {
+            s_bridge_blob_lost_ms++;
+        }
+
+        if (s_bridge_blob_lost_ms >= BRIDGE_BLOB_LOST_EXIT_MS)
+        {
+            Nag_BridgeConfirmExit(1u);
+            return;
+        }
+
+        if (s_bridge_blob_no_frame_ms < BRIDGE_BLOB_NO_FRAME_EXIT_MS)
+        {
+            s_bridge_blob_no_frame_ms++;
+        }
+        else
+        {
+            Nag_BridgeConfirmExit(1u);
+        }
     }
 }
 
@@ -589,13 +610,13 @@ void Nag_BridgeDetectUpdate(void)
 
     if (N.Bridge_Zone_Active == 0u)
     {
-        s_bridge_blob_lost_debounce = 0u;
+        s_bridge_blob_lost_ms = 0u;
         return;
     }
 
     dualcore_white_blob_pull(&center_err, &track_valid, &fresh);
 
-    /* 桥区方向控制只看当前白块快照；fresh 仅用于出桥防抖/无帧超时。 */
+    /* 桥区方向控制只看当前白块快照；fresh 仅用于无帧超时复位。 */
     Nag_BridgeApplyBlobYaw(center_err, track_valid);
 
     if (fresh == 0u)
@@ -603,29 +624,6 @@ void Nag_BridgeDetectUpdate(void)
         return;
     }
     s_bridge_blob_no_frame_ms = 0u;
-
-    /* 宽限期内只禁止出桥判定，不禁止白块 yaw 控制。 */
-    if (s_bridge_enter_grace_ms < BRIDGE_ENTER_GRACE_MS)
-    {
-        return;
-    }
-
-    if (track_valid != 0u)
-    {
-        s_bridge_blob_lost_debounce = 0u;
-        return;
-    }
-
-    if (s_bridge_blob_lost_debounce < 255u)
-    {
-        s_bridge_blob_lost_debounce++;
-    }
-
-    if (s_bridge_blob_lost_debounce >= BRIDGE_BLOB_LOST_EXIT_DEBOUNCE)
-    {
-        s_bridge_blob_lost_debounce = 0u;
-        Nag_BridgeConfirmExit(1u);
-    }
 }
 
 /*
@@ -3377,7 +3375,7 @@ void Nag_Element_Abort(void)
         N.Bridge_Saved_Leg_Long = 0.0f;
         N.Bridge_Saved_RollBalance = 0u;
         N.Bridge_Exit_Run_Index = NAG_BRIDGE_EXIT_INDEX_INVALID;
-        s_bridge_blob_lost_debounce = 0u;
+        s_bridge_blob_lost_ms = 0u;
         s_bridge_enter_grace_ms = 0u;
         s_bridge_blob_no_frame_ms = 0u;
     }

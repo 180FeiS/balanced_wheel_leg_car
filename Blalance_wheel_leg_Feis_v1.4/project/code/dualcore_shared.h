@@ -304,6 +304,8 @@ void dualcore_vision_to_ctrl_pull_step(step_info_t *out, uint32 *frame_seq_out, 
 void dualcore_bridge_vision_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
 void dualcore_bridge_vision_pull_snapshot(dualcore_bridge_vision_snapshot_t *out);
 void dualcore_white_blob_pull(float *center_err, uint8 *track_valid, uint8 *fresh);
+/** 1ms 出桥判定用：只读最新 blob_track_valid，不消费 fresh */
+uint8 dualcore_white_blob_read_track_valid(void);
 /** 读取 CM7_1 当前主导视觉模式（见 IMAGE_VISION_MODE_*） */
 uint8 dualcore_vision_guidance_pull_mode(void);
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */

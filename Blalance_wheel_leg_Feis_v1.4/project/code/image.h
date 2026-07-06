@@ -138,6 +138,8 @@ void    image_camera_auto_exposure  (void);
 
 /** 最小白块像素数，低于此 track_valid=0 */
 #define IMAGE_WHITE_BLOB_MIN_AREA         60
+/** ROI 平均灰度低于该值视为无有效白块（遮挡/全黑时不误报 track_valid） */
+#define IMAGE_WHITE_BLOB_MIN_MEAN_GRAY    28
 
 /** 大津阈值偏移；室外光强时可微调（负值更严、正值更松） */
 #define IMAGE_WHITE_BLOB_THRESH_OFFSET    (-5)
@@ -156,7 +158,7 @@ void    image_camera_auto_exposure  (void);
  * 旧方案用 steer_request_relative_yaw(小增量)，且 STEER_ANGLE_SETTLE_DEG=3° 时几乎立刻 steer_finish，转向极慢。
  * 现改为：target_yaw = 当前 yaw + clip(center_err * K_PIXEL, ±MAX_OFFSET)，持续追白块中心。
  */
-#define IMAGE_WHITE_BLOB_YAW_K_PIXEL        0.22f
+#define IMAGE_WHITE_BLOB_YAW_K_PIXEL        0.5f
 
 /** 相对当前航向的最大目标偏角（deg），大偏差时允许更快转向 */
 #define IMAGE_WHITE_BLOB_YAW_MAX_OFFSET_DEG 30.0f

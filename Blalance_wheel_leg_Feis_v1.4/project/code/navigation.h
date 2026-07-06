@@ -161,8 +161,8 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
 #define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出标记：恢复腿长
 #define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
-/** 桥区白块 track_valid=0 连续该帧数后确认出桥（仅计 CM7_1 新帧 fresh==1） */
-#define BRIDGE_BLOB_LOST_EXIT_DEBOUNCE  6u
+/** 宽限后 track_valid=0 连续该时间（ms）确认出桥；1ms ISR 读快照，不依赖 fresh */
+#define BRIDGE_BLOB_LOST_EXIT_MS        250u
 /** 进桥后该时间内禁止出桥判定（ms），给 CM7_1 启动 blob 与腿高步进留时间 */
 #define BRIDGE_ENTER_GRACE_MS           400u
 /** 进桥宽限后该时间仍没有 CM7_1 白块新帧，则退出桥区，避免视觉任务关闭时卡死 */
@@ -561,7 +561,7 @@ typedef enum {
 extern uint8 nav_heading_mode;
 void Nag_Run(); //偏航角控制总函数
 uint8 Nag_BridgeDetectShouldArm(void); /* 1=Bridge_Zone_Active，供 CM7_1 白块门控 */
-void Nag_BridgeDetectUpdate(void);     /* 桥区白块丢失 debounce 后 Nag_BridgeConfirmExit */
+void Nag_BridgeDetectUpdate(void);     /* 桥区白块 yaw + 新帧复位无帧超时 */
 void Nag_BridgeTimeoutTick1ms(void);
 void Run_Nag_GPS();//偏航角读取
 
