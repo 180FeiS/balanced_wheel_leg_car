@@ -1,0 +1,2329 @@
+/* ===== code/my_gps.h ===== */
+#ifndef CODE_MY_GPS_H_
+#define CODE_MY_GPS_H_
+#include "zf_common_typedef.h"
+#include "navigation.h"
+/*
+ * GPS 路点导航使用说明（摘要）：
+ * 1) 录点：KEY1 开始录点，录点态下 KEY3 依次保存路点；第一次保存的点为 index0，用作「录径参考起点」。
+ * 2) 存盘：KEY2 将路点写入 flash（数组为录点时的原始经纬度）。
+ * 3) 发车：KEY3 进入导航；若 GPS 有效，计算漂移修正量
+ *    delta = 发车时 GNSS − latitude_point[0]/longitude_point[0]，导航目标使用「路点 + delta」（与 gps_first_clearerr 同号约定）。
+ * 4) 航向标定：发车后先保持「目标航向 = 发车锁存 IMU yaw」直线行驶；当相对发车点位移 ≥
+ *    GPS_NAV_GPS_FIRST_DISTANCE_M 时，读取 RMC gnss.direction（COG）映射为 GPS_first，锁 euler_ref=euler_angle.yaw，
+ *    bias = Wrap180(GPS_first − euler_ref)；指路角与 subject2 GPS_angle 同源（get_two_points_azimuth→±180°），
+ *    TRACKING：target_imu = Wrap180(Theta_goal − GPS_first + euler_ref)。与坐标漂移修正相互独立。
+ * 5) 勿与 gps_first_clearerr* 同时对同一次运行做「改表 + 运行时加 delta」，否则双重平移。
+ * 6) GPS_NAV_USE_FUSION_POSITION=1 时追点用 nav_fusion 位置，录点/发车 KEY 流程不变。
+ */
+/* 1=GPS 点导航当前位置用融合坐标；0=直接用 gnss 经纬度（原行为） */
+#define GPS_NAV_USE_FUSION_POSITION 1u
+#define GPS_POINT_MAX 25u
+/* GPS 点导航参数：
+ * - ARRIVE_RADIUS_M：小于该距离认为到达当前路点；
+ * - MAX_DISTANCE_M：单点距离异常保护，防止坏点或定位跳变导致车辆乱跑；
+ * - REISSUE_YAW_DEG：目标航向变化超过该阈值才重新下发，避免 5ms 周期反复重置转向 PID。
+ */
+#define GPS_NAV_ARRIVE_RADIUS_M 1.5f
+#define GPS_NAV_MAX_DISTANCE_M 200.0f
+#define GPS_NAV_REISSUE_YAW_DEG 3.0f
+#define GPS_NAV_MIN_POINT_COUNT 1u
+/* 相对发车锁存经纬度累计位移达到该值后，用 RMC 的 gnss.direction（COG）作 GPS_first 与 IMU 对齐。 */
+#define GPS_NAV_GPS_FIRST_DISTANCE_M 5.0f
+typedef enum
+{
+    south = 0, // 朝南发车
+    north = 1, // 朝北发车
+    dong = 2,  // 朝东发车
+    xi = 3,    // 朝西发车
+} car_dir;
+/* car_dir / car_gps_dir 仅用于路径小地图绘制朝向等 UI，不参与 GPS 点导航航向换算。 */
+typedef enum
+{
+    GPS_NAV_STATE_IDLE = 0,     // 未启动 GPS 点导航
+    GPS_NAV_STATE_RUNNING = 1,  // 正在根据 GPS 点请求目标航向
+    GPS_NAV_STATE_FINISHED = 2, // 最后一个路点到达，已停车
+    GPS_NAV_STATE_PROTECT = 3,  // GPS/目标/距离异常，已停车保护
+} gps_nav_state_enum;
+typedef enum
+{
+    GPS_NAV_PROTECT_NONE = 0,
+    GPS_NAV_PROTECT_GPS_INVALID = 1,
+    GPS_NAV_PROTECT_TARGET_INVALID = 2,
+    GPS_NAV_PROTECT_DISTANCE_TOO_FAR = 3,
+    GPS_NAV_PROTECT_FINISHED = 4,
+    GPS_NAV_PROTECT_COG_INVALID = 5, /* 达标定距离后 RMC 无有效 COG（如 gnss.state==0），无法锁 GPS_first */
+} gps_nav_protect_enum;
+typedef enum
+{
+    GPS_NAV_ALIGN_WAIT = 0,      /* 位移未到 GPS_NAV_GPS_FIRST_DISTANCE_M：目标航向=发车锁存 yaw */
+    GPS_NAV_ALIGN_TRACKING = 1u, /* 已用 COG 锁过 bias，按「当前→路点」地理方位闭环 */
+} gps_nav_align_state_enum;
+extern car_dir car_gps_dir;
+extern uint8 save_point;   // 下一个保存点序号
+extern uint8 show_point;   // 当前显示/查看点序号
+extern uint8 now_point;    // 当前寻迹点
+extern uint8 tagert_point; // 目标寻迹点，保留源工程命名
+extern uint8 gps_point_count;
+extern uint8 gps_recording_active;
+extern uint32 gps_current_yuansu;
+extern double latitude_point[GPS_POINT_MAX];
+extern double longitude_point[GPS_POINT_MAX];
+extern uint32 u32yuansu[GPS_POINT_MAX];
+extern uint8 gps_nav_state;
+extern uint8 gps_nav_protect_reason;
+extern uint8 gps_nav_target_index;
+extern double gps_nav_current_latitude;
+extern double gps_nav_current_longitude;
+extern double gps_nav_target_latitude;
+extern double gps_nav_target_longitude;
+extern float gps_nav_distance_m;
+/* ±180°：当前 GNSS→当前目标点的初始方位（subject2 get_two_points_azimuth + age_change_180 等价）；距离仍局地平面近似。 */
+extern float gps_nav_geo_bearing_deg;
+extern float gps_nav_body_target_yaw_deg;
+extern float gps_nav_target_imu_yaw_deg;
+extern float gps_nav_imu_yaw_deg;
+extern float gps_nav_yaw_err_deg;
+extern uint8 gps_nav_align_state;     /* gps_nav_align_state_enum，供屏显/双核调试 */
+extern float gps_nav_heading_bias_deg; /* Wrap180(GPS_first − euler_ref)，TRACKING 后冻结 */
+extern float gps_nav_gps_first_deg;    /* ±180° RMC COG，subject2 GPS_first；WAIT 段常为 0 */
+extern float gps_nav_euler_ref_at_first_deg; /* 锁 GPS_first 当帧 euler_angle.yaw */
+extern float gps_nav_dist_from_launch_m; /* 当前距发车锁存点位移（屏显 Lm），仅调试 */
+/* 录点 index0 相对本次发车 GNSS 的经纬平移（度）；effective 时导航目标为 路点 + delta，不改 flash 数组 */
+extern double gps_drift_delta_lat;
+extern double gps_drift_delta_lon;
+extern uint8 gps_drift_corr_valid; /* 1：本次发车已锁定 delta（需首点与发车定位均有效） */
+void GPS_ClearPoints(void);
+void GPS_BeginRecord(void);
+void GPS_EndRecord(void);
+/* KEY3 发车：切 NAV_HEADING_MODE_GPS；融合模式下先 50 点原点平均再赋速。 */
+void GPS_ApplyLaunchSpeed(void);
+/* 原点平均完成后调用：锁存 launch 经纬、漂移修正并下发 run_launch_speed */
+void GPS_CompleteLaunchAfterOrigin(void);
+/* 原点采集失败（超时且样本不足）：取消待发车速，退回 IDLE */
+void GPS_OnOriginCalibrationFailed(void);
+/* 5ms 软任务：GPS 模式下先标定偏置再追点，经 steer_request_target_yaw 登记绝对航向（与惯导回放分离）。 */
+void GPS_PointNav_Run(void);
+void GPS_NavForceEndPoint(void);
+void GPS_NavTryEnterElement(uint8 point_index, uint8 unified_type);
+void GPS_NavOnElementDone(void);
+float GPS_NavDistanceToPointM(uint8 point_index);
+uint8 GPS_GetValidPointCount(void);
+const char *GPS_GetElementName(uint32 element);
+const char *GPS_GetNavStateName(uint8 state);
+const char *GPS_GetNavProtectName(uint8 reason);
+uint32 GPS_CycleCurrentElement(void);
+void GPS_SavePointFromCoord(uint8 point_num, double latitude, double longitude, uint32 yuansu_num);
+uint8 GPS_SaveCurrentPointFromCoord(double latitude, double longitude);
+void specialpoint(uint8 point_num, uint32 yuansu_num);
+/* 将录点数组整表平移到「当前 GNSS 相对参考点」坐标系；与发车自动漂移修正互斥，勿与 RUNNING 时 GPS 导航叠用。 */
+void gps_first_clearerr(double first_j, double first_w, uint8 num);
+void gps_first_clearerr_from_coord(double cur_j, double cur_w, double first_j, double first_w, uint8 num);
+void GPS_Path_Draw(const double *lat_buf, const double *lot_buf, uint16 len, uint8 carseat_enable, uint8 dir);
+void GPS_Path_DrawWithCar(const double *lat_buf,
+                          const double *lot_buf,
+                          uint16 len,
+                          uint8 carseat_enable,
+                          uint8 dir,
+                          double car_latitude,
+                          double car_longitude,
+                          uint16 x_offset,
+                          uint16 y_offset,
+                          uint16 width,
+                          uint16 height);
+#endif /* CODE_MY_GPS_H_ */
+/* ===== code/my_gps.c ===== */
+#include "zf_common_headfile.h"
+#include "my_gps.h"
+#include "nav_fusion.h"
+#include <math.h>
+#include <string.h>
+#define GPS_NAV_PI 3.14159265358979323846
+#define GPS_NAV_EARTH_RADIUS_M 6371000.0
+#define GPS_NAV_DEG_TO_RAD(x) ((x) * GPS_NAV_PI / 180.0)
+#define GPS_NAV_RAD_TO_DEG(x) ((x) * 180.0 / GPS_NAV_PI)
+#define GPS_PATH_MIN_RANGE_DEG 0.000001
+#define GPS_PATH_MARGIN_RATIO 0.10
+car_dir car_gps_dir = north;
+uint8 now_point = 0;
+uint8 tagert_point = 0;
+uint8 save_point = 0;
+uint8 show_point = 0;
+uint8 gps_point_count = 0;
+uint8 gps_recording_active = 0;
+uint32 gps_current_yuansu = NAV_ELEM_NORMAL;
+double latitude_point[GPS_POINT_MAX] = {0};
+double longitude_point[GPS_POINT_MAX] = {0};
+uint32 u32yuansu[GPS_POINT_MAX] = {0};
+uint8 gps_nav_state = GPS_NAV_STATE_IDLE;
+uint8 gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+uint8 gps_nav_target_index = 0;
+double gps_nav_current_latitude = 0.0;
+double gps_nav_current_longitude = 0.0;
+double gps_nav_target_latitude = 0.0;
+double gps_nav_target_longitude = 0.0;
+float gps_nav_distance_m = 0.0f;
+float gps_nav_geo_bearing_deg = 0.0f;
+float gps_nav_body_target_yaw_deg = 0.0f;
+float gps_nav_target_imu_yaw_deg = 0.0f;
+float gps_nav_imu_yaw_deg = 0.0f;
+float gps_nav_yaw_err_deg = 0.0f;
+uint8 gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
+float gps_nav_heading_bias_deg = 0.0f;
+float gps_nav_gps_first_deg = 0.0f;
+float gps_nav_euler_ref_at_first_deg = 0.0f;
+float gps_nav_dist_from_launch_m = 0.0f;
+double gps_drift_delta_lat = 0.0;
+double gps_drift_delta_lon = 0.0;
+uint8 gps_drift_corr_valid = 0u;
+static float gps_nav_launch_imu_yaw = 0.0f;
+static float gps_nav_last_requested_yaw = 0.0f;
+static uint8 gps_nav_request_valid = 0u;
+static double gps_nav_launch_latitude = 0.0;
+static double gps_nav_launch_longitude = 0.0;
+static uint8 gps_nav_launch_fix_valid = 0u;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+static uint8 gps_nav_origin_pending = 0u;
+#endif
+static uint16 GPS_ClampU16(int32 value, uint16 min_value, uint16 max_value)
+{
+    if (value < (int32)min_value)
+    {
+        return min_value;
+    }
+    if (value > (int32)max_value)
+    {
+        return max_value;
+    }
+    return (uint16)value;
+}
+static void GPS_FillPathViewport(uint16 x_offset, uint16 y_offset, uint16 width, uint16 height)
+{
+    uint16 y = 0;
+    uint16 x_end = (uint16)(x_offset + width);
+    uint16 y_end = (uint16)(y_offset + height);
+    for (y = y_offset; y <= y_end; y++)
+    {
+        ips200_draw_line(x_offset, y, x_end, y, RGB565_WHITE);
+    }
+}
+static void GPS_DrawViewportPoint(uint16 x,
+                                  uint16 y,
+                                  uint16 x_offset,
+                                  uint16 y_offset,
+                                  uint16 width,
+                                  uint16 height,
+                                  uint16 color)
+{
+    uint16 x_max = (uint16)(x_offset + width);
+    uint16 y_max = (uint16)(y_offset + height);
+    ips200_draw_point(x, y, color);
+    ips200_draw_point(GPS_ClampU16((int32)x + 1, x_offset, x_max), y, color);
+    ips200_draw_point(GPS_ClampU16((int32)x - 1, x_offset, x_max), y, color);
+    ips200_draw_point(x, GPS_ClampU16((int32)y + 1, y_offset, y_max), color);
+    ips200_draw_point(x, GPS_ClampU16((int32)y - 1, y_offset, y_max), color);
+}
+static void GPS_ExpandRange(double *min_value, double *max_value)
+{
+    double center = (*min_value + *max_value) * 0.5;
+    double range = *max_value - *min_value;
+    double margin = 0.0;
+    if (fabs(range) < GPS_PATH_MIN_RANGE_DEG)
+    {
+        range = GPS_PATH_MIN_RANGE_DEG;
+        *min_value = center - (range * 0.5);
+        *max_value = center + (range * 0.5);
+    }
+    margin = range * GPS_PATH_MARGIN_RATIO;
+    *min_value -= margin;
+    *max_value += margin;
+}
+static float GPS_Wrap180(float angle_deg)
+{
+    while (angle_deg > 180.0f)
+    {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < -180.0f)
+    {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+static float GPS_Wrap360(float angle_deg)
+{
+    while (angle_deg >= 360.0f)
+    {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < 0.0f)
+    {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+static void GPS_NavClearDebug(void)
+{
+    gps_nav_current_latitude = 0.0;
+    gps_nav_current_longitude = 0.0;
+    gps_nav_target_latitude = 0.0;
+    gps_nav_target_longitude = 0.0;
+    gps_nav_distance_m = 0.0f;
+    gps_nav_geo_bearing_deg = 0.0f;
+    gps_nav_body_target_yaw_deg = 0.0f;
+    gps_nav_target_imu_yaw_deg = 0.0f;
+    gps_nav_imu_yaw_deg = 0.0f;
+    gps_nav_yaw_err_deg = 0.0f;
+    gps_nav_request_valid = 0u;
+    gps_nav_last_requested_yaw = 0.0f;
+    gps_nav_align_state = GPS_NAV_ALIGN_WAIT;
+    gps_nav_heading_bias_deg = 0.0f;
+    gps_nav_gps_first_deg = 0.0f;
+    gps_nav_euler_ref_at_first_deg = 0.0f;
+    gps_nav_dist_from_launch_m = 0.0f;
+    gps_nav_launch_latitude = 0.0;
+    gps_nav_launch_longitude = 0.0;
+    gps_nav_launch_fix_valid = 0u;
+    gps_drift_delta_lat = 0.0;
+    gps_drift_delta_lon = 0.0;
+    gps_drift_corr_valid = 0u;
+}
+#if !defined(CY_CORE_CM7_1)
+static uint8 GPS_NavIsCurrentCoordValid(double latitude, double longitude)
+{
+    uint8 frame_seen = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    /* 融合模式下：原点已建立即可继续导航，避免 GNSS 瞬时掉帧误触发保护 */
+    if (NavFusion_IsValid() != 0u && latitude != 0.0 && longitude != 0.0)
+    {
+        return 1u;
+    }
+#endif
+    if (!frame_seen || latitude == 0.0 || longitude == 0.0)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+static uint8 GPS_NavIsTargetValid(uint8 index)
+{
+    if (index >= gps_point_count || index >= GPS_POINT_MAX)
+    {
+        return 0u;
+    }
+    if (latitude_point[index] == 0.0 || longitude_point[index] == 0.0)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+static void GPS_NavStop(uint8 state, uint8 reason)
+{
+    gps_nav_state = state;
+    gps_nav_protect_reason = reason;
+    gps_nav_request_valid = 0u;
+    motor_user_speed_cmd = 0.0f;
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
+    steer_task_stop();
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (state == GPS_NAV_STATE_FINISHED || state == GPS_NAV_STATE_PROTECT)
+    {
+        NavFusion_Reset();
+    }
+#endif
+}
+/* 录点首点 (index0) 与本次发车锁存 GNSS 之差，平移到当前「卫星读数坐标系」。仅写 gps_drift_*，不改动 latitude_point[]。 */
+static void GPS_NavTryUpdateDriftCorrection(void)
+{
+    if (gps_drift_corr_valid != 0u)
+    {
+        return;
+    }
+    if (gps_nav_launch_fix_valid == 0u)
+    {
+        return;
+    }
+    if (gps_point_count < 1u)
+    {
+        return;
+    }
+    if (latitude_point[0] == 0.0 || longitude_point[0] == 0.0)
+    {
+        return;
+    }
+    /* 与 gps_first_clearerr_from_coord 中 d_w/d_j 一致：cur 为发车位置，first 为录点参考首点 */
+    gps_drift_delta_lat = gps_nav_launch_latitude - latitude_point[0];
+    gps_drift_delta_lon = gps_nav_launch_longitude - longitude_point[0];
+    gps_drift_corr_valid = 1u;
+}
+/* 局地平面近似：经纬差算距离（米）；方位指路改用 get_two_points_azimuth（与 subject2 GPS_angle 同源）。 */
+static void GPS_NavSegmentMetrics(double lat_a,
+                                  double lon_a,
+                                  double lat_b,
+                                  double lon_b,
+                                  float *distance_m,
+                                  float *bearing_deg_wrap360)
+{
+    double lat_ar = GPS_NAV_DEG_TO_RAD(lat_a);
+    double lat_br = GPS_NAV_DEG_TO_RAD(lat_b);
+    double d_lat_rad = GPS_NAV_DEG_TO_RAD(lat_b - lat_a);
+    double d_lon_rad = GPS_NAV_DEG_TO_RAD(lon_b - lon_a);
+    double avg_lat_rad = (lat_ar + lat_br) * 0.5;
+    double north_m = d_lat_rad * GPS_NAV_EARTH_RADIUS_M;
+    double east_m = d_lon_rad * GPS_NAV_EARTH_RADIUS_M * cos(avg_lat_rad);
+    double bearing_deg = GPS_NAV_RAD_TO_DEG(atan2(east_m, north_m));
+    if (distance_m != NULL)
+    {
+        *distance_m = (float)sqrt(east_m * east_m + north_m * north_m);
+    }
+    if (bearing_deg_wrap360 != NULL)
+    {
+        *bearing_deg_wrap360 = GPS_Wrap360((float)bearing_deg);
+    }
+}
+/* RMC 字段 8：0–360° 真北 → 与 euler_angle.yaw 一致的 ±180°（同 subject2 对 gnss.direction）。 */
+static float GPS_GnssDirectionToSigned180(float direction_deg_0_360)
+{
+    float w = GPS_Wrap360(direction_deg_0_360);
+    if (w > 180.0f)
+    {
+        return w - 360.0f;
+    }
+    return w;
+}
+/* subject2 同源：大圆初始方位（get_two_points_azimuth）再 age_change_180 等价映射到 ±180°。 */
+static float GPS_NavAzimuthSubject2_deg(double lat1, double lon1, double lat2, double lon2)
+{
+    double az = get_two_points_azimuth(lat1, lon1, lat2, lon2);
+    return GPS_GnssDirectionToSigned180((float)az);
+}
+/* 达标定距离后采样 COG 前：需 RMC 定位分支有效，否则 direction 可能未更新。 */
+static uint8 GPS_NavIsCogSampleValid(void)
+{
+    if (gnss.state == 0u)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+static void GPS_NavApplyDriftToCoord(uint8 point_index, double *lat_out, double *lon_out)
+{
+    double lat = latitude_point[point_index];
+    double lon = longitude_point[point_index];
+    if (lat_out == NULL || lon_out == NULL)
+    {
+        return;
+    }
+    if (gps_drift_corr_valid != 0u)
+    {
+        lat += gps_drift_delta_lat;
+        lon += gps_drift_delta_lon;
+    }
+    *lat_out = lat;
+    *lon_out = lon;
+}
+float GPS_NavDistanceToPointM(uint8 point_index)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)point_index;
+    return 0.0f;
+#else
+    double target_lat = 0.0;
+    double target_lon = 0.0;
+    float distance_m = 0.0f;
+    if (point_index >= gps_point_count || point_index >= GPS_POINT_MAX)
+    {
+        return 0.0f;
+    }
+    if (!GPS_NavIsTargetValid(point_index))
+    {
+        return 0.0f;
+    }
+    GPS_NavApplyDriftToCoord(point_index, &target_lat, &target_lon);
+    GPS_NavSegmentMetrics(gnss.latitude,
+                          gnss.longitude,
+                          target_lat,
+                          target_lon,
+                          &distance_m,
+                          NULL);
+    return distance_m;
+#endif
+}
+void GPS_NavForceEndPoint(void)
+{
+    if (gps_point_count > 0u)
+    {
+        u32yuansu[gps_point_count - 1u] = NAV_ELEM_END;
+    }
+}
+void GPS_NavTryEnterElement(uint8 point_index, uint8 unified_type)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)point_index;
+    (void)unified_type;
+#else
+    uint8 ins_type = Nav_UnifiedToInsEvent(unified_type);
+    if (ins_type == 0xFFu)
+    {
+        return;
+    }
+    N.Event_Active = 1u;
+    N.Event_Active_Index = point_index;
+    N.Active_Event_Enter = point_index;
+    N.Active_Event_Exit = point_index;
+    N.Event_Active_Type = ins_type;
+    N.Event_Start_RunIndex = 0u;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0u;
+    N.Event_Done_Latched = 0u;
+    Nag_EventPrepareEnter(ins_type);
+#endif
+}
+void GPS_NavOnElementDone(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+    if (tagert_point >= (uint8)(gps_point_count - 1u))
+    {
+        GPS_NavStop(GPS_NAV_STATE_FINISHED, GPS_NAV_PROTECT_FINISHED);
+        return;
+    }
+    tagert_point++;
+    gps_nav_target_index = tagert_point;
+    gps_nav_request_valid = 0u;
+#endif
+}
+static void GPS_NavCalcDistanceBearing(double current_latitude,
+                                       double current_longitude,
+                                       double target_latitude,
+                                       double target_longitude)
+{
+    GPS_NavSegmentMetrics(current_latitude,
+                          current_longitude,
+                          target_latitude,
+                          target_longitude,
+                          &gps_nav_distance_m,
+                          NULL);
+    gps_nav_geo_bearing_deg =
+        GPS_NavAzimuthSubject2_deg(current_latitude, current_longitude, target_latitude, target_longitude);
+}
+#endif
+void GPS_ClearPoints(void)
+{
+    memset(latitude_point, 0, sizeof(latitude_point));
+    memset(longitude_point, 0, sizeof(longitude_point));
+    memset(u32yuansu, 0, sizeof(u32yuansu));
+    now_point = 0;
+    tagert_point = 0;
+    save_point = 0;
+    show_point = 0;
+    gps_point_count = 0;
+    gps_recording_active = 0;
+    gps_current_yuansu = NAV_ELEM_NORMAL;
+    gps_nav_state = GPS_NAV_STATE_IDLE;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    gps_nav_target_index = 0;
+    GPS_NavClearDebug();
+}
+void GPS_BeginRecord(void)
+{
+    GPS_ClearPoints();
+    gps_recording_active = 1u;
+}
+void GPS_EndRecord(void)
+{
+    gps_recording_active = 0u;
+    GPS_NavForceEndPoint();
+}
+void GPS_ApplyLaunchSpeed(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+    tagert_point = 0u;
+    now_point = 0u;
+    gps_nav_target_index = 0u;
+    gps_nav_state = GPS_NAV_STATE_RUNNING;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    GPS_NavClearDebug();
+    if (N.Event_Active)
+    {
+        Nag_EventForceReset();
+    }
+    gps_nav_launch_imu_yaw = (float)euler_angle.yaw;
+    gps_nav_launch_fix_valid = 0u;
+    gps_drift_corr_valid = 0u;
+    {
+        uint8 defer_speed_for_origin = 0u;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+        if (NavFusion_IsRuntimeEnabled() != 0u)
+        {
+            gps_nav_origin_pending = 1u;
+            NavFusion_BeginOriginAverage(gps_nav_launch_imu_yaw);
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            defer_speed_for_origin = 1u;
+        }
+#endif
+        if (defer_speed_for_origin != 0u)
+        {
+            motor_user_speed_cmd = 0.0f;
+        }
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+        else
+        {
+            uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+            if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+            {
+                gps_nav_launch_latitude = gnss.latitude;
+                gps_nav_launch_longitude = gnss.longitude;
+                gps_nav_launch_fix_valid = 1u;
+            }
+            GPS_NavTryUpdateDriftCorrection();
+            if (gps_nav_launch_fix_valid != 0u && NavFusion_IsRuntimeEnabled() != 0u)
+            {
+                NavFusion_InitFromGps(gps_nav_launch_latitude,
+                                      gps_nav_launch_longitude,
+                                      gps_nav_launch_imu_yaw);
+            }
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            motor_user_speed_cmd = run_launch_speed;
+        }
+#else
+        else
+        {
+            uint8 gnss_live = (uint8)((gnss.time.year != 0u) || (gnss.state != 0u) || (gnss.satellite_used != 0u));
+            if (gnss_live && (gnss.latitude != 0.0) && (gnss.longitude != 0.0))
+            {
+                gps_nav_launch_latitude = gnss.latitude;
+                gps_nav_launch_longitude = gnss.longitude;
+                gps_nav_launch_fix_valid = 1u;
+            }
+            GPS_NavTryUpdateDriftCorrection();
+            nav_heading_mode = NAV_HEADING_MODE_GPS;
+            motor_user_speed_cmd = run_launch_speed;
+        }
+#endif
+    }
+#endif
+}
+void GPS_CompleteLaunchAfterOrigin(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (gps_nav_origin_pending == 0u)
+    {
+        return;
+    }
+    if (NavFusion_IsValid() == 0u)
+    {
+        return;
+    }
+    if (NavFusion_GetOriginAvgResult(&gps_nav_launch_latitude, &gps_nav_launch_longitude) == 0u)
+    {
+        return;
+    }
+    gps_nav_launch_fix_valid = 1u;
+    GPS_NavTryUpdateDriftCorrection();
+    gps_nav_origin_pending = 0u;
+    motor_user_speed_cmd = run_launch_speed;
+#else
+    (void)0;
+#endif
+#endif
+}
+void GPS_OnOriginCalibrationFailed(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (gps_nav_origin_pending == 0u)
+    {
+        return;
+    }
+    gps_nav_origin_pending = 0u;
+    gps_nav_state = GPS_NAV_STATE_IDLE;
+    gps_nav_launch_fix_valid = 0u;
+    motor_user_speed_cmd = 0.0f;
+    NavFusion_Reset();
+#else
+    (void)0;
+#endif
+#endif
+}
+void GPS_PointNav_Run(void)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)0;
+#else
+    float target_delta = 0.0f;
+    uint8 is_last_point = 0u;
+    float dist_from_launch_m = 0.0f;
+    double target_lat_used = 0.0;
+    double target_lon_used = 0.0;
+    if (nav_heading_mode != NAV_HEADING_MODE_GPS)
+    {
+        return;
+    }
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION && NAV_FUSION_ORIGIN_ENABLE
+    if (NavFusion_IsRuntimeEnabled() != 0u && gps_nav_origin_pending != 0u)
+    {
+        motor_user_speed_cmd = 0.0f;
+        return;
+    }
+#endif
+    if (gps_nav_state == GPS_NAV_STATE_FINISHED || gps_nav_state == GPS_NAV_STATE_PROTECT)
+    {
+        motor_user_speed_cmd = 0.0f;
+        return;
+    }
+    if (N.Event_Active)
+    {
+        gps_nav_state = GPS_NAV_STATE_RUNNING;
+        return;
+    }
+    gps_nav_current_latitude = gnss.latitude;
+    gps_nav_current_longitude = gnss.longitude;
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (NavFusion_IsValid() != 0u)
+    {
+        NavFusion_GetPositionLatLon(&gps_nav_current_latitude, &gps_nav_current_longitude);
+    }
+#endif
+    gps_nav_imu_yaw_deg = (float)euler_angle.yaw;
+    if (!GPS_NavIsCurrentCoordValid(gps_nav_current_latitude, gps_nav_current_longitude))
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_GPS_INVALID);
+        return;
+    }
+    /* KEY3 时若无定位，此处用首帧有效经纬度锁存标定起点（与发车点接近）。 */
+    if (gps_nav_launch_fix_valid == 0u)
+    {
+        gps_nav_launch_latitude = gps_nav_current_latitude;
+        gps_nav_launch_longitude = gps_nav_current_longitude;
+        gps_nav_launch_fix_valid = 1u;
+    }
+    GPS_NavTryUpdateDriftCorrection();
+    if (gps_point_count < GPS_NAV_MIN_POINT_COUNT || !GPS_NavIsTargetValid(tagert_point))
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_TARGET_INVALID);
+        return;
+    }
+    gps_nav_target_index = tagert_point;
+    now_point = tagert_point;
+    target_lat_used = latitude_point[tagert_point];
+    target_lon_used = longitude_point[tagert_point];
+    if (gps_drift_corr_valid != 0u)
+    {
+        target_lat_used += gps_drift_delta_lat;
+        target_lon_used += gps_drift_delta_lon;
+    }
+    gps_nav_target_latitude = target_lat_used;
+    gps_nav_target_longitude = target_lon_used;
+    GPS_NavCalcDistanceBearing(gps_nav_current_latitude,
+                               gps_nav_current_longitude,
+                               target_lat_used,
+                               target_lon_used);
+    if (gps_nav_distance_m > GPS_NAV_MAX_DISTANCE_M)
+    {
+        GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_DISTANCE_TOO_FAR);
+        return;
+    }
+    is_last_point = (uint8)(tagert_point >= (uint8)(gps_point_count - 1u));
+    if (gps_nav_distance_m <= GPS_NAV_ARRIVE_RADIUS_M)
+    {
+        uint8 unified_elem = (uint8)u32yuansu[tagert_point];
+        if (unified_elem == NAV_ELEM_END || is_last_point)
+        {
+            GPS_NavStop(GPS_NAV_STATE_FINISHED, GPS_NAV_PROTECT_FINISHED);
+            return;
+        }
+        if (Nav_UnifiedIsPassThrough(unified_elem))
+        {
+            tagert_point++;
+            gps_nav_target_index = tagert_point;
+            gps_nav_request_valid = 0u;
+            return;
+        }
+        if (Nav_UnifiedIsMarker(unified_elem) || Nav_UnifiedIsTakeover(unified_elem))
+        {
+            GPS_NavTryEnterElement(tagert_point, unified_elem);
+            return;
+        }
+        tagert_point++;
+        gps_nav_target_index = tagert_point;
+        gps_nav_request_valid = 0u;
+        return;
+    }
+    GPS_NavSegmentMetrics(gps_nav_launch_latitude,
+                          gps_nav_launch_longitude,
+                          gps_nav_current_latitude,
+                          gps_nav_current_longitude,
+                          &dist_from_launch_m,
+                          NULL);
+#if NAV_FUSION_ENABLE && GPS_NAV_USE_FUSION_POSITION
+    if (NavFusion_IsValid() != 0u)
+    {
+        const NavFusionState *fusion_st = NavFusion_GetState();
+        if (fusion_st != NULL)
+        {
+            dist_from_launch_m = sqrtf(fusion_st->x_m * fusion_st->x_m +
+                                       fusion_st->y_m * fusion_st->y_m);
+        }
+    }
+#endif
+    gps_nav_dist_from_launch_m = dist_from_launch_m;
+    /*
+     * Theta_goal：当前→路点方位（±180°），与 subject2 GPS_angle 同源（get_two_points_azimuth）。
+     * 发车后 dist < GPS_NAV_GPS_FIRST_DISTANCE_M：目标保持 gps_nav_launch_imu_yaw。
+     * ≥ 该距离：锁 RMC COG 为 GPS_first，锁 euler_ref；TRACKING 目标
+     *   target_imu = Wrap180(Theta_goal − GPS_first + euler_ref)，等价 Wrap180(Theta_goal − bias)，bias=Wrap180(GPS_first−euler_ref)。
+     */
+    if (gps_nav_align_state == GPS_NAV_ALIGN_WAIT)
+    {
+        if (dist_from_launch_m < GPS_NAV_GPS_FIRST_DISTANCE_M)
+        {
+            gps_nav_target_imu_yaw_deg = gps_nav_launch_imu_yaw;
+            gps_nav_body_target_yaw_deg = 0.0f;
+        }
+        else
+        {
+            if (GPS_NavIsCogSampleValid() == 0u)
+            {
+                GPS_NavStop(GPS_NAV_STATE_PROTECT, GPS_NAV_PROTECT_COG_INVALID);
+                return;
+            }
+            gps_nav_gps_first_deg = GPS_GnssDirectionToSigned180((float)gnss.direction);
+            gps_nav_euler_ref_at_first_deg = gps_nav_imu_yaw_deg;
+            gps_nav_heading_bias_deg =
+                GPS_Wrap180(gps_nav_gps_first_deg - gps_nav_euler_ref_at_first_deg);
+            gps_nav_align_state = GPS_NAV_ALIGN_TRACKING;
+            gps_nav_request_valid = 0u;
+            gps_nav_target_imu_yaw_deg =
+                GPS_Wrap180(gps_nav_euler_ref_at_first_deg -
+                            gps_nav_geo_bearing_deg +
+                            gps_nav_gps_first_deg);//注意计算公式，会导致小车严重偏航
+            gps_nav_body_target_yaw_deg =
+                GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
+        }
+    }
+    else
+    {
+        gps_nav_target_imu_yaw_deg =
+            GPS_Wrap180(gps_nav_euler_ref_at_first_deg -
+                        gps_nav_geo_bearing_deg +
+                        gps_nav_gps_first_deg);//注意计算公式，会导致小车严重偏航
+        gps_nav_body_target_yaw_deg =
+            GPS_Wrap180(gps_nav_target_imu_yaw_deg - gps_nav_imu_yaw_deg);
+    }
+    gps_nav_yaw_err_deg = (float)ange_deviation1(gps_nav_target_imu_yaw_deg, gps_nav_imu_yaw_deg);
+    gps_nav_state = GPS_NAV_STATE_RUNNING;
+    gps_nav_protect_reason = GPS_NAV_PROTECT_NONE;
+    /* GPS 5ms 周期只在目标航向发生有效变化时重新登记请求，避免持续重置转向 PID。 */
+    target_delta = (float)fabsf((float)ange_deviation1(gps_nav_target_imu_yaw_deg, gps_nav_last_requested_yaw));
+    if (!gps_nav_request_valid ||
+        target_delta > GPS_NAV_REISSUE_YAW_DEG ||
+        (!steer_enable && !steer_yaw_request_pending &&
+         fabsf(gps_nav_yaw_err_deg) > GPS_NAV_REISSUE_YAW_DEG))
+    {
+        steer_request_target_yaw(gps_nav_target_imu_yaw_deg);
+        gps_nav_last_requested_yaw = gps_nav_target_imu_yaw_deg;
+        gps_nav_request_valid = 1u;
+    }
+#endif
+}
+uint8 GPS_GetValidPointCount(void)
+{
+    return gps_point_count;
+}
+const char *GPS_GetElementName(uint32 element)
+{
+    return Nav_GetUnifiedElementName((uint8)element);
+}
+const char *GPS_GetNavStateName(uint8 state)
+{
+    switch (state)
+    {
+    case GPS_NAV_STATE_IDLE:
+        return "Idle";
+    case GPS_NAV_STATE_RUNNING:
+        return "Run";
+    case GPS_NAV_STATE_FINISHED:
+        return "Done";
+    case GPS_NAV_STATE_PROTECT:
+        return "Protect";
+    default:
+        return "Unknown";
+    }
+}
+const char *GPS_GetNavProtectName(uint8 reason)
+{
+    switch (reason)
+    {
+    case GPS_NAV_PROTECT_NONE:
+        return "None";
+    case GPS_NAV_PROTECT_GPS_INVALID:
+        return "GpsBad";
+    case GPS_NAV_PROTECT_TARGET_INVALID:
+        return "TargetBad";
+    case GPS_NAV_PROTECT_DISTANCE_TOO_FAR:
+        return "Far";
+    case GPS_NAV_PROTECT_FINISHED:
+        return "Finished";
+    case GPS_NAV_PROTECT_COG_INVALID:
+        return "CogBad";
+    default:
+        return "Unknown";
+    }
+}
+uint32 GPS_CycleCurrentElement(void)
+{
+    gps_current_yuansu = Nav_CycleUnifiedElement((uint8)gps_current_yuansu);
+    return gps_current_yuansu;
+}
+void GPS_SavePointFromCoord(uint8 point_num, double latitude, double longitude, uint32 yuansu_num)
+{
+    if (point_num >= GPS_POINT_MAX)
+    {
+        return;
+    }
+    latitude_point[point_num] = latitude;
+    longitude_point[point_num] = longitude;
+    u32yuansu[point_num] = yuansu_num;
+    if (gps_point_count <= point_num)
+    {
+        gps_point_count = (uint8)(point_num + 1u);
+    }
+    show_point = point_num;
+    save_point = (gps_point_count < GPS_POINT_MAX) ? gps_point_count : (GPS_POINT_MAX - 1u);
+}
+uint8 GPS_SaveCurrentPointFromCoord(double latitude, double longitude)
+{
+    if (save_point >= GPS_POINT_MAX)
+    {
+        return 0u;
+    }
+    GPS_SavePointFromCoord(save_point, latitude, longitude, gps_current_yuansu);
+    return 1u;
+}
+void specialpoint(uint8 point_num, uint32 yuansu_num)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)point_num;
+    (void)yuansu_num;
+#else
+    GPS_SavePointFromCoord(point_num, gnss.latitude, gnss.longitude, yuansu_num);
+#endif
+}
+void gps_first_clearerr_from_coord(double cur_j, double cur_w, double first_j, double first_w, uint8 num)
+{
+    /* 与「发车自动漂移修正」二选一：此处直接改写 latitude_point/longitude_point；
+     * 若导航同时使用 gps_drift_corr_valid + 路点+delta，会双重平移。 */
+    double d_j = cur_j - first_j;
+    double d_w = cur_w - first_w;
+    uint8 i = 0;
+    uint8 count = (num > GPS_POINT_MAX) ? GPS_POINT_MAX : num;
+    for (i = 0; i < count; i++)
+    {
+        latitude_point[i] = latitude_point[i] + d_w;
+        longitude_point[i] = longitude_point[i] + d_j;
+    }
+}
+void gps_first_clearerr(double first_j, double first_w, uint8 num)
+{
+#if defined(CY_CORE_CM7_1)
+    (void)first_j;
+    (void)first_w;
+    (void)num;
+#else
+    /* cur 取当前 gnss；与 GPS_NavTryUpdateDriftCorrection 数论一致，但该接口改表。 */
+    gps_first_clearerr_from_coord(gnss.longitude, gnss.latitude, first_j, first_w, num);
+#endif
+}
+void GPS_Path_Draw(const double *lat_buf, const double *lot_buf, uint16 len, uint8 carseat_enable, uint8 dir)
+{
+#if defined(CY_CORE_CM7_1)
+    GPS_Path_DrawWithCar(lat_buf, lot_buf, len, 0u, dir, 0.0, 0.0, 31u, 9u, 64u, 90u);
+    (void)carseat_enable;
+#else
+    GPS_Path_DrawWithCar(lat_buf, lot_buf, len, carseat_enable, dir, gnss.latitude, gnss.longitude, 31u, 9u, 64u, 90u);
+#endif
+}
+void GPS_Path_DrawWithCar(const double *lat_buf,
+                          const double *lot_buf,
+                          uint16 len,
+                          uint8 carseat_enable,
+                          uint8 dir,
+                          double car_latitude,
+                          double car_longitude,
+                          uint16 x_offset,
+                          uint16 y_offset,
+                          uint16 width,
+                          uint16 height)
+{
+    double lat_max = 0.0;
+    double lat_min = 90.0;
+    double lon_max = 0.0;
+    double lon_min = 360.0;
+    double lat_range = 0.0;
+    double lon_range = 0.0;
+    uint16 point_len = 0;
+    uint16 i = 0;
+    uint16 lat_mapping[GPS_POINT_MAX] = {0};
+    uint16 lon_mapping[GPS_POINT_MAX] = {0};
+    uint16 car_y = 0;
+    uint16 car_x = 0;
+    uint8 car_valid = (uint8)(carseat_enable && (car_latitude != 0.0) && (car_longitude != 0.0));
+    if ((lat_buf == NULL) || (lot_buf == NULL) || (width == 0u) || (height == 0u))
+    {
+        return;
+    }
+    GPS_FillPathViewport(x_offset, y_offset, width, height);
+    if (len > GPS_POINT_MAX)
+    {
+        len = GPS_POINT_MAX;
+    }
+    for (i = 0; i < len; i++)
+    {
+        if ((lat_buf[i] == 0.0) || (lot_buf[i] == 0.0))
+        {
+            break;
+        }
+        if ((i + 1u < len) && (lat_buf[i + 1u] != 0.0) && (fabs(lat_buf[i + 1u] - lat_buf[i]) >= 3.0))
+        {
+            point_len = (uint16)(i + 1u);
+            break;
+        }
+        point_len = (uint16)(i + 1u);
+    }
+    if ((point_len == 0u) && !car_valid)
+    {
+        return;
+    }
+    if (point_len == 0u)
+    {
+        lat_max = car_latitude;
+        lat_min = car_latitude;
+        lon_max = car_longitude;
+        lon_min = car_longitude;
+    }
+    else
+    {
+        lat_max = lat_buf[0];
+        lat_min = lat_buf[0];
+        lon_max = lot_buf[0];
+        lon_min = lot_buf[0];
+        for (i = 1; i < point_len; i++)
+        {
+            if (lat_buf[i] > lat_max)
+            {
+                lat_max = lat_buf[i];
+            }
+            if (lat_buf[i] < lat_min)
+            {
+                lat_min = lat_buf[i];
+            }
+            if (lot_buf[i] > lon_max)
+            {
+                lon_max = lot_buf[i];
+            }
+            if (lot_buf[i] < lon_min)
+            {
+                lon_min = lot_buf[i];
+            }
+        }
+    }
+    GPS_ExpandRange(&lat_min, &lat_max);
+    GPS_ExpandRange(&lon_min, &lon_max);
+    lat_range = lat_max - lat_min;
+    lon_range = lon_max - lon_min;
+    if (fabs(lat_range) < GPS_PATH_MIN_RANGE_DEG)
+    {
+        lat_range = GPS_PATH_MIN_RANGE_DEG;
+    }
+    if (fabs(lon_range) < GPS_PATH_MIN_RANGE_DEG)
+    {
+        lon_range = GPS_PATH_MIN_RANGE_DEG;
+    }
+    for (i = 0; i < point_len; i++)
+    {
+        double y_ratio = (lat_max - lat_buf[i]) / lat_range;
+        double x_ratio = (lon_max - lot_buf[i]) / lon_range;
+        int32 mapped_y = (int32)y_offset + (int32)(y_ratio * (double)height);
+        int32 mapped_x = (int32)x_offset + (int32)((1.0 - x_ratio) * (double)width);
+        if (dir == south)
+        {
+            mapped_y = (int32)y_offset + (int32)height - (mapped_y - (int32)y_offset);
+            mapped_x = (int32)x_offset + (int32)width - (mapped_x - (int32)x_offset);
+        }
+        lat_mapping[i] = GPS_ClampU16(mapped_y, y_offset, (uint16)(y_offset + height));
+        lon_mapping[i] = GPS_ClampU16(mapped_x, x_offset, (uint16)(x_offset + width));
+    }
+    if (car_valid)
+    {
+        double car_y_ratio = (lat_max - car_latitude) / lat_range;
+        double car_x_ratio = (lon_max - car_longitude) / lon_range;
+        int32 mapped_y = (int32)y_offset + (int32)(car_y_ratio * (double)height);
+        int32 mapped_x = (int32)x_offset + (int32)((1.0 - car_x_ratio) * (double)width);
+        if (dir == south)
+        {
+            mapped_y = (int32)y_offset + (int32)height - (mapped_y - (int32)y_offset);
+            mapped_x = (int32)x_offset + (int32)width - (mapped_x - (int32)x_offset);
+        }
+        car_y = GPS_ClampU16(mapped_y, y_offset, (uint16)(y_offset + height));
+        car_x = GPS_ClampU16(mapped_x, x_offset, (uint16)(x_offset + width));
+    }
+    for (i = 1; i < point_len; i++)
+    {
+        ips200_draw_line(lon_mapping[i - 1u], lat_mapping[i - 1u], lon_mapping[i], lat_mapping[i], RGB565_RED);
+    }
+    for (i = 0; i < point_len; i++)
+    {
+        GPS_DrawViewportPoint(lon_mapping[i],
+                              lat_mapping[i],
+                              x_offset,
+                              y_offset,
+                              width,
+                              height,
+                              RGB565_BLUE);
+    }
+    if (car_valid)
+    {
+        GPS_DrawViewportPoint(car_x,
+                              car_y,
+                              x_offset,
+                              y_offset,
+                              width,
+                              height,
+                              RGB565_PURPLE);
+    }
+}
+/* ===== code/nav_fusion.h ===== */
+#ifndef CODE_NAV_FUSION_H_
+#define CODE_NAV_FUSION_H_
+#include "zf_common_typedef.h"
+/*
+ * GPS + 惯导/编码器 二维松耦合融合导航
+ *
+ * 使用方式（与原有 GPS / 惯导 并存，宏开关可一键回退）：
+ * 1) GPS 点导航：my_gps.h 中 GPS_NAV_USE_FUSION_POSITION=1，录点/发车流程不变，追点用融合位置。
+ * 2) 惯导回放：navigation.h 中 NAG_USE_FUSION_MILEAGE=1，录制/回放 KEY 流程不变，里程用融合位移。
+ * 3) 发车前：KEY3 后自动采集 NAV_FUSION_ORIGIN_SAMPLE_COUNT 个有效 GPS 点取平均建原点。
+ * 4) 融合惯导录制/回放：原点完成后锁定发车 yaw 直行 NAV_FUSION_HEADING_CALIB_DISTANCE_M，
+ *    用 RMC COG 标定 IMU 相对正北偏角；前 5m 计入路径，标定完成后旋转到东-北系再恢复 GPS 修正。
+ *
+ * 实车验证顺序见 nav_fusion.c 文件头注释。
+ */
+/* 1=编译并链接融合模块；0=整模块编译为 stub。运行时开关见 g_menu_nav_fusion_enable（Run→Config / Flash V10）。 */
+#define NAV_FUSION_ENABLE 1u
+extern uint8 g_menu_nav_fusion_enable;
+static inline uint8 NavFusion_IsRuntimeEnabled(void)
+{
+#if NAV_FUSION_ENABLE
+    return (uint8)(g_menu_nav_fusion_enable != 0u);
+#else
+    return 0u;
+#endif
+}
+/*
+ * 1=发车时用多点 GPS 平均建原点；0=退回单帧 NavFusion_InitFromGps（旧行为）。
+ */
+#define NAV_FUSION_ORIGIN_ENABLE 1u
+/*
+ * 发车原点采集：目标有效样本数（与 my_gps.h 路点上限 GPS_POINT_MAX 无关）。
+ * 调大：原点更稳、等待更久；调小：更快发车但抗跳点弱。建议配合 GNSS_UPDATE_RATE_HZ=10。
+ */
+#define NAV_FUSION_ORIGIN_SAMPLE_COUNT 50u
+/*
+ * 相对当前运行均值的跳点门限（m）；超过则本帧不入平均库。
+ * 调小：更拒野点；调大：更易凑满 SAMPLE_COUNT 但可能被野点污染。
+ */
+#define NAV_FUSION_ORIGIN_OUTLIER_M 2.0f
+/*
+ * 参与平均的最低卫星数；低于此值的帧直接丢弃。
+ * 调大：更严更稳；调小：弱信号环境更易凑点。
+ */
+#define NAV_FUSION_ORIGIN_MIN_SATELLITES 10u
+/*
+ * 原点采集总超时（ms），在 1ms Predict 中累加。
+ * 超时后若 accepted >= MIN_SAMPLES 则用部分样本完成，否则采集失败。
+ */
+#define NAV_FUSION_ORIGIN_TIMEOUT_MS 10000u
+/*
+ * 超时兜底最少样本数；不足则返回 FAILED，需重新 KEY3 发车。
+ * 设为与 SAMPLE_COUNT 相同则必须凑满才完成。
+ */
+#define NAV_FUSION_ORIGIN_MIN_SAMPLES 25u
+/* NavFusion_FeedOriginSample 返回值 */
+#define NAV_FUSION_ORIGIN_FEED_COLLECTING 0u
+#define NAV_FUSION_ORIGIN_FEED_DONE 1u
+#define NAV_FUSION_ORIGIN_FEED_FAILED 2u
+/* -------------------------------------------------------------------------- */
+/* 调参宏：注释中说明“调大/调小”效果，便于 VOFA 实车对比                        */
+/* -------------------------------------------------------------------------- */
+/* 预测周期，须与 pit0_ch0_isr 中 NavFusion_Predict1ms 调用周期一致（当前 1ms） */
+#define NAV_FUSION_DT_S 0.001f
+/*
+ * car_speed -> m/s 换算系数；可在编译前 -D 覆盖，或在 nav_fusion.c 中按 Nag_Speed_To_Mileage_Scale 默认推导。
+ * 调大：融合认为走得更快，长距离会超前；调小：会落后。
+ */
+#ifndef NAV_FUSION_SPEED_SCALE
+#define NAV_FUSION_SPEED_SCALE 0.0037f
+#endif
+/*
+ * GPS 残差门限（m）：|gps - fusion| 超过此值认为跳点，本帧不修正。
+ * 调小：更拒 GPS 跳点，但正常大偏差也修得慢；调大：更易跟 GPS，抖动时可能急转。
+ */
+#define NAV_FUSION_GPS_GATE_M 3.0f
+/*
+ * GPS 修正增益（0~1）：每帧向 GPS 靠近 residual 的比例。
+ * 调大：更跟 GPS，到点快但易抖；调小：更平滑，长距离漂移拉回慢。建议 0.05~0.15。
+ */
+#define NAV_FUSION_GPS_GAIN 0.10f
+/*
+ * 零速阈值：|car_speed| 低于此值视为静止，不再积分位移（与 Nag_Speed_Deadband 同量级）。
+ * 调大：停车/元素期更不易漂，但极低速可能被当静止；调小：低速仍积分，停车易漂。
+ */
+#define NAV_FUSION_ZERO_SPEED_THRESHOLD 10.0f
+/* 静止判定连续帧数（1ms/帧），避免单帧噪声误判 */
+#define NAV_FUSION_ZERO_SPEED_STABLE_COUNT 10u
+/*
+ * GPS 超时（ms）：超过此时间无新帧则 gps_used=0，仅惯导预测继续。
+ * 调大：GPS 丢失后仍认为“可用”更久；调小：更快放弃 GPS 修正。
+ */
+#define NAV_FUSION_GPS_TIMEOUT_MS 3000u
+/* 连续有效 GPS 帧数达到此值才允许修正，抑制首帧跳点 */
+#define NAV_FUSION_GPS_GOOD_STREAK 2u
+/*
+ * 1=融合惯导录制/回放启用北向角标定（NAG_USE_FUSION_MILEAGE 路径）；
+ * 0=仅保留位置原点/GPS 松耦合，GPS 点导航不受影响。
+ */
+#define NAV_FUSION_HEADING_CALIB_ENABLE 1u
+/*
+ * 北向标定直行距离（m）：编码器累计里程达到此值后采样 COG。
+ * 调大：COG 更稳但等待更久；调小：更快标定但低速/短距 COG 易抖。
+ */
+#define NAV_FUSION_HEADING_CALIB_DISTANCE_M 5.0f
+/*
+ * 北向标定总超时（ms），自进入 straight_hold 起在 Predict1ms 中累加。
+ * 超时未锁 bias 则标定失败，需重新录制/回放。
+ */
+#define NAV_FUSION_HEADING_CALIB_TIMEOUT_MS 60000u
+/* NavFusion_FeedHeadingAlignSample 返回值 */
+#define NAV_FUSION_HEADING_FEED_COLLECTING 0u
+#define NAV_FUSION_HEADING_FEED_DONE       1u
+#define NAV_FUSION_HEADING_FEED_FAILED     2u
+/* fusion_calib_state 调试枚举（VOFA/UI） */
+#define NAV_FUSION_CALIB_IDLE           0u
+#define NAV_FUSION_CALIB_ORIGIN         1u
+#define NAV_FUSION_CALIB_STRAIGHT_HOLD  2u
+#define NAV_FUSION_CALIB_HEADING_ALIGN  3u
+#define NAV_FUSION_CALIB_READY          4u
+#define NAV_FUSION_CALIB_FAILED         5u
+#define NAV_FUSION_EARTH_RADIUS_M 6371000.0
+#define NAV_FUSION_PI 3.14159265358979323846f
+#define NAV_FUSION_DEG_TO_RAD(x) ((x) * (NAV_FUSION_PI / 180.0f))
+#define NAV_FUSION_RAD_TO_DEG(x) ((x) * (180.0f / NAV_FUSION_PI))
+typedef struct
+{
+    float x_m;            /* 局部东向位移，m，相对 origin */
+    float y_m;            /* 局部北向位移，m */
+    float yaw_deg;        /* 用于推算的航向，来自 euler_angle.yaw */
+    float v_mps;          /* 标定后前向速度，m/s */
+    float gps_residual_m; /* 最近 GPS 与融合位置距离，m，VOFA 看跳点 */
+    float gps_weight;     /* 最近一帧实际使用的修正增益 */
+    uint8 valid;          /* 1：原点已建立，融合状态可用 */
+    uint8 gps_used;       /* 1：最近一帧 GPS 参与了修正 */
+} NavFusionState;
+void NavFusion_Reset(void);
+/*
+ * 以当前 GPS 为局部坐标原点建立融合状态；发车/回放前调用。
+ * lat/lon 须有效非零；yaw_deg 一般为 euler_angle.yaw。
+ */
+uint8 NavFusion_InitFromGps(double lat, double lon, float yaw_deg);
+/*
+ * 1ms ISR 内调用：yaw + 速度预测位置。
+ * speed_src 一般为 car_speed（与 NAV_FUSION_SPEED_SCALE 配套）。
+ */
+void NavFusion_Predict1ms(float yaw_deg, float speed_src);
+/*
+ * 1ms ISR 内调用：静止零速约束，抑制元素停车期间积分漂移。
+ */
+void NavFusion_ZeroVelocityUpdate(float speed_src);
+/*
+ * 主循环 gnss_data_parse() 之后调用；GPS 新帧低频修正 x/y。
+ * gps_state==0 或坐标无效时不修正。
+ */
+void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellite_used);
+const NavFusionState *NavFusion_GetState(void);
+uint8 NavFusion_IsValid(void);
+/* 融合位置反算经纬度，供 GPS_PointNav_Run 复用现有距离/方位函数 */
+void NavFusion_GetPositionLatLon(double *lat_out, double *lon_out);
+/* 经纬度 -> 相对 origin 的局部坐标（m） */
+void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m);
+/*
+ * 惯导里程辅助：返回本周期融合位移（cm）；<0 表示无效，应退回 car_speed 积分。
+ * 在 Nag_GetMileageStep() 内调用。
+ */
+float NavFusion_GetMileageStepCm(void);
+/*
+ * 刷新融合里程 prev 快照（g_prev_x/y <- 当前 g_fusion.x/y），不重置融合位置。
+ * Spin / ENTER_STAIR 等元素冻结 Run_index 期间 Predict 仍在跑；进入/退出元素时调用，
+ * 避免恢复后 NavFusion_GetMileageStepCm() 一次性把元素期位移灌入 Run_index。
+ */
+void NavFusion_SyncMileageSnapshot(void);
+#if NAV_FUSION_ENABLE && NAV_FUSION_ORIGIN_ENABLE
+/*
+ * KEY3 发车后调用：Reset 后进入原点采集态，尚未建立 valid 融合坐标系。
+ * yaw_deg 为发车瞬间 IMU 偏航，供完成后 InitFromGps 使用。
+ */
+void NavFusion_BeginOriginAverage(float yaw_deg);
+/*
+ * 主循环 gnss_data_parse 后调用（采集态下替代 UpdateGps）。
+ * 返回 NAV_FUSION_ORIGIN_FEED_*：DONE 时内部已 InitFromGps；FAILED 时样本不足。
+ */
+uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used);
+uint8 NavFusion_IsOriginCalibrating(void);
+uint16 NavFusion_GetOriginAcceptedCount(void);
+uint16 NavFusion_GetOriginRejectedCount(void);
+/* 采集成功后读取平均原点经纬度；失败或未结束时返回 0 */
+uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out);
+/* 超时失败等：消费一次失败脉冲，返回 1 表示刚失败（主循环无需等 GNSS 帧） */
+uint8 NavFusion_ConsumeOriginFailure(void);
+/* 融合录制/回放会话原点采满：消费一次完成脉冲，返回 1 表示刚完成（主循环双短鸣） */
+uint8 NavFusion_ConsumeOriginDonePulse(void);
+#else
+void NavFusion_BeginOriginAverage(float yaw_deg);
+uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used);
+uint8 NavFusion_IsOriginCalibrating(void);
+uint16 NavFusion_GetOriginAcceptedCount(void);
+uint16 NavFusion_GetOriginRejectedCount(void);
+uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out);
+uint8 NavFusion_ConsumeOriginFailure(void);
+uint8 NavFusion_ConsumeOriginDonePulse(void);
+#endif /* NAV_FUSION_ORIGIN_ENABLE */
+#if NAV_FUSION_ENABLE && NAV_FUSION_HEADING_CALIB_ENABLE
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg);
+uint8 NavFusion_IsHeadingCalibSessionActive(void);
+uint8 NavFusion_IsHeadingCalibrating(void);
+uint8 NavFusion_IsHeadingAlignPending(void);
+uint8 NavFusion_IsHeadingCalibReady(void);
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg);
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void);
+float NavFusion_GetLaunchYawHoldDeg(void);
+float NavFusion_GetHeadingBiasDeg(void);
+float NavFusion_GetHoldDistM(void);
+float NavFusion_GetHeadingCogDeg(void);
+float NavFusion_GetHeadingImuRefDeg(void);
+uint8 NavFusion_GetHeadingCalibState(void);
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void);
+uint8 NavFusion_ConsumeHeadingCalibFailure(void);
+#else
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg);
+uint8 NavFusion_IsHeadingCalibSessionActive(void);
+uint8 NavFusion_IsHeadingCalibrating(void);
+uint8 NavFusion_IsHeadingAlignPending(void);
+uint8 NavFusion_IsHeadingCalibReady(void);
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg);
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void);
+float NavFusion_GetLaunchYawHoldDeg(void);
+float NavFusion_GetHeadingBiasDeg(void);
+float NavFusion_GetHoldDistM(void);
+float NavFusion_GetHeadingCogDeg(void);
+float NavFusion_GetHeadingImuRefDeg(void);
+uint8 NavFusion_GetHeadingCalibState(void);
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void);
+uint8 NavFusion_ConsumeHeadingCalibFailure(void);
+#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
+#endif /* CODE_NAV_FUSION_H_ */
+/* ===== code/nav_fusion.c ===== */
+/*
+ * nav_fusion.c — GPS + IMU/编码器 二维松耦合融合
+ *
+ * 实车验证建议（按顺序）：
+ * 1. 静止 30s：fusion_x/y 基本不变，gps_residual_m 反映 GPS 抖动。
+ * 2. 直线 5~10m：标定 NAV_FUSION_SPEED_SCALE，融合里程与卷尺一致。
+ * 3. GPS 单点：融合 GPS 导航到点误差应小于纯 GPS。
+ * 4. 惯导长距离 + 元素停车：NAG_USE_FUSION_MILEAGE 开启后 Run_index 漂移减小。
+ * 5. 发车原点：KEY3 后静止采集 50 个有效 GPS 点平均建 origin（见 NAV_FUSION_ORIGIN_*）。
+ * 6. 融合惯导录制/回放：原点完成后锁定发车 yaw 直行 5m，COG 标定北向偏角，首段路径旋转后恢复 GPS 修正。
+ *
+ * VOFA：菜单 n 切到组 2（VOFA_GROUP_FUSION_DEBUG）观察 fusion_x/y、gps_residual_m 等。
+ */
+#include "zf_common_headfile.h"
+#include "nav_fusion.h"
+#include "control.h"
+#include <math.h>
+#include <string.h>
+#if NAV_FUSION_ENABLE
+#ifndef NAV_FUSION_SPEED_SCALE_USER
+/* 默认与惯导里程标定一致：Nag_Speed_To_Mileage_Scale 为 cm/s，此处换算为 m/s */
+#undef NAV_FUSION_SPEED_SCALE
+#define NAV_FUSION_SPEED_SCALE (Nag_Speed_To_Mileage_Scale / 100.0f)
+#endif
+static NavFusionState g_fusion;
+static double g_origin_lat = 0.0;
+static double g_origin_lon = 0.0;
+static float g_prev_x_m = 0.0f;
+static float g_prev_y_m = 0.0f;
+static uint8 g_prev_xy_valid = 0u;
+static uint16 g_zero_speed_count = 0u;
+static uint16 g_gps_timeout_ms = 0u;
+static uint8 g_gps_good_streak = 0u;
+#if NAV_FUSION_ORIGIN_ENABLE
+static struct
+{
+    uint8 active;
+    float yaw_deg;
+    uint16 accepted;
+    uint16 rejected;
+    double lat_sum;
+    double lon_sum;
+    double mean_lat;
+    double mean_lon;
+    double result_lat;
+    double result_lon;
+    uint16 timeout_ms;
+    uint8 failed_pulse;
+    uint8 origin_done_pulse;
+} g_origin_avg;
+static uint8 NavFusion_FinishOriginAverage(void);
+#endif
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+static struct
+{
+    uint8 session_active;
+    uint8 state;
+    uint8 gps_update_allowed;
+    uint8 done_pulse;
+    uint8 failed_pulse;
+    float launch_yaw_deg;
+    float hold_dist_m;
+    float heading_bias_deg;
+    float cog_deg;
+    float imu_ref_deg;
+    uint16 timeout_ms;
+} g_heading_calib;
+static void NavFusion_HeadingCalibReset(void);
+static void NavFusion_OnOriginReadyForHeadingCalib(void);
+static void NavFusion_RotatePathToNorthFrame(float bias_deg);
+static uint8 NavFusion_FinishHeadingAlign(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg);
+static void NavFusion_TickHeadingCalibTimeout(void);
+static float NavFusion_GnssDirectionToSigned180(float direction_deg_0_360);
+void NavFusion_SyncMileageSnapshot(void);
+#endif
+static uint8 NavFusion_IsCoordValid(double lat, double lon)
+{
+    if (lat == 0.0 || lon == 0.0)
+    {
+        return 0u;
+    }
+    return 1u;
+}
+static float NavFusion_Wrap180(float angle_deg)
+{
+    while (angle_deg > 180.0f)
+    {
+        angle_deg -= 360.0f;
+    }
+    while (angle_deg < -180.0f)
+    {
+        angle_deg += 360.0f;
+    }
+    return angle_deg;
+}
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+static void NavFusion_HeadingCalibReset(void)
+{
+    memset(&g_heading_calib, 0, sizeof(g_heading_calib));
+}
+static float NavFusion_GnssDirectionToSigned180(float direction_deg_0_360)
+{
+    float w = direction_deg_0_360;
+    while (w >= 360.0f)
+    {
+        w -= 360.0f;
+    }
+    while (w < 0.0f)
+    {
+        w += 360.0f;
+    }
+    if (w > 180.0f)
+    {
+        return w - 360.0f;
+    }
+    return w;
+}
+static void NavFusion_OnOriginReadyForHeadingCalib(void)
+{
+    if (g_heading_calib.session_active == 0u)
+    {
+        return;
+    }
+    g_heading_calib.state = NAV_FUSION_CALIB_STRAIGHT_HOLD;
+    g_heading_calib.hold_dist_m = 0.0f;
+    g_heading_calib.timeout_ms = 0u;
+    g_heading_calib.gps_update_allowed = 0u;
+}
+static void NavFusion_RotatePathToNorthFrame(float bias_deg)
+{
+    float bias_rad;
+    float sin_b;
+    float cos_b;
+    float x_old;
+    float y_old;
+    bias_rad = NAV_FUSION_DEG_TO_RAD(bias_deg);
+    sin_b = sinf(bias_rad);
+    cos_b = cosf(bias_rad);
+    x_old = g_fusion.x_m;
+    y_old = g_fusion.y_m;
+    g_fusion.x_m = x_old * cos_b + y_old * sin_b;
+    g_fusion.y_m = -x_old * sin_b + y_old * cos_b;
+}
+static uint8 NavFusion_FinishHeadingAlign(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg)
+{
+    float cog_signed;
+    float imu_ref;
+    float bias_deg;
+    if (gps_state == 0u)
+    {
+        g_heading_calib.state = NAV_FUSION_CALIB_FAILED;
+        g_heading_calib.failed_pulse = 1u;
+        return NAV_FUSION_HEADING_FEED_FAILED;
+    }
+    cog_signed = NavFusion_GnssDirectionToSigned180(cog_deg_0_360);
+    imu_ref = NavFusion_Wrap180(imu_yaw_deg);
+    bias_deg = NavFusion_Wrap180(cog_signed - imu_ref);
+    g_heading_calib.cog_deg = cog_signed;
+    g_heading_calib.imu_ref_deg = imu_ref;
+    g_heading_calib.heading_bias_deg = bias_deg;
+    NavFusion_RotatePathToNorthFrame(bias_deg);
+    NavFusion_SyncMileageSnapshot();
+    g_heading_calib.gps_update_allowed = 1u;
+    g_heading_calib.state = NAV_FUSION_CALIB_READY;
+    g_heading_calib.done_pulse = 1u;
+    return NAV_FUSION_HEADING_FEED_DONE;
+}
+static void NavFusion_TickHeadingCalibTimeout(void)
+{
+    if (g_heading_calib.session_active == 0u)
+    {
+        return;
+    }
+    if (g_heading_calib.state != NAV_FUSION_CALIB_STRAIGHT_HOLD &&
+        g_heading_calib.state != NAV_FUSION_CALIB_HEADING_ALIGN)
+    {
+        return;
+    }
+    if (g_heading_calib.timeout_ms < 0xFFFFu)
+    {
+        g_heading_calib.timeout_ms++;
+    }
+    if (g_heading_calib.timeout_ms < NAV_FUSION_HEADING_CALIB_TIMEOUT_MS)
+    {
+        return;
+    }
+    g_heading_calib.state = NAV_FUSION_CALIB_FAILED;
+    g_heading_calib.failed_pulse = 1u;
+}
+#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
+#if NAV_FUSION_ORIGIN_ENABLE
+static void NavFusion_OriginAvgReset(void)
+{
+    memset(&g_origin_avg, 0, sizeof(g_origin_avg));
+}
+/* 样本到临时参考点（运行均值）的平面距离，m；不依赖 g_origin_lat/lon */
+static float NavFusion_DistanceToRefM(double lat, double lon, double ref_lat, double ref_lon)
+{
+    double ref_lat_rad;
+    double d_lat_rad;
+    double d_lon_rad;
+    float x_m;
+    float y_m;
+    ref_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)ref_lat);
+    d_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lat - ref_lat));
+    d_lon_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lon - ref_lon));
+    x_m = (float)(d_lon_rad * NAV_FUSION_EARTH_RADIUS_M * cos(ref_lat_rad));
+    y_m = (float)(d_lat_rad * NAV_FUSION_EARTH_RADIUS_M);
+    return sqrtf(x_m * x_m + y_m * y_m);
+}
+static uint8 NavFusion_FinishOriginAverage(void)
+{
+    double avg_lat;
+    double avg_lon;
+    if (g_origin_avg.accepted == 0u)
+    {
+        return NAV_FUSION_ORIGIN_FEED_FAILED;
+    }
+    avg_lat = g_origin_avg.lat_sum / (double)g_origin_avg.accepted;
+    avg_lon = g_origin_avg.lon_sum / (double)g_origin_avg.accepted;
+    g_origin_avg.result_lat = avg_lat;
+    g_origin_avg.result_lon = avg_lon;
+    if (NavFusion_InitFromGps(avg_lat, avg_lon, g_origin_avg.yaw_deg) == 0u)
+    {
+        return NAV_FUSION_ORIGIN_FEED_FAILED;
+    }
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    if (g_heading_calib.session_active != 0u)
+    {
+        g_origin_avg.origin_done_pulse = 1u;
+        NavFusion_OnOriginReadyForHeadingCalib();
+    }
+    else
+    {
+        NavFusion_SyncMileageSnapshot();
+    }
+#else
+    NavFusion_SyncMileageSnapshot();
+#endif
+    g_origin_avg.active = 0u;
+    return NAV_FUSION_ORIGIN_FEED_DONE;
+}
+static void NavFusion_TickOriginTimeout(void)
+{
+    uint8 finish_code;
+    if (g_origin_avg.active == 0u)
+    {
+        return;
+    }
+    if (g_origin_avg.timeout_ms < 0xFFFFu)
+    {
+        g_origin_avg.timeout_ms++;
+    }
+    if (g_origin_avg.timeout_ms < NAV_FUSION_ORIGIN_TIMEOUT_MS)
+    {
+        return;
+    }
+    if (g_origin_avg.accepted >= NAV_FUSION_ORIGIN_MIN_SAMPLES)
+    {
+        finish_code = NavFusion_FinishOriginAverage();
+        if (finish_code == NAV_FUSION_ORIGIN_FEED_DONE)
+        {
+            return;
+        }
+    }
+    g_origin_avg.active = 0u;
+    g_origin_avg.failed_pulse = 1u;
+}
+#endif /* NAV_FUSION_ORIGIN_ENABLE */
+void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m)
+{
+    double origin_lat_rad;
+    double d_lat_rad;
+    double d_lon_rad;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    origin_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)g_origin_lat);
+    d_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lat - g_origin_lat));
+    d_lon_rad = (double)NAV_FUSION_DEG_TO_RAD((float)(lon - g_origin_lon));
+    if (x_m != NULL)
+    {
+        *x_m = (float)(d_lon_rad * NAV_FUSION_EARTH_RADIUS_M * cos(origin_lat_rad));
+    }
+    if (y_m != NULL)
+    {
+        *y_m = (float)(d_lat_rad * NAV_FUSION_EARTH_RADIUS_M);
+    }
+}
+void NavFusion_Reset(void)
+{
+    memset(&g_fusion, 0, sizeof(g_fusion));
+    g_origin_lat = 0.0;
+    g_origin_lon = 0.0;
+    g_prev_x_m = 0.0f;
+    g_prev_y_m = 0.0f;
+    g_prev_xy_valid = 0u;
+    g_zero_speed_count = 0u;
+    g_gps_timeout_ms = 0u;
+    g_gps_good_streak = 0u;
+#if NAV_FUSION_ORIGIN_ENABLE
+    NavFusion_OriginAvgReset();
+#endif
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    NavFusion_HeadingCalibReset();
+#endif
+}
+uint8 NavFusion_InitFromGps(double lat, double lon, float yaw_deg)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (!NavFusion_IsCoordValid(lat, lon))
+    {
+        return 0u;
+    }
+    g_origin_lat = lat;
+    g_origin_lon = lon;
+    g_fusion.x_m = 0.0f;
+    g_fusion.y_m = 0.0f;
+    g_fusion.yaw_deg = NavFusion_Wrap180(yaw_deg);
+    g_fusion.v_mps = 0.0f;
+    g_fusion.gps_residual_m = 0.0f;
+    g_fusion.gps_weight = 0.0f;
+    g_fusion.valid = 1u;
+    g_fusion.gps_used = 0u;
+    g_prev_x_m = 0.0f;
+    g_prev_y_m = 0.0f;
+    g_prev_xy_valid = 1u;
+    g_zero_speed_count = 0u;
+    g_gps_timeout_ms = 0u;
+    g_gps_good_streak = 0u;
+    return 1u;
+}
+void NavFusion_Predict1ms(float yaw_deg, float speed_src)
+{
+    float yaw_rad;
+    float v_mps;
+    float sin_yaw;
+    float cos_yaw;
+    float pred_yaw_deg;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+#if NAV_FUSION_ORIGIN_ENABLE
+    NavFusion_TickOriginTimeout();
+#endif
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    NavFusion_TickHeadingCalibTimeout();
+#endif
+    if (g_fusion.valid == 0u)
+    {
+        return;
+    }
+    pred_yaw_deg = NavFusion_Wrap180(yaw_deg);
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    if (g_heading_calib.session_active != 0u)
+    {
+        if (g_heading_calib.state == NAV_FUSION_CALIB_STRAIGHT_HOLD ||
+            g_heading_calib.state == NAV_FUSION_CALIB_HEADING_ALIGN)
+        {
+            pred_yaw_deg = g_heading_calib.launch_yaw_deg;
+        }
+        else if (g_heading_calib.state == NAV_FUSION_CALIB_READY)
+        {
+            pred_yaw_deg = NavFusion_Wrap180(yaw_deg + g_heading_calib.heading_bias_deg);
+        }
+    }
+#endif
+    g_fusion.yaw_deg = pred_yaw_deg;
+    v_mps = fabsf(speed_src) * NAV_FUSION_SPEED_SCALE;
+    g_fusion.v_mps = v_mps;
+    if (g_gps_timeout_ms < 0xFFFFu)
+    {
+        g_gps_timeout_ms++;
+    }
+    if (fabsf(speed_src) < NAV_FUSION_ZERO_SPEED_THRESHOLD)
+    {
+        return;
+    }
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    if (g_heading_calib.session_active != 0u &&
+        g_heading_calib.state == NAV_FUSION_CALIB_STRAIGHT_HOLD)
+    {
+        g_heading_calib.hold_dist_m += v_mps * NAV_FUSION_DT_S;
+        if (g_heading_calib.hold_dist_m >= NAV_FUSION_HEADING_CALIB_DISTANCE_M)
+        {
+            g_heading_calib.state = NAV_FUSION_CALIB_HEADING_ALIGN;
+        }
+    }
+#endif
+    yaw_rad = NAV_FUSION_DEG_TO_RAD(g_fusion.yaw_deg);
+    sin_yaw = sinf(yaw_rad);
+    cos_yaw = cosf(yaw_rad);
+    /* 与 my_gps 局地平面一致：x 东、y 北；yaw 0° 为北时 dx≈sin(yaw), dy≈cos(yaw) */
+    g_fusion.x_m += v_mps * sin_yaw * NAV_FUSION_DT_S;
+    g_fusion.y_m += v_mps * cos_yaw * NAV_FUSION_DT_S;
+}
+void NavFusion_ZeroVelocityUpdate(float speed_src)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    if (g_fusion.valid == 0u)
+    {
+        return;
+    }
+    if (fabsf(speed_src) < NAV_FUSION_ZERO_SPEED_THRESHOLD)
+    {
+        if (g_zero_speed_count < 0xFFFFu)
+        {
+            g_zero_speed_count++;
+        }
+    }
+    else
+    {
+        g_zero_speed_count = 0u;
+    }
+    if (g_zero_speed_count >= NAV_FUSION_ZERO_SPEED_STABLE_COUNT)
+    {
+        g_fusion.v_mps = 0.0f;
+    }
+}
+void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellite_used)
+{
+    float gps_x;
+    float gps_y;
+    float residual_x;
+    float residual_y;
+    float residual_m;
+    float gain;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+#if NAV_FUSION_ORIGIN_ENABLE
+    /* 原点采集中：禁止 auto-init 与 GPS 修正，避免 origin 未建立时 fusion 被拉动 */
+    if (NavFusion_IsOriginCalibrating() != 0u)
+    {
+        return;
+    }
+#endif
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+    if (NavFusion_IsGpsPositionUpdateAllowed() == 0u)
+    {
+        return;
+    }
+#endif
+    (void)satellite_used;
+    g_gps_timeout_ms = 0u;
+    g_fusion.gps_used = 0u;
+    g_fusion.gps_weight = 0.0f;
+    if (gps_state == 0u || !NavFusion_IsCoordValid(lat, lon))
+    {
+        g_gps_good_streak = 0u;
+        return;
+    }
+    if (g_fusion.valid == 0u)
+    {
+#if NAV_FUSION_ORIGIN_ENABLE
+        /* 已启用多点原点平均时，禁止首帧自动建原点，须等 FeedOriginSample 完成 */
+        return;
+#else
+        (void)NavFusion_InitFromGps(lat, lon, 0.0f);
+#endif
+    }
+    g_gps_good_streak++;
+    if (g_gps_good_streak < NAV_FUSION_GPS_GOOD_STREAK)
+    {
+        return;
+    }
+    NavFusion_LatLonToLocal(lat, lon, &gps_x, &gps_y);
+    residual_x = gps_x - g_fusion.x_m;
+    residual_y = gps_y - g_fusion.y_m;
+    residual_m = sqrtf(residual_x * residual_x + residual_y * residual_y);
+    g_fusion.gps_residual_m = residual_m;
+    if (residual_m >= NAV_FUSION_GPS_GATE_M)
+    {
+        return;
+    }
+    gain = NAV_FUSION_GPS_GAIN;
+    g_fusion.x_m += gain * residual_x;
+    g_fusion.y_m += gain * residual_y;
+    g_fusion.gps_weight = gain;
+    g_fusion.gps_used = 1u;
+}
+const NavFusionState *NavFusion_GetState(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return NULL;
+    }
+    return &g_fusion;
+}
+uint8 NavFusion_IsValid(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_fusion.valid == 0u)
+    {
+        return 0u;
+    }
+    if (g_gps_timeout_ms > NAV_FUSION_GPS_TIMEOUT_MS)
+    {
+        /* 超时后仍可用惯导预测，但标记本周期未用 GPS */
+        return 1u;
+    }
+    return 1u;
+}
+void NavFusion_GetPositionLatLon(double *lat_out, double *lon_out)
+{
+    double origin_lat_rad;
+    double d_lat_rad;
+    double d_lon_rad;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    if (lat_out == NULL || lon_out == NULL || g_fusion.valid == 0u)
+    {
+        return;
+    }
+    origin_lat_rad = (double)NAV_FUSION_DEG_TO_RAD((float)g_origin_lat);
+    d_lat_rad = (double)g_fusion.y_m / NAV_FUSION_EARTH_RADIUS_M;
+    d_lon_rad = (double)g_fusion.x_m / (NAV_FUSION_EARTH_RADIUS_M * cos(origin_lat_rad));
+    *lat_out = g_origin_lat + (double)NAV_FUSION_RAD_TO_DEG((float)d_lat_rad);
+    *lon_out = g_origin_lon + (double)NAV_FUSION_RAD_TO_DEG((float)d_lon_rad);
+}
+float NavFusion_GetMileageStepCm(void)
+{
+    float dx;
+    float dy;
+    float step_m;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return -1.0f;
+    }
+    if (g_fusion.valid == 0u || g_prev_xy_valid == 0u)
+    {
+        return -1.0f;
+    }
+    dx = g_fusion.x_m - g_prev_x_m;
+    dy = g_fusion.y_m - g_prev_y_m;
+    g_prev_x_m = g_fusion.x_m;
+    g_prev_y_m = g_fusion.y_m;
+    step_m = sqrtf(dx * dx + dy * dy);
+    return step_m * 100.0f;
+}
+void NavFusion_SyncMileageSnapshot(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    if (g_fusion.valid == 0u)
+    {
+        return;
+    }
+    g_prev_x_m = g_fusion.x_m;
+    g_prev_y_m = g_fusion.y_m;
+    g_prev_xy_valid = 1u;
+}
+#if NAV_FUSION_ORIGIN_ENABLE
+void NavFusion_BeginOriginAverage(float yaw_deg)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    NavFusion_Reset();
+    g_origin_avg.active = 1u;
+    g_origin_avg.yaw_deg = NavFusion_Wrap180(yaw_deg);
+    g_origin_avg.timeout_ms = 0u;
+}
+uint8 NavFusion_IsOriginCalibrating(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    return g_origin_avg.active;
+}
+uint16 NavFusion_GetOriginAcceptedCount(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    return g_origin_avg.accepted;
+}
+uint16 NavFusion_GetOriginRejectedCount(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    return g_origin_avg.rejected;
+}
+uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_fusion.valid == 0u || g_origin_avg.accepted == 0u)
+    {
+        return 0u;
+    }
+    if (lat_out != NULL)
+    {
+        *lat_out = g_origin_avg.result_lat;
+    }
+    if (lon_out != NULL)
+    {
+        *lon_out = g_origin_avg.result_lon;
+    }
+    return 1u;
+}
+uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used)
+{
+    float dist_m;
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+    }
+    if (g_origin_avg.failed_pulse != 0u)
+    {
+        g_origin_avg.failed_pulse = 0u;
+        return NAV_FUSION_ORIGIN_FEED_FAILED;
+    }
+    if (g_origin_avg.active == 0u)
+    {
+        return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+    }
+    if (gps_state == 0u || !NavFusion_IsCoordValid(lat, lon))
+    {
+        g_origin_avg.rejected++;
+        return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+    }
+    if (satellite_used < NAV_FUSION_ORIGIN_MIN_SATELLITES)
+    {
+        g_origin_avg.rejected++;
+        return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+    }
+    if (g_origin_avg.accepted > 0u)
+    {
+        dist_m = NavFusion_DistanceToRefM(lat, lon, g_origin_avg.mean_lat, g_origin_avg.mean_lon);
+        if (dist_m >= NAV_FUSION_ORIGIN_OUTLIER_M)
+        {
+            g_origin_avg.rejected++;
+            return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+        }
+    }
+    g_origin_avg.lat_sum += lat;
+    g_origin_avg.lon_sum += lon;
+    g_origin_avg.accepted++;
+    g_origin_avg.mean_lat = g_origin_avg.lat_sum / (double)g_origin_avg.accepted;
+    g_origin_avg.mean_lon = g_origin_avg.lon_sum / (double)g_origin_avg.accepted;
+    if (g_origin_avg.accepted >= NAV_FUSION_ORIGIN_SAMPLE_COUNT)
+    {
+        return NavFusion_FinishOriginAverage();
+    }
+    return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+}
+uint8 NavFusion_ConsumeOriginFailure(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_origin_avg.failed_pulse == 0u)
+    {
+        return 0u;
+    }
+    g_origin_avg.failed_pulse = 0u;
+    return 1u;
+}
+uint8 NavFusion_ConsumeOriginDonePulse(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_origin_avg.origin_done_pulse == 0u)
+    {
+        return 0u;
+    }
+    g_origin_avg.origin_done_pulse = 0u;
+    return 1u;
+}
+#endif /* NAV_FUSION_ORIGIN_ENABLE */
+#if NAV_FUSION_HEADING_CALIB_ENABLE
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return;
+    }
+    g_heading_calib.session_active = 1u;
+    g_heading_calib.state = NAV_FUSION_CALIB_IDLE;
+    g_heading_calib.launch_yaw_deg = NavFusion_Wrap180(launch_yaw_deg);
+    g_heading_calib.hold_dist_m = 0.0f;
+    g_heading_calib.heading_bias_deg = 0.0f;
+    g_heading_calib.cog_deg = 0.0f;
+    g_heading_calib.imu_ref_deg = 0.0f;
+    g_heading_calib.timeout_ms = 0u;
+    g_heading_calib.gps_update_allowed = 0u;
+    g_heading_calib.done_pulse = 0u;
+    g_heading_calib.failed_pulse = 0u;
+    if (g_fusion.valid != 0u && NavFusion_IsOriginCalibrating() == 0u)
+    {
+        NavFusion_OnOriginReadyForHeadingCalib();
+    }
+}
+uint8 NavFusion_IsHeadingCalibSessionActive(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    return g_heading_calib.session_active;
+}
+uint8 NavFusion_IsHeadingCalibrating(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.session_active == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.state == NAV_FUSION_CALIB_STRAIGHT_HOLD ||
+        g_heading_calib.state == NAV_FUSION_CALIB_HEADING_ALIGN)
+    {
+        return 1u;
+    }
+    return 0u;
+}
+uint8 NavFusion_IsHeadingAlignPending(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    return (uint8)(g_heading_calib.session_active != 0u &&
+                   g_heading_calib.state == NAV_FUSION_CALIB_HEADING_ALIGN);
+}
+uint8 NavFusion_IsHeadingCalibReady(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.session_active == 0u)
+    {
+        return 1u;
+    }
+    return (uint8)(g_heading_calib.state == NAV_FUSION_CALIB_READY);
+}
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return NAV_FUSION_HEADING_FEED_COLLECTING;
+    }
+    if (g_heading_calib.failed_pulse != 0u)
+    {
+        g_heading_calib.failed_pulse = 0u;
+        return NAV_FUSION_HEADING_FEED_FAILED;
+    }
+    if (g_heading_calib.session_active == 0u ||
+        g_heading_calib.state != NAV_FUSION_CALIB_HEADING_ALIGN)
+    {
+        return NAV_FUSION_HEADING_FEED_COLLECTING;
+    }
+    return NavFusion_FinishHeadingAlign(cog_deg_0_360, gps_state, imu_yaw_deg);
+}
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_fusion.valid == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.session_active == 0u)
+    {
+        return 1u;
+    }
+    return g_heading_calib.gps_update_allowed;
+}
+float NavFusion_GetLaunchYawHoldDeg(void)
+{
+    return g_heading_calib.launch_yaw_deg;
+}
+float NavFusion_GetHeadingBiasDeg(void)
+{
+    return g_heading_calib.heading_bias_deg;
+}
+float NavFusion_GetHoldDistM(void)
+{
+    return g_heading_calib.hold_dist_m;
+}
+float NavFusion_GetHeadingCogDeg(void)
+{
+    return g_heading_calib.cog_deg;
+}
+float NavFusion_GetHeadingImuRefDeg(void)
+{
+    return g_heading_calib.imu_ref_deg;
+}
+uint8 NavFusion_GetHeadingCalibState(void)
+{
+#if NAV_FUSION_ORIGIN_ENABLE
+    if (NavFusion_IsOriginCalibrating() != 0u)
+    {
+        return NAV_FUSION_CALIB_ORIGIN;
+    }
+#endif
+    if (g_heading_calib.session_active == 0u)
+    {
+        return NAV_FUSION_CALIB_IDLE;
+    }
+    return g_heading_calib.state;
+}
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.done_pulse == 0u)
+    {
+        return 0u;
+    }
+    g_heading_calib.done_pulse = 0u;
+    return 1u;
+}
+uint8 NavFusion_ConsumeHeadingCalibFailure(void)
+{
+    if (NavFusion_IsRuntimeEnabled() == 0u)
+    {
+        return 0u;
+    }
+    if (g_heading_calib.failed_pulse == 0u)
+    {
+        return 0u;
+    }
+    g_heading_calib.failed_pulse = 0u;
+    return 1u;
+}
+#endif /* NAV_FUSION_HEADING_CALIB_ENABLE */
+#if NAV_FUSION_ENABLE && !NAV_FUSION_ORIGIN_ENABLE
+void NavFusion_BeginOriginAverage(float yaw_deg) { (void)yaw_deg; }
+uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used)
+{
+    (void)lat;
+    (void)lon;
+    (void)gps_state;
+    (void)satellite_used;
+    return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+}
+uint8 NavFusion_IsOriginCalibrating(void) { return 0u; }
+uint16 NavFusion_GetOriginAcceptedCount(void) { return 0u; }
+uint16 NavFusion_GetOriginRejectedCount(void) { return 0u; }
+uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out)
+{
+    (void)lat_out;
+    (void)lon_out;
+    return 0u;
+}
+uint8 NavFusion_ConsumeOriginFailure(void) { return 0u; }
+uint8 NavFusion_ConsumeOriginDonePulse(void) { return 0u; }
+#endif
+#if !NAV_FUSION_HEADING_CALIB_ENABLE
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg) { (void)launch_yaw_deg; }
+uint8 NavFusion_IsHeadingCalibSessionActive(void) { return 0u; }
+uint8 NavFusion_IsHeadingCalibrating(void) { return 0u; }
+uint8 NavFusion_IsHeadingAlignPending(void) { return 0u; }
+uint8 NavFusion_IsHeadingCalibReady(void) { return 1u; }
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg)
+{
+    (void)cog_deg_0_360;
+    (void)gps_state;
+    (void)imu_yaw_deg;
+    return NAV_FUSION_HEADING_FEED_COLLECTING;
+}
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void) { return 1u; }
+float NavFusion_GetLaunchYawHoldDeg(void) { return 0.0f; }
+float NavFusion_GetHeadingBiasDeg(void) { return 0.0f; }
+float NavFusion_GetHoldDistM(void) { return 0.0f; }
+float NavFusion_GetHeadingCogDeg(void) { return 0.0f; }
+float NavFusion_GetHeadingImuRefDeg(void) { return 0.0f; }
+uint8 NavFusion_GetHeadingCalibState(void) { return NAV_FUSION_CALIB_IDLE; }
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void) { return 0u; }
+uint8 NavFusion_ConsumeHeadingCalibFailure(void) { return 0u; }
+#endif
+#else /* !NAV_FUSION_ENABLE */
+void NavFusion_Reset(void) {}
+uint8 NavFusion_InitFromGps(double lat, double lon, float yaw_deg)
+{
+    (void)lat;
+    (void)lon;
+    (void)yaw_deg;
+    return 0u;
+}
+void NavFusion_Predict1ms(float yaw_deg, float speed_src)
+{
+    (void)yaw_deg;
+    (void)speed_src;
+}
+void NavFusion_ZeroVelocityUpdate(float speed_src) { (void)speed_src; }
+void NavFusion_UpdateGps(double lat, double lon, uint8 gps_state, uint8 satellite_used)
+{
+    (void)lat;
+    (void)lon;
+    (void)gps_state;
+    (void)satellite_used;
+}
+const NavFusionState *NavFusion_GetState(void) { return NULL; }
+uint8 NavFusion_IsValid(void) { return 0u; }
+void NavFusion_GetPositionLatLon(double *lat_out, double *lon_out)
+{
+    (void)lat_out;
+    (void)lon_out;
+}
+void NavFusion_LatLonToLocal(double lat, double lon, float *x_m, float *y_m)
+{
+    (void)lat;
+    (void)lon;
+    (void)x_m;
+    (void)y_m;
+}
+float NavFusion_GetMileageStepCm(void) { return -1.0f; }
+void NavFusion_SyncMileageSnapshot(void) {}
+void NavFusion_BeginOriginAverage(float yaw_deg) { (void)yaw_deg; }
+uint8 NavFusion_FeedOriginSample(double lat, double lon, uint8 gps_state, uint8 satellite_used)
+{
+    (void)lat;
+    (void)lon;
+    (void)gps_state;
+    (void)satellite_used;
+    return NAV_FUSION_ORIGIN_FEED_COLLECTING;
+}
+uint8 NavFusion_IsOriginCalibrating(void) { return 0u; }
+uint16 NavFusion_GetOriginAcceptedCount(void) { return 0u; }
+uint16 NavFusion_GetOriginRejectedCount(void) { return 0u; }
+uint8 NavFusion_GetOriginAvgResult(double *lat_out, double *lon_out)
+{
+    (void)lat_out;
+    (void)lon_out;
+    return 0u;
+}
+uint8 NavFusion_ConsumeOriginFailure(void) { return 0u; }
+uint8 NavFusion_ConsumeOriginDonePulse(void) { return 0u; }
+void NavFusion_BeginHeadingCalibSession(float launch_yaw_deg) { (void)launch_yaw_deg; }
+uint8 NavFusion_IsHeadingCalibSessionActive(void) { return 0u; }
+uint8 NavFusion_IsHeadingCalibrating(void) { return 0u; }
+uint8 NavFusion_IsHeadingAlignPending(void) { return 0u; }
+uint8 NavFusion_IsHeadingCalibReady(void) { return 0u; }
+uint8 NavFusion_FeedHeadingAlignSample(float cog_deg_0_360, uint8 gps_state, float imu_yaw_deg)
+{
+    (void)cog_deg_0_360;
+    (void)gps_state;
+    (void)imu_yaw_deg;
+    return NAV_FUSION_HEADING_FEED_COLLECTING;
+}
+uint8 NavFusion_IsGpsPositionUpdateAllowed(void) { return 0u; }
+float NavFusion_GetLaunchYawHoldDeg(void) { return 0.0f; }
+float NavFusion_GetHeadingBiasDeg(void) { return 0.0f; }
+float NavFusion_GetHoldDistM(void) { return 0.0f; }
+float NavFusion_GetHeadingCogDeg(void) { return 0.0f; }
+float NavFusion_GetHeadingImuRefDeg(void) { return 0.0f; }
+uint8 NavFusion_GetHeadingCalibState(void) { return NAV_FUSION_CALIB_IDLE; }
+uint8 NavFusion_ConsumeHeadingCalibDonePulse(void) { return 0u; }
+uint8 NavFusion_ConsumeHeadingCalibFailure(void) { return 0u; }
+#endif /* NAV_FUSION_ENABLE */
