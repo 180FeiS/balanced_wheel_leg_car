@@ -137,7 +137,7 @@ void    image_camera_auto_exposure  (void);
 #define IMAGE_WHITE_BLOB_COL_MARGIN       8
 
 /** 最小白块像素数，低于此 track_valid=0 */
-#define IMAGE_WHITE_BLOB_MIN_AREA         60
+#define IMAGE_WHITE_BLOB_MIN_AREA         500//60
 /** ROI 平均灰度低于该值视为无有效白块（遮挡/全黑时不误报 track_valid） */
 #define IMAGE_WHITE_BLOB_MIN_MEAN_GRAY    28
 
