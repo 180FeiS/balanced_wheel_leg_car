@@ -1168,6 +1168,8 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_enter_cones_target_speed;
     case Nag_Launch_Field_Cone_Dec:
         return s_ui_dc.nag_enter_cones_pre_decel_dist_cm;
+    case Nag_Launch_Field_Stair_Spd:
+        return s_ui_dc.nag_enter_stair_target_speed;
     case Nag_Launch_Field_Stair_Dec:
         return s_ui_dc.nag_enter_stair_pre_decel_dist_cm;
     case Nag_Launch_Field_BridgeIn_Spd:
@@ -1190,13 +1192,13 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
     {
         "BaseSpd", "SpinSpd", "SpinDec",
         "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
-        "ConeSpd", "ConeDec", "SpinRt", "StairDec",
+        "ConeSpd", "ConeDec", "SpinRt", "StairSp", "StairDec",
         "BrgInSp", "BrgInDc"
     };
     static const int16 rows[Nag_Run_Launch_Param_Count] =
     {
         ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13, ROW_14,
-        ROW_15, ROW_16
+        ROW_15, ROW_16, ROW_17
     };
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();

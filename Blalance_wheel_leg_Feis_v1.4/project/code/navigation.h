@@ -185,9 +185,10 @@ extern float nag_enter_bridge_pre_decel_dist_cm;
  * 见 Nag_FindPairedExitStairMarker / Nag_ComputeStairResumeIndex（navigation.c）。
  */
 /* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 录制点单点 yaw；见 Nag_Hook_EnterStair_* */
-#define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
+#define Nag_EnterStair_Target_Speed_Default 300.0f // 进入台阶目标速度默认；Launch/Flash 可调
 #define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
 #define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f  // 进入台阶预减速默认（cm）；Launch/Flash 可调
+extern float nag_enter_stair_target_speed;
 extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 Nav_read[enter_index]）
 
@@ -211,7 +212,8 @@ extern float nag_enter_stair_pre_decel_dist_cm;
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
  * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel；
  * v8：v7 + bridge_in speed/decel；v9：v8 + Nag_Vofa_Group @ [18]；
- * v10：v9 + g_menu_nav_fusion_enable @ [19]。
+ * v10：v9 + g_menu_nav_fusion_enable @ [19]；
+ * v11：v10 布局在 [12] 插入 enter_stair target speed，[13..20] 顺延。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -225,13 +227,15 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V8 8u      /* v8：v7 + bridge_in speed/decel */
 #define Nag_Run_Launch_Params_Version_V9 9u      /* v9：v8 + vofa debug group */
 #define Nag_Run_Launch_Params_Version_V10 10u    /* v10：v9 + nav fusion enable */
-#define Nag_Run_Launch_Param_Count 13u
+#define Nag_Run_Launch_Params_Version_V11 11u    /* v11：v10 + enter_stair target speed @ [12] */
+#define Nag_Run_Launch_Param_Count 14u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
 #define Nag_Run_Launch_Config_Word_Count_V7 13u  /* v7：11 float + 2 config word */
 #define Nag_Run_Launch_Config_Word_Count_V8 15u  /* v8：13 float + 2 config word */
 #define Nag_Run_Launch_Config_Word_Count_V9 16u  /* v9：v8 + Nag_Vofa_Group @ [18] */
-#define Nag_Run_Launch_Config_Word_Count 17u     /* v10：v9 + g_menu_nav_fusion_enable @ [19] */
+#define Nag_Run_Launch_Config_Word_Count_V10 17u /* v10：v9 + g_menu_nav_fusion_enable @ [19] */
+#define Nag_Run_Launch_Config_Word_Count 18u     /* v11：v10 顺延 + enter_stair target @ [12] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -244,9 +248,10 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Launch_Field_Cone_Spd 7u
 #define Nag_Launch_Field_Cone_Dec 8u
 #define Nag_Launch_Field_Spin_Rate 9u
-#define Nag_Launch_Field_Stair_Dec 10u
-#define Nag_Launch_Field_BridgeIn_Spd 11u   /* 单边桥进目标速度 */
-#define Nag_Launch_Field_BridgeIn_Dec 12u   /* 单边桥进预减速距离（cm） */
+#define Nag_Launch_Field_Stair_Spd 10u      /* 进入台阶目标速度 */
+#define Nag_Launch_Field_Stair_Dec 11u      /* 进入台阶预减速距离（cm） */
+#define Nag_Launch_Field_BridgeIn_Spd 12u   /* 单边桥进目标速度 */
+#define Nag_Launch_Field_BridgeIn_Dec 13u   /* 单边桥进预减速距离（cm） */
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -261,6 +266,7 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
                    (field_index == Nag_Launch_Field_TurnIn_Spd) ||
                    (field_index == Nag_Launch_Field_TurnOut_Spd) ||
                    (field_index == Nag_Launch_Field_Cone_Spd) ||
+                   (field_index == Nag_Launch_Field_Stair_Spd) ||
                    (field_index == Nag_Launch_Field_BridgeIn_Spd));
 }
 

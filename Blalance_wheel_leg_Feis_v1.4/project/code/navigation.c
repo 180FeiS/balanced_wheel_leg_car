@@ -57,6 +57,7 @@ float nag_exit_turn_recovery_speed = Nag_ExitTurn_Recovery_Speed_Default;
 float nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
 float nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
 float nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+float nag_enter_stair_target_speed = Nag_EnterStair_Target_Speed_Default;
 float nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
 float nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
 float nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
@@ -71,6 +72,7 @@ void Nag_LaunchParamApplyDefaults(void)
     nag_exit_turn_pre_accel_dist_cm = Nag_ExitTurn_PreAccel_Dist_cm_Default;
     nag_enter_cones_target_speed = Nag_EnterCones_Target_Speed_Default;
     nag_enter_cones_pre_decel_dist_cm = Nag_EnterCones_PreDecel_Dist_cm_Default;
+    nag_enter_stair_target_speed = Nag_EnterStair_Target_Speed_Default;
     nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
     nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
     nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
@@ -101,6 +103,8 @@ float Nag_LaunchParamGet(uint8 field_index)
         return nag_enter_cones_pre_decel_dist_cm;
     case Nag_Launch_Field_Spin_Rate:
         return spin_rate_max_dps;
+    case Nag_Launch_Field_Stair_Spd:
+        return nag_enter_stair_target_speed;
     case Nag_Launch_Field_Stair_Dec:
         return nag_enter_stair_pre_decel_dist_cm;
     case Nag_Launch_Field_BridgeIn_Spd:
@@ -145,6 +149,9 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
         break;
     case Nag_Launch_Field_Spin_Rate:
         spin_set_rate_max_dps(value);
+        break;
+    case Nag_Launch_Field_Stair_Spd:
+        nag_enter_stair_target_speed = value;
         break;
     case Nag_Launch_Field_Stair_Dec:
         nag_enter_stair_pre_decel_dist_cm = value;
@@ -631,7 +638,7 @@ void Nag_BridgeDetectUpdate(void)
 /*
  * 进入台阶元素：
  * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
- * - 固定速度 Nag_EnterStair_Target_Speed、腿长 Nag_EnterStair_Leg_Long；
+ * - 固定速度 nag_enter_stair_target_speed、腿长 Nag_EnterStair_Leg_Long；
  * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
  * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
  * IsDone：三次 jump_control 正常结束后链式切入 EXIT_STAIR。
@@ -674,7 +681,7 @@ bool Nag_Hook_EnterStair_Start(void)
     {
         speed_sign = -1.0f;
     }
-    motor_user_speed_cmd = speed_sign * Nag_EnterStair_Target_Speed;
+    motor_user_speed_cmd = speed_sign * nag_enter_stair_target_speed;
     leg_long = Nag_EnterStair_Leg_Long;
     return true;
 }
@@ -1368,7 +1375,7 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             *pre_decel_dist_cm = Nag_Bump_PreDecel_Dist_cm;
             return (*pre_decel_dist_cm > 0.0f);
         case NAG_EVENT_TYPE_ENTER_STAIR:
-            *target_speed = Nag_EnterStair_Target_Speed;
+            *target_speed = nag_enter_stair_target_speed;
             *pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
             return true;
         default:
@@ -2669,7 +2676,7 @@ float Nag_GetControlSpeedTarget(void)
             switch (N.Event_Active_Type)
             {
                 case NAG_EVENT_TYPE_ENTER_STAIR:
-                    nav_speed = Nag_EnterStair_Target_Speed;
+                    nav_speed = nag_enter_stair_target_speed;
                     break;
                 case NAG_EVENT_TYPE_EXIT_STAIR:
                     nav_speed = fabsf(N.Stair_Saved_SetSpeed);
@@ -2756,7 +2763,7 @@ float Nag_GetControlSpeedTarget(void)
         switch (N.Event_Active_Type)
         {
             case NAG_EVENT_TYPE_ENTER_STAIR:
-                nav_speed = Nag_EnterStair_Target_Speed;
+                nav_speed = nag_enter_stair_target_speed;
                 break;
             case NAG_EVENT_TYPE_EXIT_STAIR:
                 nav_speed = fabsf(N.Stair_Saved_SetSpeed);

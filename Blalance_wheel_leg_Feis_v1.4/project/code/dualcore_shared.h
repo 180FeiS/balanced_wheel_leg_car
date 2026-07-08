@@ -88,6 +88,7 @@ typedef struct
   float nag_exit_turn_pre_accel_dist_cm;
   float nag_enter_cones_target_speed;
   float nag_enter_cones_pre_decel_dist_cm;
+  float nag_enter_stair_target_speed;       /* 进入台阶目标速度（Launch/Flash） */
   float nag_enter_stair_pre_decel_dist_cm;
   float nag_enter_bridge_target_speed;      /* 单边桥进目标速度（Launch/Flash） */
   float nag_enter_bridge_pre_decel_dist_cm; /* 单边桥进预减速距离 cm */
