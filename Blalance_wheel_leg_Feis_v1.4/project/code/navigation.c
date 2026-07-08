@@ -210,7 +210,7 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
         return;
     }
 
-    /* ENTER_STAIR：锁航向目标在 Nag_Hook_EnterStair_Start 内按 enter_index 前 lookback 圆均值设置。 */
+    /* ENTER_STAIR：锁航向目标在 Nag_Hook_EnterStair_Start 内按 Nav_read[enter_index] 单点设置。 */
     if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
     {
         return;
@@ -223,6 +223,7 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
 /*
  * Spin 等待期（已 Event_Active 但尚未 spin_task_start）：继续惯导路径 yaw 跟踪。
  * 仅 spin_enable==1 起转后由 spin_cmd 接管，避免减速/刹停阶段无航向闭环而乱走。
+ * 航向闭环校正不在本 Hook：由 control.c spin_finish(1) + Yaw_AlignDisplayDeg 完成。
  */
 static uint8 Nag_Spin_ShouldTrackInsYaw(void)
 {
@@ -295,9 +296,9 @@ void Nag_Hook_ExitTurn_Stop(void) {}
 
 /* 自转元素接法：
  * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
- * 2. Run：只有当前速度连续多拍低于阈值后，才真正启动 spin_task_start()；
- * 3. IsDone：只有自旋真正启动后才读取 spin_done，避免等待阶段误判完成；
- * 4. Stop：无论正常结束还是异常中止，都统一恢复被接管前的速度档位。
+ * 2. Run：速度连续多拍低于 Nag_Spin_Stop_Speed_Threshold 后 spin_task_start()（起转前低速区）；
+ * 3. IsDone：自旋已启动且 spin_done!=0（control 收刹结束；成功时 spin_finish(1) 会做航向校正）；
+ * 4. Stop：恢复 Spin_Saved_SetSpeed；航向校正结果由 control 层保留在 euler_angle.yaw。
  */
 bool Nag_Hook_Spin_Start(void)
 {
@@ -311,7 +312,7 @@ bool Nag_Hook_Spin_Start(void)
 }
 void Nag_Hook_Spin_Run(void)
 {
-    /* 等待期 Run_index 仍推进；此处用实时速度源判定停稳，起转后索引才冻结。 */
+    /* 等待期 Run_index 仍推进；用 Nag_Spin_Stop_* 判定停稳后再起转（与 control SPIN_ANGLE_SETTLE_DEG 收刹无关）。 */
     float abs_speed = fabsf((float)Nag_Speed_Source);
 
     if (N.Spin_Task_Started)
@@ -349,6 +350,7 @@ void Nag_Hook_Spin_Run(void)
     spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
     N.Spin_Task_Started = 1;
 }
+/* spin_done 由 control spin_finish 置位；成功结束时会 gated 校正显示 yaw，再由此返回 true 给元素状态机 */
 bool Nag_Hook_Spin_IsDone(void)
 {
     return (N.Spin_Task_Started && (spin_done != 0));
@@ -627,72 +629,8 @@ void Nag_BridgeDetectUpdate(void)
 }
 
 /*
- * 计算 anchor_index 向前 lookback_cm 范围内 Nav_read[] 存储 yaw 的圆均值（deg）。
- * Nav_read 每 Nag_Set_mileage（2cm）一点，yaw 存为 int32×100。
- * 点数不足或 anchor==0 时回退为 anchor 点 yaw 或当前 euler_angle.yaw。
- */
-float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
-{
-    uint16 point_count = 0u;
-    uint16 start_index = 0u;
-    uint16 i = 0u;
-    float sum_sin = 0.0f;
-    float sum_cos = 0.0f;
-    float yaw_deg = 0.0f;
-    float avg_yaw = 0.0f;
-
-    if (N.Save_index == 0u)
-    {
-        return (float)euler_angle.yaw;
-    }
-
-    point_count = Nag_DistanceToPoints(lookback_cm);
-    if (point_count == 0u)
-    {
-        point_count = 1u;
-    }
-
-    if (anchor_index >= N.Save_index)
-    {
-        anchor_index = (uint16)(N.Save_index - 1u);
-    }
-
-    if (anchor_index >= point_count)
-    {
-        start_index = (uint16)(anchor_index - point_count + 1u);
-    }
-    else
-    {
-        start_index = 0u;
-    }
-
-    for (i = start_index; i <= anchor_index; i++)
-    {
-        if (i >= Read_MaxSize)
-        {
-            break;
-        }
-        yaw_deg = (float)(Nav_read[i] / 100.0f);
-        sum_sin += sinf(yaw_deg * (float)(3.1415926f / 180.0f));
-        sum_cos += cosf(yaw_deg * (float)(3.1415926f / 180.0f));
-    }
-
-    if (sum_sin == 0.0f && sum_cos == 0.0f)
-    {
-        if (anchor_index < Read_MaxSize && N.Save_index > 0u)
-        {
-            return (float)(Nav_read[anchor_index] / 100.0f);
-        }
-        return (float)euler_angle.yaw;
-    }
-
-    avg_yaw = atan2f(sum_sin, sum_cos) * 57.2957795f;
-    return avg_yaw;
-}
-
-/*
  * 进入台阶元素：
- * - 锁 enter_index 前 Nag_EnterStair_Yaw_Lookback_cm 的 yaw 圆均值；
+ * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
  * - 固定速度 Nag_EnterStair_Target_Speed、腿长 Nag_EnterStair_Leg_Long；
  * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
  * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
@@ -701,7 +639,7 @@ float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm)
 bool Nag_Hook_EnterStair_Start(void)
 {
     uint16 enter_index = 0u;
-    float avg_yaw = 0.0f;
+    float locked_yaw = 0.0f;
     float speed_sign = 1.0f;
 
     N.Stair_Jump_Completed_Count = 0u;
@@ -720,9 +658,13 @@ bool Nag_Hook_EnterStair_Start(void)
     N.Stair_Saved_SetSpeed = motor_user_speed_cmd;
     N.Stair_Saved_Leg_Long = leg_long;
 
-    avg_yaw = Nag_ComputeYawAverageLookback(enter_index, Nag_EnterStair_Yaw_Lookback_cm);
-    N.Stair_Lookback_Yaw = avg_yaw;
-    Nag_HeadingHold_Enable(avg_yaw);
+    locked_yaw = (float)euler_angle.yaw;
+    if (enter_index < Read_MaxSize && N.Save_index > 0u && enter_index < N.Save_index)
+    {
+        locked_yaw = (float)(Nav_read[enter_index] / 100.0f);
+    }
+    N.Stair_Lookback_Yaw = locked_yaw;
+    Nag_HeadingHold_Enable(locked_yaw);
 
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
     NavFusion_SyncMileageSnapshot();
@@ -1064,7 +1006,8 @@ static void Nag_Element_StateMachine(void)
             return;
         }
     }
-    else if (event_index >= N.Event_Count)
+    else if (event_index >= N.Event_Count &&
+             !(event_index == 0xFFu && event_type == NAG_EVENT_TYPE_EXIT_STAIR))
     {
         return;
     }
@@ -3237,6 +3180,7 @@ void Nag_Notify_Event_Done(void)
     uint8 chain_exit_stair = 0u;
     float preserved_saved_speed = 0.0f;
     float preserved_saved_leg = 0.0f;
+    uint16 preserved_stair_enter_index = NAG_STAIR_PAIRED_ENTER_INVALID;
     uint16 enter_index = 0;
     uint16 exit_index = 0;
     uint16 resume_index = 0;
@@ -3272,6 +3216,7 @@ void Nag_Notify_Event_Done(void)
     {
         enter_index = Nag_Event_Table[event_index].enter_index;
         N.Stair_Paired_Enter_Index = enter_index;
+        preserved_stair_enter_index = enter_index;
         /* 链式切 EXIT 前保持 Ein，不推到 Ein+1。 */
         resume_index = N.Run_index;
     }
@@ -3345,6 +3290,7 @@ void Nag_Notify_Event_Done(void)
     {
         N.Stair_Saved_SetSpeed = preserved_saved_speed;
         N.Stair_Saved_Leg_Long = preserved_saved_leg;
+        N.Stair_Paired_Enter_Index = preserved_stair_enter_index;
         Nag_ConsumeTableExitStairEvents();
         Nag_ActivateChainedExitStair();
     }

@@ -184,13 +184,12 @@ extern float nag_enter_bridge_pre_decel_dist_cm;
  * 3) 回放：ENTER~EXIT 间 flash 路径不推进 Run_index；EXIT 完成后从 Eout+1 接回惯导。
  * 见 Nag_FindPairedExitStairMarker / Nag_ComputeStairResumeIndex（navigation.c）。
  */
-/* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 前回溯 yaw 均值；见 Nag_Hook_EnterStair_* */
+/* 进入台阶元素（ENTER_STAIR）：接管后固定速度与腿长，锁 enter_index 录制点单点 yaw；见 Nag_Hook_EnterStair_* */
 #define Nag_EnterStair_Target_Speed 300.0f       // 元素期内速度环目标（与 motor_user_speed_cmd 同单位）
 #define Nag_EnterStair_Leg_Long 5.5f             // 元素期内 leg_long（非 jump_flag 跳跃时序）
-#define Nag_EnterStair_Yaw_Lookback_cm 20.0f     // 锁航向：enter_index 向前该距离内 Nav_read yaw 圆均值
 #define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f  // 进入台阶预减速默认（cm）；Launch/Flash 可调
 extern float nag_enter_stair_pre_decel_dist_cm;
-#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 lookback 均值）
+#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 Nav_read[enter_index]）
 
 /* 退出台阶元素（EXIT_STAIR）：三次跳跃完成后软件链式切入；见 Nag_Hook_ExitStair_* */
 #define Nag_ExitStair_Leg_Long 3.5f              // 退出后恢复腿长
@@ -289,14 +288,21 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
  */
 #define Nag_Spin_Demo_Turns 2.0f
 #define Nag_Spin_Demo_Dir 1
-#define Nag_Spin_Stop_Speed_Threshold 30.0f // 当前速度低于该值时视为进入低速区
-#define Nag_Spin_Stop_Stable_Count 15u      // 连续低于阈值 N 个 1ms 周期后才开始自旋
+/*
+ * 起转前“低速停稳”判定（navigation 层，与 control 层收刹无关）：
+ * Nag_Spin_Stop_Speed_Threshold — 当前速度低于该值视为进入低速区；
+ * Nag_Spin_Stop_Stable_Count   — 连续满足上述条件的 1ms 拍数，达到后才 spin_task_start()。
+ * 收刹结束区在 control.c：SPIN_ANGLE_SETTLE_DEG / SPIN_RATE_SETTLE_DPS / spin_finish(1)。
+ * 航向漂移闭环校正在 control spin_finish(1) 内（Yaw_AlignDisplayDeg），本层不参与。
+ */
+#define Nag_Spin_Stop_Speed_Threshold 30.0f
+#define Nag_Spin_Stop_Stable_Count 15u
 
 /*
  * Spin 分阶段策略（实现见 Nag_Spin_ShouldTrackInsYaw / Run_Nag_GPS / Nag_Hook_Spin_Run）：
  * - 等待减速期：Run_index 与 Angle_Run 仍按里程/前瞻推进；
  * - spin_task_start 起转后：冻结 Run_index，锁存 Spin_Resume_RunIndex，融合里程快照同步；
- * - 自旋完成：从 Spin_Resume_RunIndex 接回惯导，Event_Consumed 防重复触发；
+ * - 自旋完成（spin_done，control 层 spin_finish(1) 含航向校正）：从 Spin_Resume_RunIndex 接回惯导；
  * - 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制。
  */
 
@@ -488,14 +494,14 @@ typedef struct{
        uint16 Event_Trigger_RunIndex; //本次元素进入时的 Run_index（调试用；Spin 恢复不依赖此字段）
        uint8 Event_Triggered_In_Window; //1=在 Spin 触发区域内提前触发；0=精确命中 enter_index
        uint8 Event_Consumed[Nag_Event_Max]; //本轮回放各事件是否已执行，防止窗口触发后再次命中同一点
-       float Spin_Saved_SetSpeed; //自旋元素接管前保存的全局速度档位
-       uint16 Spin_Stop_Stable_Count; //当前已连续低于速度阈值多少个 1ms 周期
-       uint8 Spin_Task_Started; //1表示当前自旋任务已经真正下发给控制层
-       uint16 Spin_Resume_RunIndex; //Spin 起转前锁存的路径索引，自旋完成后从此处继续惯导
-       uint8 Spin_Speed_Latched; //1表示当前元素已接管并清零 motor_user_speed_cmd，退出时需恢复
+       float Spin_Saved_SetSpeed; // 自旋元素接管前保存的全局速度档位
+       uint16 Spin_Stop_Stable_Count; // 起转前：已连续低于 Nag_Spin_Stop_Speed_Threshold 的 1ms 拍数
+       uint8 Spin_Task_Started; // 1=已调用 spin_task_start，控制层自旋进行中或刚结束
+       uint16 Spin_Resume_RunIndex; // 起转前锁存 Run_index；自旋完成后从此索引接回惯导（非 enter_index 跳点）
+       uint8 Spin_Speed_Latched; // 1=元素已清零 motor_user_speed_cmd，退出时需 Nag_Spin_RestoreSetSpeed
        float Stair_Saved_Leg_Long; //进入台阶前备份的 leg_long，Stop/Done 时恢复
        float Stair_Saved_SetSpeed; //进入台阶前备份的 motor_user_speed_cmd，Stop/Done 时恢复
-       float Stair_Lookback_Yaw;   //进入台阶时计算的锁航向目标（deg），供 VOFA/调试
+       float Stair_Lookback_Yaw;   //进入台阶时锁定的航向目标（deg，Nav_read[enter_index]），供 VOFA/调试
        uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
        uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
        uint16 Stair_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Ein；0xFFFF=无效 */
@@ -549,7 +555,7 @@ extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
 /* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑 */
-#define NAG_VOFA_GROUP_COUNT (4u)
+#define NAG_VOFA_GROUP_COUNT (5u)
 
 void Nag_OdoSlip_ResetState(void); /* 清零里程纠偏运行时态；Init_Nag/回放开始时调用 */
 void Nag_OdoSlip_ApplyPendingRollback(void); /* 将待补扣里程写回 Mileage_All/Run_index */
@@ -628,8 +634,6 @@ bool Nag_Hook_Bump_Start(void);
 void Nag_Hook_Bump_Run(void);
 bool Nag_Hook_Bump_IsDone(void);
 void Nag_Hook_Bump_Stop(void);
-
-float Nag_ComputeYawAverageLookback(uint16 anchor_index, float lookback_cm);
 
 bool Nag_Hook_EnterStair_Start(void);
 void Nag_Hook_EnterStair_Run(void);

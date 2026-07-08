@@ -113,6 +113,26 @@ void Yaw_ResetZero(void)
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     将显示航向对齐到指定角度
+// 参数说明     target_display_yaw_deg  目标显示航向（±180°），即 euler_angle.yaw 应对齐的值
+// 返回参数     uint8  1=已应用；仅改 yaw_zero_offset_deg，不改四元数 exf_x
+// 使用示例     Yaw_AlignDisplayDeg(wrap180(spin_start_yaw + spin_target_deg));
+// 备注信息     与 Yaw_ResetZero 区别：ResetZero 以当前 raw 为零点；本函数以指定显示角为目标
+//              自旋闭环校正验证（VOFA）：
+//              A) 记录起转前 euler_yaw=A，2 圈结束后 |euler_yaw-A|<2° 且 spin_yaw_correct_applied==1
+//              B) SPIN_YAW_CORRECT_MAX_ERR_DEG 设过小应出现 spin_yaw_correct_skipped==1
+//              C) 导航 Spin 元素回放后 Angle_Run 与 euler_yaw 不应因自旋凭空跳变
+//              D) spin_finish(0)/spin_task_stop 不应置 applied
+-------------------------------------------------------------------------------------------------------------------*/
+uint8 Yaw_AlignDisplayDeg(float target_display_yaw_deg)
+{
+  target_display_yaw_deg = yaw_wrap180_deg(target_display_yaw_deg);
+  yaw_zero_offset_deg = yaw_wrap180_deg(yaw_raw_deg - target_display_yaw_deg);
+  euler_angle.yaw = yaw_apply_zero_offset(yaw_raw_deg);
+  return 1u;
+}
+
+/*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     EKF初始化
 // 参数说明     null
 // 返回参数     null

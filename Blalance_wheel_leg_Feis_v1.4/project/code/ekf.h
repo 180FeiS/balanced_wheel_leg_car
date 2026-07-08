@@ -38,7 +38,8 @@ void EKF_Init(void); // EKF初始化
 float Yaw_GetDeg(void);           // 偏移后航向（同 euler_angle.yaw）
 float Yaw_GetRawDeg(void);        // EKF 原始 yaw，未减零点偏移
 float Yaw_GetZeroOffsetDeg(void); // 当前 yaw 零点偏移
-void Yaw_ResetZero(void);         // 将当前原始 yaw 记为新零点，偏移后 yaw 立即为 0；运行中可随时调用
+void Yaw_ResetZero(void);         // 将当前 raw 记为零点，显示 yaw 立即为 0（如 SWITCH2）
+uint8 Yaw_AlignDisplayDeg(float target_display_yaw_deg); // 将显示 yaw 对齐到目标角（自旋闭环校正等）
 
 void imu_get_values(void); // 得到imu原始值
 

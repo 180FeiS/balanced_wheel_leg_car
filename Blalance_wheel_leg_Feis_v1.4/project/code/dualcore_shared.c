@@ -100,6 +100,12 @@ void dualcore_ctrl_to_ui_publish(void)
   c->odo_slip_state = (float)N.Odo_Slip_State;
   c->odo_protected_step_cm = N.Odo_Protected_Step_Cm;
   c->odo_rollback_applied_cm = N.Odo_Rollback_Applied_Cm;
+  c->spin_start_yaw_deg = spin_start_yaw_deg;
+  c->spin_yaw_correct_delta_deg = spin_yaw_correct_delta_deg;
+  c->spin_yaw_correct_applied = spin_yaw_correct_applied;
+  c->spin_yaw_correct_skipped = spin_yaw_correct_skipped;
+  c->spin_accum_deg_snap = spin_accum_deg;
+  c->spin_angle_err_snap = spin_angle_err;
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;

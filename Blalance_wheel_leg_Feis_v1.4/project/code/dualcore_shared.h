@@ -209,6 +209,13 @@ typedef struct
   float odo_slip_state;          /* Nag_OdoSlip_State 枚举值，0=正常 */
   float odo_protected_step_cm;   /* 本拍纠偏后里程步长 */
   float odo_rollback_applied_cm; /* 累计回溯补扣 cm */
+  /* VOFA 组 4 — 自旋航向闭环校正（control.c spin_apply_yaw_closed_loop_correct） */
+  float spin_start_yaw_deg;
+  float spin_yaw_correct_delta_deg;
+  uint8 spin_yaw_correct_applied;
+  uint8 spin_yaw_correct_skipped;
+  float spin_accum_deg_snap;
+  float spin_angle_err_snap;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

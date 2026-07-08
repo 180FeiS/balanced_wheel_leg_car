@@ -153,12 +153,24 @@ void yaw_hold_poweron_request_if_needed(void);
 extern uint8 spin_enable;
 extern uint8 spin_done;
 extern int8 spin_dir;
-extern float spin_target_deg;
-extern float spin_accum_deg;
-extern float spin_angle_err;
+extern float spin_target_deg;   /* 任务目标总转角 (deg)，如 ±720 */
+extern float spin_accum_deg;    /* 自旋累计 euler_yaw 增量 */
+extern float spin_angle_err;    /* spin_target_deg - spin_accum_deg */
 extern float spin_rate_max_dps;
 extern float spin_rate_target_dps;
 extern float spin_rate_meas_dps;
+extern float spin_start_yaw_deg;           /* 起转瞬间显示航向，供闭环校正与 VOFA */
+extern uint8 spin_yaw_correct_applied;     /* 最近一次 spin_finish(1) 是否已校正航向 */
+extern uint8 spin_yaw_correct_skipped;     /* 1=结束误差超 SPIN_YAW_CORRECT_MAX_ERR_DEG */
+extern float spin_yaw_correct_delta_deg;   /* 校正前后显示 yaw 差 (deg) */
+
+/*
+ * 自旋航向闭环校正验证（660RC，见 control.c SPIN_YAW_CORRECT_* / Yaw_AlignDisplayDeg）：
+ * A) VOFA 组 4：起转前记 euler_yaw=A，遥控 2 圈后 |yaw-A|<2° 且 spin_yaw_correct_applied==1
+ * B) 将 SPIN_YAW_CORRECT_MAX_ERR_DEG 临时设为 10°，应出现 spin_yaw_correct_skipped==1
+ * C) 导航 Spin 元素回放：自旋后 Angle_Run 与 euler_yaw 不应凭空跳变
+ * D) spin_finish(0)/spin_task_stop：spin_yaw_correct_applied 保持 0
+ */
 
 /*********************************************************************参数*********************************************************************/
 

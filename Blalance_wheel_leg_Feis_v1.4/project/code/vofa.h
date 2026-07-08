@@ -46,6 +46,17 @@ void vofa_send_nav_from_dualcore_snapshot(void);
  * 调试：直行/弯道看 ch4≈ch5；单轮空转时一侧偏离、ch6 应低于 car_speed 对应步长。
  */
 #define VOFA_GROUP_ODO_SLIP_DEBUG (3u)
+
+/*
+ * VOFA 组 4 — 自旋航向闭环校正（菜单 n 切组至 4）：
+ *   ch1 spin_angle_err_snap      剩余角 spin_target - spin_accum (deg)
+ *   ch2 spin_accum_deg_snap      自旋累计角 (deg)
+ *   ch3 spin_start_yaw_deg        起转显示航向 (deg)
+ *   ch4 spin_yaw_correct_delta_deg  最近一次校正量 (deg)
+ *   ch5 spin_yaw_correct_applied  1=上次 spin_finish(1) 已校正
+ *   ch6 spin_yaw_correct_skipped  1=误差超门限跳过校正
+ */
+#define VOFA_GROUP_SPIN_YAW_DEBUG (4u)
 #endif
 
 #endif

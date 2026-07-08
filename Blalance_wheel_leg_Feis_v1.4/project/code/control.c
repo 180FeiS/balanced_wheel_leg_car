@@ -32,8 +32,8 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 1.0;  // pitch机械中值（俯仰平衡）4.5
-float roll_mid = 4.2; // roll机械中值（横滚平衡，leg_hight PID目标）
+float pitch_mid = -1.5;  // pitch机械中值（俯仰平衡）1.0
+float roll_mid = 4.2; // roll机械中值（横滚平衡，leg_hight PID目标） -0.5
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -300,24 +300,38 @@ uint8 control_bridge_vision_track_valid(void)
 #define STEER_SETTLE_COUNT_MAX      20u     // 连续满足收敛条件若干次再结束，避免边界抖动误判
 
 /* 自旋任务参数与调试变量 */
-#define SPIN_ANGLE_OUT_MAX_DPS_DEFAULT 200.0f  // 自旋巡航角速度默认值 (deg/s)
-#define SPIN_RATE_MIN_DPS               30.0f
-#define SPIN_RATE_MAX_DPS              1000.0f
-#define SPIN_ANGLE_SETTLE_DEG         70.0f  // 剩余角度进入该窗口后开始收转向并准备结束任务
-#define SPIN_RATE_SETTLE_DPS         20.0f  // 收转向后，实测角速度低于该值时认为已经基本停住
-#define SPIN_SETTLE_COUNT_MAX        25u
+#define SPIN_ANGLE_OUT_MAX_DPS_DEFAULT 200.0f  /* 自旋巡航角速度默认值 (deg/s) */
+#define SPIN_RATE_MIN_DPS               30.0f  /* spin_rate_max_dps 下限 */
+#define SPIN_RATE_MAX_DPS              1000.0f /* spin_rate_max_dps 上限 */
+/*
+ * 剩余角度 |spin_angle_err| 进入该窗口后开始收角速度（spin_brake_phase=1）。
+ * 与 spin_target_deg/spin_accum_deg 配合：spin_angle_err = spin_target_deg - spin_accum_deg。
+ * 闭环航向校正 gate（SPIN_YAW_CORRECT_MAX_ERR_DEG）建议 >= 本值。
+ */
+#define SPIN_ANGLE_SETTLE_DEG         35.0f
+#define SPIN_RATE_SETTLE_DPS         20.0f  /* 收刹后实测 |spin_rate_meas_dps| 低于该值才累计停稳计数 */
+#define SPIN_SETTLE_COUNT_MAX        25u    /* 连续满足停稳条件的 1ms 拍数，达到后 spin_finish(1) */
 #define SPIN_TIMEOUT_BASE_MS       3000u
-#define SPIN_PITCH_ABORT_DEG         20.0f
+#define SPIN_PITCH_ABORT_DEG         20.0f  /* 自旋中 pitch 偏离过大则 spin_finish(0)，不校正航向 */
+
+/* 自旋成功结束时的航向闭环校正（660RC 6 轴 EKF yaw 漂移补偿，见 Yaw_AlignDisplayDeg） */
+#define SPIN_YAW_CORRECT_ENABLE           1u    /* 1=spin_finish(1) 且误差在门限内时校正显示 yaw */
+#define SPIN_YAW_CORRECT_MAX_ERR_DEG     70.0f  /* 允许校正的最大 |spin_angle_err|；须 >= SPIN_ANGLE_SETTLE_DEG */
 
 float spin_rate_max_dps = SPIN_ANGLE_OUT_MAX_DPS_DEFAULT;
 uint8 spin_enable = 0;
 uint8 spin_done = 0;
 int8 spin_dir = 1;
-float spin_target_deg = 0.0f;
-float spin_accum_deg = 0.0f;
-float spin_angle_err = 0.0f;
+float spin_target_deg = 0.0f;   /* 任务目标总转角（deg），如 2 圈 * dir => ±720 */
+float spin_accum_deg = 0.0f;    /* 自旋过程中累计的 euler_yaw 增量（±180° 解包） */
+float spin_angle_err = 0.0f;    /* spin_target_deg - spin_accum_deg，供收刹与航向校正 gate */
 float spin_rate_target_dps = 0.0f;
 float spin_rate_meas_dps = 0.0f;
+
+float spin_start_yaw_deg = 0.0f;           /* 起转瞬间显示航向 euler_angle.yaw，供闭环校正 */
+uint8 spin_yaw_correct_applied = 0u;       /* 最近一次 spin_finish(1) 是否已做航向校正 */
+uint8 spin_yaw_correct_skipped = 0u;       /* 1=成功结束但 |spin_angle_err| 超门限，跳过校正 */
+float spin_yaw_correct_delta_deg = 0.0f; /* 校正量：对齐後 yaw − 校正前 yaw（deg） */
 
 static float spin_last_yaw = 0.0f;
 static uint8 spin_brake_phase = 0;
@@ -370,9 +384,49 @@ static void steer_finish(uint8 done)
     spin_reset_pid_state(&turn_gyro);
 }
 
-/* 统一收尾：结束自旋任务并清空双环内部状态。 */
+/* 自旋成功结束时：在 |spin_angle_err| 门限内将显示 yaw 对齐到 spin_start_yaw + spin_target_deg */
+static void spin_apply_yaw_closed_loop_correct(void)
+{
+#if SPIN_YAW_CORRECT_ENABLE
+    float expected_yaw;
+    float before_yaw;
+
+    spin_yaw_correct_applied = 0u;
+    spin_yaw_correct_skipped = 0u;
+    spin_yaw_correct_delta_deg = 0.0f;
+
+    if (ABS(spin_angle_err) > SPIN_YAW_CORRECT_MAX_ERR_DEG)
+    {
+        spin_yaw_correct_skipped = 1u;
+        return;
+    }
+
+    before_yaw = (float)euler_angle.yaw;
+    expected_yaw = wrap_yaw_deg(spin_start_yaw_deg + spin_target_deg);
+    Yaw_AlignDisplayDeg(expected_yaw);
+    spin_yaw_correct_delta_deg = (float)ange_deviation1(expected_yaw, before_yaw);
+    spin_yaw_correct_applied = 1u;
+#else
+    spin_yaw_correct_applied = 0u;
+    spin_yaw_correct_skipped = 0u;
+    spin_yaw_correct_delta_deg = 0.0f;
+#endif
+}
+
+/* 统一收尾：结束自旋任务并清空双环内部状态。done=1 时尝试航向闭环校正。 */
 static void spin_finish(uint8 done)
 {
+    if (done != 0u)
+    {
+        spin_apply_yaw_closed_loop_correct();
+    }
+    else
+    {
+        spin_yaw_correct_applied = 0u;
+        spin_yaw_correct_skipped = 0u;
+        spin_yaw_correct_delta_deg = 0.0f;
+    }
+
     spin_enable = 0;
     spin_done = done;
     spin_rate_target_dps = 0.0f;
@@ -405,6 +459,10 @@ void spin_task_start(float turns, int8 dir)
     spin_angle_err = spin_target_deg;
     spin_rate_target_dps = 0.0f;
     spin_rate_meas_dps = 0.0f;
+    spin_start_yaw_deg = (float)euler_angle.yaw;
+    spin_yaw_correct_applied = 0u;
+    spin_yaw_correct_skipped = 0u;
+    spin_yaw_correct_delta_deg = 0.0f;
     spin_last_yaw = (float)euler_angle.yaw;
     spin_brake_phase = 0;
     spin_settle_count = 0;
@@ -652,8 +710,8 @@ void set_steer_cmd(float cmd)
 /*---------- 通用腿/舵机参数 ----------*/
 #define LEG_P_MIN           2.4f   // 腿长下限
 #define LEG_P_MAX          14.5f   // 腿长上限
-#define LEG_STEP_P_MAX      1.0f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
-#define LEG_STEP_ANGLE_MAX  1.0f   // 每5ms腿部倾角最大变化(度)
+#define LEG_STEP_P_MAX      0.5f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
+#define LEG_STEP_ANGLE_MAX  0.5f   // 每5ms腿部倾角最大变化(度)
 #define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
 /*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
