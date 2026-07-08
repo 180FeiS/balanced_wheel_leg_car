@@ -150,4 +150,14 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void);
 
 void step_debug_send_to_vofa(void);
 
+/** 菜单调试：对当前 mt9v03x_image 做下沿检测，不改动滤波/计数/finish_flag；未检出返回 -1 */
+int step_debug_find_bottom_row(void);
+
+#if defined(CY_CORE_CM7_1)
+/** 在压缩灰度预览上叠加下沿水平线（bottom_row<0 时不绘制） */
+void step_debug_draw_bottom_overlay(int disp_x, int disp_y, int disp_w, int disp_h, int bottom_row);
+/** 台阶 Image 调试页：压缩显示 + 下沿红线叠加，并更新 step_data.bottom_row_raw */
+void step_debug_show(int disp_x, int disp_y);
+#endif /* CY_CORE_CM7_1 */
+
 #endif /* CODE_STEP_DETECTION_H_ */

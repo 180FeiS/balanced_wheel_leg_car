@@ -34,6 +34,7 @@
 #include "image.h"
 #if defined(CY_CORE_CM7_1)
 #include "single_bridge.h"
+#include "step_detection.h"
 #endif
 #include "my_gps.h"
 #if defined(CY_CORE_CM7_1)
@@ -1501,6 +1502,9 @@ void GUI_2_1_1_1(void) // Ì¨½×¼ì²â
     ips200_show_string(88, ROW_7, step_data.detected ? "Yes" : "No ");
 
     ips200_show_string(0, ROW_6, "Ñ¹Ëõ»Ò¶È");
+#if defined(CY_CORE_CM7_1)
+    ips200_show_string(120, ROW_6, "Bot:red");
+#endif
     ips200_show_string(0, ROW_8, "Distance:");
     ips200_show_float(88, ROW_8, step_data.distance_cm, 3, 1);
     ips200_show_string(136, ROW_8, "cm");
@@ -1510,10 +1514,9 @@ void GUI_2_1_1_1(void) // Ì¨½×¼ì²â
     ips200_show_string(136, ROW_9, "pix");
 
 #if defined(CY_CORE_CM7_1)
-    image_photo_compress(mt9v03x_image[0]);
-    ips200_show_gray_image(0, ROW_10, image_two_value[0],
-                           IMAGE_COMPRESS_W, IMAGE_COMPRESS_H,
-                           MT9V03X_W, MT9V03X_H, 0);
+    step_debug_show(0, ROW_10);
+    ips200_show_string(0, ROW_5, "BotRow:");
+    ips200_show_uint(56, ROW_5, step_data.bottom_row_raw, 3);
 #endif
 }
 void ACT_2_1_1_1()

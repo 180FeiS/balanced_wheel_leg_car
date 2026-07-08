@@ -711,7 +711,7 @@ void set_steer_cmd(float cmd)
 #define LEG_P_MIN           2.4f   // 腿长下限
 #define LEG_P_MAX          14.5f   // 腿长上限
 #define LEG_STEP_P_MAX      0.5f   // 每5ms腿高最大变化（步进限幅，越大响应越快）
-#define LEG_STEP_ANGLE_MAX  0.5f   // 每5ms腿部倾角最大变化(度)
+#define LEG_STEP_ANGLE_MAX  0.3f   // 每5ms腿部倾角最大变化(度)
 #define LEG_RIGHT_ANGLE_INVERT  1   // 右腿俯仰取反(左右镜像)，若方向反则改0
 
 /*---------- 横滚角参数（只抬腿不收腿，抬腿侧给占空比）----------*/
@@ -726,7 +726,7 @@ uint8 roll_balance_en = 0;  // 1开/0关横滚平衡；LORA 切换键下标见 r
 #define LEG_TILT_MAX             VMC_A_EXT_MAX // 腿倾角限幅，与 vmc 外推上限一致
 
 /*---------- 跳跃参数（障碍跨越）----------*/
-#define JUMP_PID_SCALE          0.4f  // 跳跃时angle/speed的kp缩放，维持稳定
+#define JUMP_PID_SCALE          0.5f  // 跳跃时angle/speed的kp缩放，维持稳定
 #define JUMP_TAKEOFF_P_DEFAULT   12.5f
 #define JUMP_RETRACT_P_DEFAULT   5.5f
 #define JUMP_PREPARE_P_DEFAULT   7.5f

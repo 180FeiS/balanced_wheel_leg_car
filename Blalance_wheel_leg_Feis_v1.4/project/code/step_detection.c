@@ -1,4 +1,5 @@
 #include "zf_common_headfile.h"
+#include "image.h"
 
 step_info_t step_data = {0};
 
@@ -645,6 +646,54 @@ void step_visual_jump_post_jump_cooldown_on_cm7_1_1ms(void)
 #endif
 #endif /* !LEG_DEBUG_MODE && DUALCORE_UI_ON_CM7_1 && VISUAL_JUMP_AUTO_ENABLE */
 }
+#endif /* CY_CORE_CM7_1 */
+
+int step_debug_find_bottom_row(void)
+{
+    compute_horizontal_edge_histogram();
+    return find_step_bottom_edge();
+}
+
+#if defined(CY_CORE_CM7_1)
+
+static int step_debug_map_y_full_row(int row, int disp_y, int disp_h)
+{
+    return disp_y + (row * disp_h) / (int)MT9V03X_H;
+}
+
+void step_debug_draw_bottom_overlay(int disp_x, int disp_y, int disp_w, int disp_h, int bottom_row)
+{
+    int y;
+    int x_end;
+
+    if (bottom_row < 0)
+    {
+        return;
+    }
+
+    y = step_debug_map_y_full_row(bottom_row, disp_y, disp_h);
+    x_end = disp_x + disp_w - 1;
+    if (x_end < disp_x)
+    {
+        x_end = disp_x;
+    }
+    ips200_draw_line(disp_x, y, x_end, y, RGB565_RED);
+}
+
+void step_debug_show(int disp_x, int disp_y)
+{
+    int bottom_row;
+
+    image_photo_compress(mt9v03x_image[0]);
+    ips200_show_gray_image(disp_x, disp_y, image_two_value[0],
+                           IMAGE_COMPRESS_W, IMAGE_COMPRESS_H,
+                           MT9V03X_W, MT9V03X_H, 0);
+
+    bottom_row = step_debug_find_bottom_row();
+    step_data.bottom_row_raw = (bottom_row >= 0) ? (uint16)bottom_row : 0u;
+    step_debug_draw_bottom_overlay(disp_x, disp_y, MT9V03X_W, MT9V03X_H, bottom_row);
+}
+
 #endif /* CY_CORE_CM7_1 */
 
 void step_debug_send_to_vofa(void)
