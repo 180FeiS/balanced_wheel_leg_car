@@ -26,6 +26,17 @@ extern volatile float car_speed;
 /* gyro_z 零偏观测：静止 10s 后输出的 gyro_z 均值，单位 rad/s */
 extern float gyro_z_bias_mean;
 
+/* gyro_z 运行补偿量（rad/s）：imu_get_values 内执行 gyro_z -= gyro_z_bias_comp */
+extern float gyro_z_bias_comp;
+
+/* 标定状态：0=Idle 1=Running 2=Done */
+#define GYRO_BIAS_CALIB_IDLE     0u
+#define GYRO_BIAS_CALIB_RUNNING  1u
+#define GYRO_BIAS_CALIB_DONE     2u
+
+extern float yaw_drift_10s_deg; /* 10s 后 yaw 与 KEY3 起点的差值（度，±180） */
+extern float gyro_bias_calib_yaw_start_deg; /* KEY3 按下瞬间的 yaw（度） */
+
 /* yaw 零点偏移：euler_angle.yaw 为偏移后航向；yaw_raw_deg 为 EKF 原始解算 */
 extern float yaw_raw_deg;
 extern float yaw_zero_offset_deg;
@@ -48,6 +59,14 @@ void EKF_UpData(void); // 更新EKF数据
 void SOSFilter(float *input, float *output, int length); // Direct Form II 二阶节滤波
 
 void EKF_V_UPData(void); // 更新EKF得到真实的位移、速度
+
+void GyroBias_CalibStart(void);
+uint8 GyroBias_GetCalibState(void);
+float GyroBias_GetComp(void);
+float GyroBias_GetYawDrift10sDeg(void);
+float GyroBias_GetYawStartDeg(void);
+uint8 GyroBias_GetRemainSec(void);
+void GyroBias_SetComp(float bias_rad);
 /*********************************************************************函数*********************************************************************/
 
 #endif /* CODE_EKF_H_ */

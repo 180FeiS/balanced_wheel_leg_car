@@ -3,6 +3,7 @@
 #include "my_gps.h"
 #include "control.h"
 #include "navigation.h"
+#include "ekf.h"
 
 static uint8 nag_flash_index_read = 0;
 
@@ -600,6 +601,57 @@ void flash_JumpParams_Read(void)
                                                           Nag_Jump_Params_Word_Count_V1)))
     {
         flash_JumpParamsUnpackV1();
+    }
+    flash_buffer_clear();
+}
+
+#define Nag_Gyro_Bias_Page 51u
+#define Nag_Gyro_Bias_Magic 0x475A4253u   /* "GZBS" */
+#define Nag_Gyro_Bias_Version 1u
+
+static uint32 flash_GyroBiasChecksum(void)
+{
+    return Nag_Gyro_Bias_Magic ^ Nag_Gyro_Bias_Version ^
+           flash_union_buffer[3].uint32_type;
+}
+
+void flash_GyroBias_Write(void)
+{
+    flash_buffer_clear();
+    flash_union_buffer[0].uint32_type = Nag_Gyro_Bias_Magic;
+    flash_union_buffer[1].uint32_type = Nag_Gyro_Bias_Version;
+    flash_union_buffer[3].float_type = gyro_z_bias_comp;
+    flash_union_buffer[2].uint32_type = flash_GyroBiasChecksum();
+
+    if (flash_check(0, Nag_Gyro_Bias_Page))
+    {
+        flash_erase_page(0, Nag_Gyro_Bias_Page);
+    }
+    flash_write_page_from_buffer(0, Nag_Gyro_Bias_Page, FLASH_PAGE_LENGTH);
+    flash_buffer_clear();
+}
+
+void flash_GyroBias_Read(void)
+{
+    uint32 magic = 0u;
+    uint32 version = 0u;
+    uint32 checksum = 0u;
+
+    if (!flash_check(0, Nag_Gyro_Bias_Page))
+    {
+        return;
+    }
+
+    flash_read_page_to_buffer(0, Nag_Gyro_Bias_Page, FLASH_PAGE_LENGTH);
+    magic = flash_union_buffer[0].uint32_type;
+    version = flash_union_buffer[1].uint32_type;
+    checksum = flash_union_buffer[2].uint32_type;
+
+    if ((magic == Nag_Gyro_Bias_Magic) &&
+        (version == Nag_Gyro_Bias_Version) &&
+        (checksum == flash_GyroBiasChecksum()))
+    {
+        GyroBias_SetComp(flash_union_buffer[3].float_type);
     }
     flash_buffer_clear();
 }

@@ -1,4 +1,5 @@
 #include "zf_common_headfile.h"
+#include "init.h"
 
 #define ikun (0.00215885305953045270200687624638f)
 
@@ -52,8 +53,14 @@ const float K_V = 0.05;
 float gyro_z_bias_mean = 0.0f;
 #define GYRO_Z_BIAS_SAMPLES 10000u  /* 1ms * 10000 = 10s */
 
-/* gyro_z 固定零偏补偿，单位 rad/s，静止测得后直接减去，无需上电标定 */
-#define GYRO_Z_BIAS_COMPENSATION 0.0001f
+/* gyro_z 运行补偿（rad/s）：每次采样 gyro_z -= gyro_z_bias_comp */
+float gyro_z_bias_comp = 0.0f;
+float yaw_drift_10s_deg = 0.0f;
+float gyro_bias_calib_yaw_start_deg = 0.0f;
+
+static uint8 gyro_bias_calib_state = GYRO_BIAS_CALIB_IDLE;
+static float gyro_bias_calib_sum = 0.0f;
+static uint32_t gyro_bias_calib_count = 0u;
 // SOS 系数（根据给定的 Numerator 和 Denominator）
 float numerator[3][3] = {
     {1.0, -1.4180, 1.0}, // 第一个二阶节的分子系数 (b0, b1, b2)
@@ -130,6 +137,86 @@ uint8 Yaw_AlignDisplayDeg(float target_display_yaw_deg)
   yaw_zero_offset_deg = yaw_wrap180_deg(yaw_raw_deg - target_display_yaw_deg);
   euler_angle.yaw = yaw_apply_zero_offset(yaw_raw_deg);
   return 1u;
+}
+
+void GyroBias_SetComp(float bias_rad)
+{
+  gyro_z_bias_comp = bias_rad;
+}
+
+float GyroBias_GetComp(void)
+{
+  return gyro_z_bias_comp;
+}
+
+uint8 GyroBias_GetCalibState(void)
+{
+  return gyro_bias_calib_state;
+}
+
+float GyroBias_GetYawDrift10sDeg(void)
+{
+  return yaw_drift_10s_deg;
+}
+
+float GyroBias_GetYawStartDeg(void)
+{
+  return gyro_bias_calib_yaw_start_deg;
+}
+
+uint8 GyroBias_GetRemainSec(void)
+{
+  if (gyro_bias_calib_state != GYRO_BIAS_CALIB_RUNNING)
+  {
+    return 0u;
+  }
+  if (gyro_bias_calib_count >= GYRO_Z_BIAS_SAMPLES)
+  {
+    return 0u;
+  }
+  return (uint8)((GYRO_Z_BIAS_SAMPLES - gyro_bias_calib_count + 999u) / 1000u);
+}
+
+void GyroBias_CalibStart(void)
+{
+  if (gyro_bias_calib_state == GYRO_BIAS_CALIB_RUNNING)
+  {
+    return;
+  }
+  gyro_bias_calib_yaw_start_deg = (float)euler_angle.yaw;
+  gyro_bias_calib_sum = 0.0f;
+  gyro_bias_calib_count = 0u;
+  yaw_drift_10s_deg = 0.0f;
+  gyro_bias_calib_state = GYRO_BIAS_CALIB_RUNNING;
+}
+
+static void gyro_bias_calib_accumulate(float gyro_z_raw_rad)
+{
+  if (gyro_bias_calib_state != GYRO_BIAS_CALIB_RUNNING)
+  {
+    return;
+  }
+
+  gyro_bias_calib_sum += gyro_z_raw_rad;
+  gyro_bias_calib_count++;
+}
+
+static void gyro_bias_calib_finalize(void)
+{
+  if (gyro_bias_calib_state != GYRO_BIAS_CALIB_RUNNING)
+  {
+    return;
+  }
+  if (gyro_bias_calib_count < GYRO_Z_BIAS_SAMPLES)
+  {
+    return;
+  }
+
+  gyro_z_bias_comp = gyro_bias_calib_sum / (float)GYRO_Z_BIAS_SAMPLES;
+  yaw_drift_10s_deg =
+      yaw_wrap180_deg((float)euler_angle.yaw - gyro_bias_calib_yaw_start_deg);
+  gyro_bias_calib_state = GYRO_BIAS_CALIB_DONE;
+  buzzer_beep_request(200u);
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -222,11 +309,13 @@ void imu_get_values(void)
   imu660rc_acc_y_l = imu_data.acc_y;
   imu660rc_acc_z_l = imu_data.acc_z;
 
+  float gyro_z_raw;
   /* 陀螺仪：驱动宏得到 °/s，再转 rad/s（量程由 imu660rc_transition_factor[1] 决定） */
   imu_data.gyro_x = imu660rc_gyro_transition(imu660rc_gyro_x) * PI / 180.0f;
   imu_data.gyro_y = imu660rc_gyro_transition(imu660rc_gyro_y) * PI / 180.0f;
-  imu_data.gyro_z = imu660rc_gyro_transition(imu660rc_gyro_z) * PI / 180.0f;
-  imu_data.gyro_z -= GYRO_Z_BIAS_COMPENSATION;  // 固定零偏补偿
+  gyro_z_raw = imu660rc_gyro_transition(imu660rc_gyro_z) * PI / 180.0f;
+  gyro_bias_calib_accumulate(gyro_z_raw);
+  imu_data.gyro_z = gyro_z_raw - gyro_z_bias_comp;
 }
 
 /*-------------------------------------------------------------------------------------------------------------------
@@ -305,6 +394,7 @@ void EKF_UpData(void)
   if (inverse_matrix(&DK, &invDK))
   {
     quaternion_to_euler();
+    gyro_bias_calib_finalize();
     return;
   }
 
@@ -321,6 +411,7 @@ void EKF_UpData(void)
   if (error.data[0][0] > r_yz)
   {
     quaternion_to_euler();
+    gyro_bias_calib_finalize();
     return;
   }
 
@@ -342,6 +433,7 @@ void EKF_UpData(void)
   temp = subtract_matrices(&I, &temp);
   P = multiply_matrices(&temp, &P);
   quaternion_to_euler();
+  gyro_bias_calib_finalize();
 }
 
 /*-------------------------------------------------------------------------------------------------------------------

@@ -66,6 +66,7 @@ void all_init(uint8 camera_flag, uint8 seekfree_flag, uint8 vofa_flag,
     Init_Nag();
     flash_RunLaunchSpeed_Read();
     flash_JumpParams_Read();
+    flash_GyroBias_Read();
     flash_GpsPoints_Read();
   }
   // 姿态解算初始化

@@ -70,6 +70,9 @@
 #include "navigation.h"
 #include "flash.h"
 #include "nav_fusion.h"
+#if !defined(CY_CORE_CM7_1)
+#include "ekf.h"
+#endif
 #endif
 
 /* 全局变量定义 */
@@ -111,11 +114,13 @@ static uint8 MenuIsRunLaunchSpeedPage(void);
 static uint8 MenuIsRunJumpPage(void);
 static uint8 MenuIsRunFlashPage(void);
 static uint8 MenuIsRunConfigPage(void);
+static uint8 MenuIsRunGyroBiasPage(void);
 static void MenuAdjustRunLaunchParam(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
 static uint8 MenuTryHandleRunJumpKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
 static uint8 MenuTryHandleRunConfigKeyEvent(void);
+static uint8 MenuTryHandleRunGyroBiasKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
 static uint8 MenuIsRemoteMenuFirst(void);
 
@@ -333,6 +338,10 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsRunGyroBiasPage() && MenuTryHandleRunGyroBiasKeyEvent())
+   {
+        return;
+   }
    if(MenuIsGpsDebugPage() && MenuTryHandleGpsDebugKeyEvent())
    {
         return;
@@ -420,6 +429,10 @@ void menu_key_capture_event(void)
         return;
    }
    if(MenuIsRunConfigPage() && MenuTryHandleRunConfigKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunGyroBiasPage() && MenuTryHandleRunGyroBiasKeyEvent())
    {
         return;
    }
@@ -631,6 +644,11 @@ static uint8 MenuIsRunJumpPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.4.1") == 0);
 }
 
+static uint8 MenuIsRunGyroBiasPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.5.1") == 0);
+}
+
 static void MenuAdjustRunLaunchParam(float delta)
 {
 #if defined(CY_CORE_CM7_1)
@@ -723,6 +741,24 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
 #else
         flash_RunLaunchSpeed_Write();
         flash_JumpParams_Write();
+        flash_GyroBias_Write();
+#endif
+        gpio_toggle_level(LED1);
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* 返回 1 表示 GyroBias 页已消费 KEY3 标定动作。 */
+static uint8 MenuTryHandleRunGyroBiasKeyEvent(void)
+{
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START, 0, 0.0f);
+#else
+        GyroBias_CalibStart();
 #endif
         gpio_toggle_level(LED1);
         key_clear_state(KEY_3);
@@ -1124,6 +1160,11 @@ void MenuInit()
     strcpy(menuMember.pos, "3.4");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
+    menuMember.gui = GUI_3_5;
+    menuMember.act = ACT_3_5;
+    strcpy(menuMember.pos, "3.5");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
     menuMember.gui = GUI_3_1_1;
     menuMember.act = ACT_3_1_1;
     strcpy(menuMember.pos, "3.1.1");
@@ -1137,6 +1178,11 @@ void MenuInit()
     menuMember.gui = GUI_3_4_1;
     menuMember.act = ACT_3_4_1;
     strcpy(menuMember.pos, "3.4.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_5_1;
+    menuMember.act = ACT_3_5_1;
+    strcpy(menuMember.pos, "3.5.1");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
     
     menuMember.gui = GUI_1_1_1;

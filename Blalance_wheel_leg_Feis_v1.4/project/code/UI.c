@@ -47,6 +47,7 @@ static dualcore_ctrl_to_ui_t s_ui_dc;
 #include "Menu.h"
 #include "navigation.h"
 #include "control.h"
+#include "ekf.h"
 
 /* Run：须让 pos 3.1~3.4 的 menuMember 头部一致，否则 HashPeer 切项时画面与真实 pos 不同步；勿在 pos「3」上用子菜单列表。 */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index);
@@ -852,7 +853,7 @@ static void GUI_Display_Level2_Common3(void)
     GUI_Display_FPS();
 }
 
-/** 二级 Run 列表：selected_row_index 0=Launch 1=Save 2=Config 3=Jump */
+/** 二级 Run 列表：selected_row_index 0=Launch 1=Save 2=Config 3=Jump 4=GyroBias */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -863,6 +864,7 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     ips200_show_string(80, ROW_10, " Save   ");
     ips200_show_string(80, ROW_12, " Config ");
     ips200_show_string(80, ROW_14, " Jump   ");
+    ips200_show_string(80, ROW_16, "GyroBias");
 
     switch (selected_row_index)
     {
@@ -878,12 +880,15 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     case 3u:
         ay = ROW_14;
         break;
+    case 4u:
+        ay = ROW_16;
+        break;
     }
     ips200_show_string(48, ay, "-->");
     ips200_show_string(152, ay, "<--");
     if (selected_row_index == 1u)
     {
-        ips200_show_string(24, ROW_15, "KEY3: save run");
+        ips200_show_string(24, ROW_17, "K3:save all");
     }
 }
 
@@ -935,6 +940,19 @@ void ACT_3_4()
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '4';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_5(void)
+{
+    GUI_Run_ShowSubmenuList(4u);
+}
+void ACT_3_5()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '5';
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
@@ -1141,6 +1159,76 @@ void ACT_3_4_1()
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '4';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
+void GUI_3_5_1(void)
+{
+    float bias_dps = 0.0f;
+    float yaw_drift = 0.0f;
+    float yaw_start = 0.0f;
+    uint8 calib_state = GYRO_BIAS_CALIB_IDLE;
+    uint8 remain_s = 0u;
+    const char *state_text = "Idle";
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    bias_dps = s_ui_dc.gyro_z_bias_comp * 180.0f / (float)PI;
+    yaw_drift = s_ui_dc.yaw_drift_10s_deg;
+    yaw_start = s_ui_dc.gyro_bias_calib_yaw_start_deg;
+    calib_state = s_ui_dc.gyro_bias_calib_state;
+    remain_s = s_ui_dc.gyro_bias_calib_remain_s;
+#else
+    bias_dps = GyroBias_GetComp() * 180.0f / (float)PI;
+    yaw_drift = GyroBias_GetYawDrift10sDeg();
+    yaw_start = GyroBias_GetYawStartDeg();
+    calib_state = GyroBias_GetCalibState();
+    remain_s = GyroBias_GetRemainSec();
+#endif
+
+    if (calib_state == GYRO_BIAS_CALIB_RUNNING)
+    {
+        state_text = "Run";
+    }
+    else if (calib_state == GYRO_BIAS_CALIB_DONE)
+    {
+        state_text = "Done";
+    }
+
+    GUI_Display_Level2_Common3();
+    ips200_show_string(40, ROW_3, "GyroBias");
+    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(8, ROW_5, "Bias(dps):");
+    ips200_show_float(96, ROW_5, (double)bias_dps, 4, 3);
+
+    ips200_show_string(8, ROW_7, "State:");
+    ips200_show_string(64, ROW_7, state_text);
+
+    ips200_show_string(8, ROW_9, "Remain(s):");
+    ips200_show_uint(96, ROW_9, (uint32)remain_s, 2);
+
+    if (calib_state != GYRO_BIAS_CALIB_IDLE)
+    {
+        ips200_show_string(8, ROW_10, "YawStart:");
+        ips200_show_float(96, ROW_10, (double)yaw_start, 4, 2);
+    }
+
+    ips200_show_string(8, ROW_11, "YawDrift:");
+    ips200_show_float(96, ROW_11, (double)yaw_drift, 4, 2);
+
+    ips200_show_string(8, ROW_13, "Drift=end-start");
+    ips200_show_string(8, ROW_15, "K3:start K4:back");
+    ips200_show_string(8, ROW_16, "Save:Run->Save K3");
+}
+
+void ACT_3_5_1()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '5';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;

@@ -152,6 +152,12 @@ extern void ACT_3_4();
 extern void GUI_3_4_1();
 extern void ACT_3_4_1();
 
+extern void GUI_3_5();
+extern void ACT_3_5();
+
+extern void GUI_3_5_1();
+extern void ACT_3_5_1();
+
 extern void GUI_1_1_1();
 extern void ACT_1_1_1();
 

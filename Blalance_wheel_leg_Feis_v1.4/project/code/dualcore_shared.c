@@ -51,6 +51,11 @@ void dualcore_ctrl_to_ui_publish(void)
   c->euler_roll = euler_angle.roll;
   c->euler_yaw = euler_angle.yaw;
   c->gyro_z_bias_mean = gyro_z_bias_mean;
+  c->gyro_z_bias_comp = gyro_z_bias_comp;
+  c->gyro_bias_calib_state = GyroBias_GetCalibState();
+  c->gyro_bias_calib_remain_s = GyroBias_GetRemainSec();
+  c->yaw_drift_10s_deg = yaw_drift_10s_deg;
+  c->gyro_bias_calib_yaw_start_deg = gyro_bias_calib_yaw_start_deg;
   c->car_speed = (float)car_speed;
   c->left_motor_speed = (float)Left_Motor_Speed;
   c->right_motor_speed = (float)Right_Motor_Speed;
@@ -430,6 +435,7 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
   case DUALCORE_UI_CMD_RUN_LAUNCH_SPEED_SAVE_FLASH:
     flash_RunLaunchSpeed_Write();
     flash_JumpParams_Write();
+    flash_GyroBias_Write();
     break;
   case DUALCORE_UI_CMD_RUN_LAUNCH_PARAM_DELTA:
     if (s->arg_u32 < Nag_Run_Launch_Param_Count)
@@ -445,6 +451,9 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     {
       JumpParamAdjust((uint8)s->arg_u32, s->arg_f32);
     }
+    break;
+  case DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START:
+    GyroBias_CalibStart();
     break;
   case DUALCORE_UI_CMD_GPS_SAVE_POINT:
     (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);

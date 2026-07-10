@@ -52,6 +52,7 @@ typedef enum
   DUALCORE_UI_CMD_GPS_LAUNCH = 25,
   DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE = 27, /* Config 页：arg_u32=字段索引，切换当前字段取值 */
   DUALCORE_UI_CMD_RUN_JUMP_PARAM_DELTA = 28, /* Jump 页：arg_u32=字段索引，arg_f32=增量 */
+  DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START = 29, /* GyroBias 页：KEY3 开始 10s 零偏标定 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -61,6 +62,11 @@ typedef struct
   float euler_roll;
   float euler_yaw;
   float gyro_z_bias_mean;
+  float gyro_z_bias_comp;
+  uint8 gyro_bias_calib_state;
+  uint8 gyro_bias_calib_remain_s;
+  float yaw_drift_10s_deg;
+  float gyro_bias_calib_yaw_start_deg;
   float car_speed;
   float left_motor_speed;
   float right_motor_speed;
