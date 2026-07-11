@@ -235,7 +235,10 @@ int main(void)
     remote_lora_apply_validate_motor();
     Nag_BridgeDetectUpdate();
     dualcore_ctrl_to_ui_publish();
-#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+    /* 白底黑线元素验证：元素内黑条中心控制 yaw，进入/退出蜂鸣 */
+    image_dark_line_apply_yaw();
+#elif IMAGE_WHITE_BLOB_VALIDATE_ENABLE
     /* 室外验证：按 vision_guidance_mode 选择白块或中线 yaw；桥区正式路径走 Nag_BridgeDetectUpdate */
     image_vision_guidance_apply_yaw();
 #endif

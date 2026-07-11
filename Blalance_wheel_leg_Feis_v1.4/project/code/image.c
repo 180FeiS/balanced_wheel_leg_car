@@ -1369,3 +1369,723 @@ void image_vision_guidance_apply_yaw(void)
 }
 
 #endif /* CY_CORE_CM7_0 && IMAGE_WHITE_BLOB_VALIDATE_ENABLE */
+
+#if defined(CY_CORE_CM7_1) && IMAGE_DARK_LINE_VALIDATE_ENABLE
+
+#include "zf_common_headfile.h"
+#include "dualcore_shared.h"
+
+typedef enum
+{
+    IMAGE_DARK_LINE_STATE_OUTSIDE = 0,
+    IMAGE_DARK_LINE_STATE_INSIDE  = 1,
+} image_dark_line_state_enum;
+
+static image_dark_line_state_enum s_dark_line_state = IMAGE_DARK_LINE_STATE_OUTSIDE;
+static uint8 s_dark_line_enter_debounce = 0u;
+static uint8 s_dark_line_exit_debounce = 0u;
+static uint16 s_dark_line_inside_hold_frames = 0u;
+static image_dark_line_debug_state_t s_dark_line_debug;
+/** 二值化前压缩灰度快照，仅供 Bumpy 调试页显示（算法仍用二值图） */
+static uint8 s_dark_line_gray_view[IMAGE_COMPRESS_H][IMAGE_COMPRESS_W];
+
+/**
+ * 统计 ROI 白色像素占比（0~1）。
+ * 入口/出口为深色地面时 white_ratio 低；进入白底元素后升高。
+ */
+static float image_dark_line_measure_white_ratio(int row_start, int row_end,
+                                                 int col_lo, int col_hi)
+{
+    int row;
+    int col;
+    int white_cnt = 0;
+    int total = 0;
+
+    for (row = row_start; row < row_end; row++)
+    {
+        for (col = col_lo; col < col_hi; col++)
+        {
+            total++;
+            if (image_two_value[row][col] == IMG_WHITE)
+            {
+                white_cnt++;
+            }
+        }
+    }
+    if (total <= 0)
+    {
+        return 0.0f;
+    }
+    return (float)white_cnt / (float)total;
+}
+
+/** 单行内找最宽黑条；宽度在 [MIN, MAX] 内返回 1 */
+static uint8 image_dark_line_find_widest_black_run(int row, int col_lo, int col_hi,
+                                                   int *out_left, int *out_right)
+{
+    int col;
+    int run_left = -1;
+    int best_width = 0;
+    int best_left = 0;
+    int best_right = 0;
+
+    for (col = col_lo; col < col_hi; col++)
+    {
+        if (image_two_value[row][col] == IMG_BLACK)
+        {
+            if (run_left < 0)
+            {
+                run_left = col;
+            }
+        }
+        else if (run_left >= 0)
+        {
+            int width = col - run_left;
+            if (width > best_width)
+            {
+                best_width = width;
+                best_left = run_left;
+                best_right = col - 1;
+            }
+            run_left = -1;
+        }
+    }
+    if (run_left >= 0)
+    {
+        int width = col_hi - run_left;
+        if (width > best_width)
+        {
+            best_width = width;
+            best_left = run_left;
+            best_right = col_hi - 1;
+        }
+    }
+
+    if (best_width < IMAGE_DARK_LINE_MIN_STRIPE_WIDTH ||
+        best_width > IMAGE_DARK_LINE_MAX_STRIPE_WIDTH)
+    {
+        return 0u;
+    }
+    *out_left = best_left;
+    *out_right = best_right;
+    return 1u;
+}
+
+/**
+ * 元素内：多行黑条中心 + 线性拟合斜率修正。
+ * 横条在画面中应近似水平；斜率偏离 0 时折算为等效 center_err 修正 yaw。
+ * 若 dbg 非空，写入各行中心点与拟合量供 IPS 叠加。
+ */
+static void image_dark_line_track_black_center(int row_start, int row_end,
+                                               int col_lo, int col_hi,
+                                               float *center_err, int *line_cx,
+                                               int *avg_width, uint8 *track_valid,
+                                               image_dark_line_debug_state_t *dbg)
+{
+    int row;
+    int valid_rows = 0;
+    int sum_cx = 0;
+    int sum_width = 0;
+    int img_center = (int)IMAGE_COMPRESS_W / 2;
+    int pts_row[64];
+    int pts_cx[64];
+    int pts_n = 0;
+    int weight_sum = 0;
+
+    if (dbg != NULL)
+    {
+        dbg->pts_count = 0u;
+        dbg->slope_x1000 = 0;
+        dbg->mean_row = 0;
+        dbg->mean_cx = img_center;
+    }
+
+    if (center_err != NULL)
+    {
+        *center_err = 0.0f;
+    }
+    if (line_cx != NULL)
+    {
+        *line_cx = img_center;
+    }
+    if (avg_width != NULL)
+    {
+        *avg_width = 0;
+    }
+    if (track_valid != NULL)
+    {
+        *track_valid = 0u;
+    }
+
+    for (row = row_start; row < row_end; row++)
+    {
+        int left;
+        int right;
+        int cx;
+        int weight;
+
+        if (image_dark_line_find_widest_black_run(row, col_lo, col_hi, &left, &right) == 0u)
+        {
+            continue;
+        }
+
+        cx = (left + right) / 2;
+        weight = row - row_start + 1;
+        valid_rows++;
+        sum_cx += cx * weight;
+        sum_width += (right - left + 1);
+        weight_sum += weight;
+
+        if (pts_n < 64)
+        {
+            pts_row[pts_n] = row;
+            pts_cx[pts_n] = cx;
+            pts_n++;
+        }
+    }
+
+    if (valid_rows < (int)IMAGE_DARK_LINE_MIN_TRACK_ROWS || weight_sum <= 0)
+    {
+        return;
+    }
+
+    {
+        int mean_cx = sum_cx / weight_sum;
+        int mean_row = 0;
+        int sum_r = 0;
+        int sum_c = 0;
+        int sum_rc = 0;
+        int sum_rr = 0;
+        int denom;
+        int slope_x1000 = 0;
+        int mid_row = (row_start + row_end) / 2;
+        int predicted_cx;
+        float lateral_err;
+        int i;
+
+        if (line_cx != NULL)
+        {
+            *line_cx = mean_cx;
+        }
+        if (avg_width != NULL)
+        {
+            *avg_width = sum_width / valid_rows;
+        }
+
+        for (i = 0; i < pts_n; i++)
+        {
+            sum_r += pts_row[i];
+            sum_c += pts_cx[i];
+            sum_rc += pts_row[i] * pts_cx[i];
+            sum_rr += pts_row[i] * pts_row[i];
+        }
+        mean_row = sum_r / pts_n;
+
+        denom = pts_n * sum_rr - sum_r * sum_r;
+        if (denom != 0)
+        {
+            slope_x1000 = ((pts_n * sum_rc - sum_r * sum_c) * 1000) / denom;
+        }
+
+        predicted_cx = mean_cx + (slope_x1000 * (mid_row - mean_row)) / 1000;
+        lateral_err = (float)(img_center - predicted_cx);
+
+        if (center_err != NULL)
+        {
+            *center_err = lateral_err;
+        }
+        if (track_valid != NULL)
+        {
+            *track_valid = 1u;
+        }
+
+        if (dbg != NULL)
+        {
+            uint8 copy_n = (uint8)pts_n;
+            if (copy_n > IMAGE_DARK_LINE_DEBUG_PTS_MAX)
+            {
+                copy_n = IMAGE_DARK_LINE_DEBUG_PTS_MAX;
+            }
+            dbg->pts_count = copy_n;
+            for (i = 0; i < (int)copy_n; i++)
+            {
+                dbg->pts[i].row = pts_row[i];
+                dbg->pts[i].cx = pts_cx[i];
+            }
+            dbg->slope_x1000 = slope_x1000;
+            dbg->mean_row = mean_row;
+            dbg->mean_cx = mean_cx;
+            dbg->line_cx = mean_cx;
+            dbg->black_line_width = (avg_width != NULL) ? *avg_width : (sum_width / valid_rows);
+            dbg->center_err = lateral_err;
+            dbg->track_valid = 1u;
+        }
+    }
+}
+
+/** 白底出现/消失状态机；更新 result 的 element_active 与 enter/exit_pulse */
+static void image_dark_line_apply_state_machine(image_dark_line_result_t *result)
+{
+    uint8 white_enter;
+    uint8 white_exit;
+
+    if (result == NULL)
+    {
+        return;
+    }
+
+    white_enter = (uint8)(result->white_ratio * 100.0f >= (float)IMAGE_DARK_LINE_WHITE_ENTER_RATIO_PCT);
+    white_exit = (uint8)(result->white_ratio * 100.0f <= (float)IMAGE_DARK_LINE_WHITE_EXIT_RATIO_PCT);
+    result->enter_pulse = 0u;
+    result->exit_pulse = 0u;
+
+    if (s_dark_line_state == IMAGE_DARK_LINE_STATE_OUTSIDE)
+    {
+        if (white_enter != 0u)
+        {
+            if (s_dark_line_enter_debounce < 255u)
+            {
+                s_dark_line_enter_debounce++;
+            }
+        }
+        else
+        {
+            s_dark_line_enter_debounce = 0u;
+        }
+
+        if (s_dark_line_enter_debounce >= IMAGE_DARK_LINE_ENTER_DEBOUNCE_FRAMES)
+        {
+            s_dark_line_state = IMAGE_DARK_LINE_STATE_INSIDE;
+            s_dark_line_enter_debounce = 0u;
+            s_dark_line_exit_debounce = 0u;
+            s_dark_line_inside_hold_frames = 0u;
+            result->enter_pulse = 1u;
+        }
+    }
+    else
+    {
+        if (s_dark_line_inside_hold_frames < 0xFFFFu)
+        {
+            s_dark_line_inside_hold_frames++;
+        }
+
+        if (white_exit != 0u &&
+            s_dark_line_inside_hold_frames >= IMAGE_DARK_LINE_MIN_INSIDE_HOLD_FRAMES)
+        {
+            if (s_dark_line_exit_debounce < 255u)
+            {
+                s_dark_line_exit_debounce++;
+            }
+        }
+        else
+        {
+            s_dark_line_exit_debounce = 0u;
+        }
+
+        if (s_dark_line_exit_debounce >= IMAGE_DARK_LINE_EXIT_DEBOUNCE_FRAMES)
+        {
+            s_dark_line_state = IMAGE_DARK_LINE_STATE_OUTSIDE;
+            s_dark_line_exit_debounce = 0u;
+            s_dark_line_enter_debounce = 0u;
+            s_dark_line_inside_hold_frames = 0u;
+            result->exit_pulse = 1u;
+            result->track_valid = 0u;
+            result->center_err = 0.0f;
+        }
+    }
+
+    result->element_active = (uint8)(s_dark_line_state == IMAGE_DARK_LINE_STATE_INSIDE);
+}
+
+/** 压缩→二值→白底比例→（元素内）黑条中心；save_gray_view=1 时保留二值化前灰度供调试显示 */
+static void image_dark_line_detect(image_dark_line_result_t *out, uint8 save_gray_view)
+{
+    int row_end = IMAGE_DARK_LINE_ROI_ROW_END;
+    int col_lo = IMAGE_DARK_LINE_COL_MARGIN;
+    int col_hi = (int)IMAGE_COMPRESS_W - IMAGE_DARK_LINE_COL_MARGIN;
+    int row;
+    int col;
+    int gray_sum = 0;
+    int gray_count = 0;
+    int mean_gray;
+    int th;
+    float white_ratio;
+    float center_err = 0.0f;
+    int line_cx = (int)IMAGE_COMPRESS_W / 2;
+    int avg_width = 0;
+    uint8 track_valid = 0u;
+
+    if (out == NULL)
+    {
+        return;
+    }
+
+    if (row_end > (int)IMAGE_COMPRESS_H)
+    {
+        row_end = (int)IMAGE_COMPRESS_H;
+    }
+    if (col_hi <= col_lo)
+    {
+        col_lo = 0;
+        col_hi = (int)IMAGE_COMPRESS_W;
+    }
+
+    image_photo_compress(mt9v03x_image[0]);
+
+    if (save_gray_view != 0u)
+    {
+        memcpy(s_dark_line_gray_view, image_two_value, sizeof(s_dark_line_gray_view));
+    }
+
+    for (row = IMAGE_DARK_LINE_ROI_ROW_START; row < row_end; row++)
+    {
+        for (col = col_lo; col < col_hi; col++)
+        {
+            gray_sum += (int)image_two_value[row][col];
+            gray_count++;
+        }
+    }
+    mean_gray = (gray_count > 0) ? (gray_sum / gray_count) : 0;
+
+    Threshold = (int)image_otsu_on_process_buf();
+    th = Threshold + IMAGE_DARK_LINE_THRESH_OFFSET;
+    if (th < 0)
+    {
+        th = 0;
+    }
+    if (th > 255)
+    {
+        th = 255;
+    }
+    image_binarization_inplace(th);
+
+    white_ratio = image_dark_line_measure_white_ratio(IMAGE_DARK_LINE_ROI_ROW_START,
+                                                      row_end, col_lo, col_hi);
+
+    if (mean_gray >= IMAGE_DARK_LINE_MIN_MEAN_GRAY &&
+        s_dark_line_state == IMAGE_DARK_LINE_STATE_INSIDE)
+    {
+        image_dark_line_track_black_center(IMAGE_DARK_LINE_TRACK_ROW_START,
+                                           IMAGE_DARK_LINE_TRACK_ROW_END,
+                                           col_lo, col_hi,
+                                           &center_err, &line_cx, &avg_width, &track_valid,
+                                           &s_dark_line_debug);
+    }
+    else
+    {
+        s_dark_line_debug.pts_count = 0u;
+        s_dark_line_debug.track_valid = 0u;
+        s_dark_line_debug.center_err = 0.0f;
+        s_dark_line_debug.slope_x1000 = 0;
+    }
+
+    s_dark_line_debug.white_ratio = white_ratio;
+    s_dark_line_debug.element_active = (uint8)(s_dark_line_state == IMAGE_DARK_LINE_STATE_INSIDE);
+
+    out->center_err = center_err;
+    out->line_cx = line_cx;
+    out->black_line_width = avg_width;
+    out->white_ratio = white_ratio;
+    out->track_valid = track_valid;
+    out->element_active = (uint8)(s_dark_line_state == IMAGE_DARK_LINE_STATE_INSIDE);
+    out->enter_pulse = 0u;
+    out->exit_pulse = 0u;
+}
+
+void image_dark_line_reset(void)
+{
+    s_dark_line_state = IMAGE_DARK_LINE_STATE_OUTSIDE;
+    s_dark_line_enter_debounce = 0u;
+    s_dark_line_exit_debounce = 0u;
+    s_dark_line_inside_hold_frames = 0u;
+    memset(&s_dark_line_debug, 0, sizeof(s_dark_line_debug));
+}
+
+/**
+ * CM7_1 主循环：白底黑线元素状态机 + dualcore 发布。
+ * 边界判据为白底出现/消失（入口出口均为深色，不靠黑色判定进出）。
+ */
+void image_dark_line_process_frame(int bw_threshold)
+{
+    static uint32 s_dark_line_frame_seq;
+    image_dark_line_result_t result;
+
+    (void)bw_threshold;
+
+    image_dark_line_detect(&result, 0u);
+    image_dark_line_apply_state_machine(&result);
+
+    Cammer_Err = result.center_err;
+    s_dark_line_debug.element_active = result.element_active;
+
+    s_dark_line_frame_seq++;
+    dualcore_dark_line_publish(result.center_err,
+                               result.track_valid,
+                               result.element_active,
+                               result.enter_pulse,
+                               result.exit_pulse,
+                               result.white_ratio,
+                               s_dark_line_frame_seq);
+    dualcore_white_blob_publish_inactive();
+    dualcore_bridge_vision_publish_inactive();
+}
+
+/** 压缩图坐标 → IPS 显示坐标（裁剪到屏幕与显示区内，避免 ips200_draw_line 断言） */
+static int image_dark_line_clip_i(int v, int lo, int hi)
+{
+    if (v < lo)
+    {
+        return lo;
+    }
+    if (v > hi)
+    {
+        return hi;
+    }
+    return v;
+}
+
+static int image_dark_line_map_x(int col, int disp_x, int disp_w)
+{
+    extern uint16 ips200_width_max;
+    int x = disp_x + (col * disp_w) / (int)IMAGE_COMPRESS_W;
+    int x_hi = disp_x + disp_w - 1;
+    if (x_hi > (int)ips200_width_max - 1)
+    {
+        x_hi = (int)ips200_width_max - 1;
+    }
+    return image_dark_line_clip_i(x, disp_x, x_hi);
+}
+
+static int image_dark_line_map_y(int row, int disp_y, int disp_h)
+{
+    extern uint16 ips200_height_max;
+    int y = disp_y + (row * disp_h) / (int)IMAGE_COMPRESS_H;
+    int y_hi = disp_y + disp_h - 1;
+    if (y_hi > (int)ips200_height_max - 1)
+    {
+        y_hi = (int)ips200_height_max - 1;
+    }
+    return image_dark_line_clip_i(y, disp_y, y_hi);
+}
+
+static int image_dark_line_clamp_col(int col)
+{
+    if (col < 0)
+    {
+        return 0;
+    }
+    if (col >= (int)IMAGE_COMPRESS_W)
+    {
+        return (int)IMAGE_COMPRESS_W - 1;
+    }
+    return col;
+}
+
+/** 叠加：黄折线=各行黑条中心；绿竖线=图像中心；紫线=拟合回归线；白线=跟踪 ROI */
+void image_dark_line_draw_center_overlay(int disp_x, int disp_y, int disp_w, int disp_h)
+{
+    int i;
+    int prev_x = -1;
+    int prev_y = 0;
+    int center_col = (int)IMAGE_COMPRESS_W / 2;
+    int y_top;
+    int y_bot;
+    int fit_x0;
+    int fit_y0;
+    int fit_x1;
+    int fit_y1;
+    int row0 = IMAGE_DARK_LINE_TRACK_ROW_START;
+    int row1 = IMAGE_DARK_LINE_TRACK_ROW_END - 1;
+
+    if (s_dark_line_debug.element_active == 0u)
+    {
+        return;
+    }
+
+    y_top = image_dark_line_map_y(row0, disp_y, disp_h);
+    y_bot = image_dark_line_map_y(row1, disp_y, disp_h);
+    ips200_draw_line(disp_x, y_top, disp_x + disp_w - 1, y_top, RGB565_WHITE);
+    ips200_draw_line(disp_x, y_bot, disp_x + disp_w - 1, y_bot, RGB565_WHITE);
+
+    ips200_draw_line(image_dark_line_map_x(center_col, disp_x, disp_w), disp_y,
+                     image_dark_line_map_x(center_col, disp_x, disp_w), disp_y + disp_h - 1,
+                     RGB565_GREEN);
+
+    for (i = 0; i < (int)s_dark_line_debug.pts_count; i++)
+    {
+        int cur_x = image_dark_line_map_x(s_dark_line_debug.pts[i].cx, disp_x, disp_w);
+        int cur_y = image_dark_line_map_y(s_dark_line_debug.pts[i].row, disp_y, disp_h);
+
+        if (prev_x >= 0)
+        {
+            ips200_draw_line(prev_x, prev_y, cur_x, cur_y, (uint16)0xFFE0u);
+        }
+        else
+        {
+            ips200_draw_point(cur_x, cur_y, (uint16)0xFFE0u);
+        }
+        prev_x = cur_x;
+        prev_y = cur_y;
+    }
+
+    if (s_dark_line_debug.pts_count >= 2u)
+    {
+        int cx0 = s_dark_line_debug.mean_cx +
+                  (s_dark_line_debug.slope_x1000 * (row0 - s_dark_line_debug.mean_row)) / 1000;
+        int cx1 = s_dark_line_debug.mean_cx +
+                  (s_dark_line_debug.slope_x1000 * (row1 - s_dark_line_debug.mean_row)) / 1000;
+
+        cx0 = image_dark_line_clamp_col(cx0);
+        cx1 = image_dark_line_clamp_col(cx1);
+        fit_x0 = image_dark_line_map_x(cx0, disp_x, disp_w);
+        fit_y0 = image_dark_line_map_y(row0, disp_y, disp_h);
+        fit_x1 = image_dark_line_map_x(cx1, disp_x, disp_w);
+        fit_y1 = image_dark_line_map_y(row1, disp_y, disp_h);
+        ips200_draw_line(fit_x0, fit_y0, fit_x1, fit_y1, RGB565_PURPLE);
+    }
+}
+
+/**
+ * Bumpy 调试页：压缩二值图 + INSIDE 时中心点折线叠加。
+ * 复用实车状态机但不写 dualcore，避免菜单调试影响 CM7_0 控车。
+ */
+void image_dark_line_debug_show(int disp_x, int disp_y, int bw_threshold)
+{
+    image_dark_line_result_t result;
+
+    (void)bw_threshold;
+
+    image_dark_line_detect(&result, 1u);
+    image_dark_line_apply_state_machine(&result);
+
+    s_dark_line_debug.white_ratio = result.white_ratio;
+    s_dark_line_debug.element_active = result.element_active;
+    s_dark_line_debug.track_valid = result.track_valid;
+    if (result.element_active == 0u)
+    {
+        s_dark_line_debug.pts_count = 0u;
+        s_dark_line_debug.center_err = 0.0f;
+        s_dark_line_debug.slope_x1000 = 0;
+    }
+
+    Cammer_Err = result.center_err;
+
+    ips200_show_gray_image(disp_x, disp_y, s_dark_line_gray_view[0],
+                           IMAGE_COMPRESS_W, IMAGE_COMPRESS_H,
+                           MT9V03X_W, MT9V03X_H, 0);
+
+    if (result.element_active != 0u)
+    {
+        image_dark_line_draw_center_overlay(disp_x, disp_y, MT9V03X_W, MT9V03X_H);
+    }
+}
+
+float image_dark_line_get_center_err(void)
+{
+    return s_dark_line_debug.center_err;
+}
+
+uint8 image_dark_line_get_track_valid(void)
+{
+    return s_dark_line_debug.track_valid;
+}
+
+uint8 image_dark_line_get_pts_count(void)
+{
+    return s_dark_line_debug.pts_count;
+}
+
+float image_dark_line_get_white_ratio(void)
+{
+    return s_dark_line_debug.white_ratio;
+}
+
+uint8 image_dark_line_get_element_active(void)
+{
+    return s_dark_line_debug.element_active;
+}
+
+int image_dark_line_get_slope_x1000(void)
+{
+    return s_dark_line_debug.slope_x1000;
+}
+
+#endif /* CY_CORE_CM7_1 && IMAGE_DARK_LINE_VALIDATE_ENABLE */
+
+#if defined(CY_CORE_CM7_0) && IMAGE_DARK_LINE_VALIDATE_ENABLE
+
+#include "control.h"
+#include "navigation.h"
+#include "dualcore_shared.h"
+#include "init.h"
+#include <math.h>
+
+static float image_dark_line_clipf(float v, float lo, float hi)
+{
+    if (v < lo)
+    {
+        return lo;
+    }
+    if (v > hi)
+    {
+        return hi;
+    }
+    return v;
+}
+
+/** 元素内黑线横向误差 → 绝对航向目标，经 steer_request_target_yaw 交给 1ms 航向双环 */
+static void image_dark_line_apply_yaw_from_snapshot(const dualcore_dark_line_snapshot_t *snap)
+{
+    float target_offset_deg;
+    float target_yaw_deg;
+
+    if (snap == NULL)
+    {
+        return;
+    }
+    if (snap->fresh == 0u || snap->track_valid == 0u || snap->element_active == 0u)
+    {
+        return;
+    }
+    if (spin_enable != 0u || Motor_Runaway_Latch != 0u)
+    {
+        return;
+    }
+    /* 回放态默认禁视觉 yaw */
+    if (N.Nag_SystemRun_Index == 3u)
+    {
+        return;
+    }
+
+    target_offset_deg = snap->center_err * IMAGE_DARK_LINE_YAW_K_PIXEL;
+    target_offset_deg = image_dark_line_clipf(target_offset_deg,
+                                              -IMAGE_DARK_LINE_YAW_MAX_OFFSET_DEG,
+                                              IMAGE_DARK_LINE_YAW_MAX_OFFSET_DEG);
+    if (fabsf(target_offset_deg) < IMAGE_DARK_LINE_YAW_DEADBAND_DEG)
+    {
+        return;
+    }
+
+    target_yaw_deg = (float)euler_angle.yaw + target_offset_deg;
+    steer_request_target_yaw(target_yaw_deg);
+}
+
+void image_dark_line_apply_yaw(void)
+{
+    dualcore_dark_line_snapshot_t snap;
+
+    dualcore_dark_line_pull_snapshot(&snap);
+
+    if (snap.enter_pulse != 0u)
+    {
+        buzzer_beep_request(BRIDGE_BEEP_MS);
+    }
+    if (snap.exit_pulse != 0u)
+    {
+        buzzer_beep_request(BRIDGE_BEEP_MS);
+    }
+
+    image_dark_line_apply_yaw_from_snapshot(&snap);
+}
+
+#endif /* CY_CORE_CM7_0 && IMAGE_DARK_LINE_VALIDATE_ENABLE */

@@ -1683,13 +1683,42 @@ void ACT_2_1_2_1()
 void GUI_2_1_3_1(void) // µßô¤Â·¶Î¼ì²â
 {
     GUI_Display_Level2_Common2();
-    ips200_show_string(56, ROW_3, "Bumpy Road");
+    ips200_show_string(48, ROW_2, "Bumpy Road");
+    ips200_show_string(0, ROW_3, "C:ylw Mid:grn Fit:mag");
+    ips200_show_string(120, ROW_3, "Gray");
 
-    ips200_show_string(0, ROW_8, "Bumpy Road");
-    ips200_show_string(0, ROW_9, "Reserved Page");
-    ips200_show_string(0, ROW_11, "Use this page");
-    ips200_show_string(0, ROW_12, "for future image");
-    ips200_show_string(0, ROW_13, "detection logic.");
+#if defined(CY_CORE_CM7_1) && IMAGE_DARK_LINE_VALIDATE_ENABLE
+    image_dark_line_debug_show(0, ROW_10, hd_threshold);
+
+    ips200_show_string(0, ROW_4, "St:");
+    if (image_dark_line_get_element_active() != 0u)
+    {
+        ips200_show_string(24, ROW_4, "In ");
+    }
+    else
+    {
+        ips200_show_string(24, ROW_4, "Out");
+    }
+
+    ips200_show_string(56, ROW_4, "W%:");
+    ips200_show_int(88, ROW_4, (int32)(image_dark_line_get_white_ratio() * 100.0f), 3);
+
+    ips200_show_string(0, ROW_5, "Vld:");
+    ips200_show_int(32, ROW_5, (int32)image_dark_line_get_track_valid(), 1);
+    ips200_show_string(48, ROW_5, "N:");
+    ips200_show_int(64, ROW_5, (int32)image_dark_line_get_pts_count(), 2);
+
+    ips200_show_string(0, ROW_6, "Err:");
+    ips200_show_float(32, ROW_6, image_dark_line_get_center_err(), 4, 1);
+    ips200_show_string(88, ROW_6, "Sl:");
+    ips200_show_float(112, ROW_6, (float)image_dark_line_get_slope_x1000() / 1000.0f, 3, 2);
+
+    ips200_show_string(0, ROW_7, "Th:");
+    ips200_show_int(24, ROW_7, hd_threshold, 3);
+#else
+    ips200_show_string(0, ROW_7, "Bumpy");
+    ips200_show_string(0, ROW_8, "UI on M7_1");
+#endif
 }
 void ACT_2_1_3_1()
 {

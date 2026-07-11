@@ -221,4 +221,123 @@ void image_white_blob_apply_yaw(void);
 void image_midline_apply_yaw(void);
 #endif
 
+/*--------------------------------------------------------------------------------------------------------------------
+ * 白底黑线元素验证（方案一）：
+ * IMAGE_DARK_LINE_VALIDATE_ENABLE=1 时，主循环占用摄像头帧做进入/退出判定与黑线 yaw；
+ * 入口/出口均为深色地面，边界判据为白底出现/消失，不靠黑色判定进出。
+ *-------------------------------------------------------------------------------------------------------------------*/
+
+#ifndef IMAGE_DARK_LINE_VALIDATE_ENABLE
+#define IMAGE_DARK_LINE_VALIDATE_ENABLE  0u
+#endif
+
+/** dualcore vision_guidance_mode 取值：白底黑线元素引导 */
+#define IMAGE_VISION_MODE_DARK_LINE       3u
+
+/** 状态机 ROI 行范围 [START, END) */
+#define IMAGE_DARK_LINE_ROI_ROW_START     0
+#define IMAGE_DARK_LINE_ROI_ROW_END       ((int)IMAGE_COMPRESS_H - 10)
+
+/** 左右忽略列，避开暗角 */
+#define IMAGE_DARK_LINE_COL_MARGIN        8
+
+/**
+ * 白底进入/退出比例阈值（0~100，迟滞防抖）。
+ * 入口/出口地面均为深色，仅当白底 ROI 白色像素占比升高/降低时切换状态。
+ */
+#define IMAGE_DARK_LINE_WHITE_ENTER_RATIO_PCT  40u
+#define IMAGE_DARK_LINE_WHITE_EXIT_RATIO_PCT   20u
+
+/** 进入/退出连续帧计数（帧） */
+#define IMAGE_DARK_LINE_ENTER_DEBOUNCE_FRAMES  4u
+#define IMAGE_DARK_LINE_EXIT_DEBOUNCE_FRAMES   6u
+
+/** 进入元素后最少保持帧数，防止黑胶带短暂遮挡白底误退出 */
+#define IMAGE_DARK_LINE_MIN_INSIDE_HOLD_FRAMES 20u
+
+/** 黑线跟踪行范围：中下 ROI，近处权重大 */
+#define IMAGE_DARK_LINE_TRACK_ROW_START   ((int)IMAGE_COMPRESS_H / 3)
+#define IMAGE_DARK_LINE_TRACK_ROW_END     (((int)IMAGE_COMPRESS_H * 2) / 3)
+
+/** 单行黑条宽度合法范围（压缩图列像素） */
+#define IMAGE_DARK_LINE_MIN_STRIPE_WIDTH  8
+#define IMAGE_DARK_LINE_MAX_STRIPE_WIDTH  ((int)IMAGE_COMPRESS_W - 16)
+
+/** 至少多少行检出黑条才认为 track_valid */
+#define IMAGE_DARK_LINE_MIN_TRACK_ROWS    3u
+
+/** 大津阈值偏移；光强变化时可微调 */
+#define IMAGE_DARK_LINE_THRESH_OFFSET     (-5)
+
+/** ROI 平均灰度过低视为无效（暗场误分割） */
+#define IMAGE_DARK_LINE_MIN_MEAN_GRAY     28
+
+/** 黑线横向误差 → yaw 偏移（deg/px），比白块略小 */
+#define IMAGE_DARK_LINE_YAW_K_PIXEL       0.20f
+#define IMAGE_DARK_LINE_YAW_MAX_OFFSET_DEG 25.0f
+#define IMAGE_DARK_LINE_YAW_DEADBAND_DEG  0.15f
+
+typedef struct
+{
+    float center_err;       /**< 图像中心 - 黑条中心 x；正=黑条在右，需向右修正 yaw */
+    int   line_cx;          /**< 加权黑条中心列（压缩图坐标） */
+    int   black_line_width; /**< 检出黑条平均宽度（列像素） */
+    float white_ratio;      /**< ROI 白色像素占比 0~1 */
+    uint8 track_valid;      /**< 1=元素内且足够行检出黑条 */
+    uint8 element_active;   /**< 1=已进入白底元素区 */
+    uint8 enter_pulse;      /**< 单帧：刚进入元素 */
+    uint8 exit_pulse;       /**< 单帧：刚退出元素 */
+} image_dark_line_result_t;
+
+/** Bumpy 调试页：各行黑条中心采样点（压缩图坐标） */
+#define IMAGE_DARK_LINE_DEBUG_PTS_MAX  64u
+
+typedef struct
+{
+    int row;
+    int cx;
+} image_dark_line_track_point_t;
+
+/** 最近一帧黑线调试状态，供 IPS 叠加与 GUI 文字读取 */
+typedef struct
+{
+    image_dark_line_track_point_t pts[IMAGE_DARK_LINE_DEBUG_PTS_MAX];
+    uint8 pts_count;
+    float center_err;
+    int   line_cx;
+    int   black_line_width;
+    float white_ratio;
+    uint8 track_valid;
+    uint8 element_active;
+    int   slope_x1000;   /**< 中心点线性拟合斜率 ×1000，横条应≈0 */
+    int   mean_row;      /**< 拟合参考行 */
+    int   mean_cx;       /**< 拟合参考列 */
+} image_dark_line_debug_state_t;
+
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+
+/** CM7_1：每帧压缩→二值→白底状态机→黑条中心；调用方须在 finish_flag 置位后调用 */
+void image_dark_line_process_frame(int bw_threshold);
+
+/** 离开视觉路径或进 Image 菜单时复位状态机 */
+void image_dark_line_reset(void);
+
+/** CM7_0 主循环：消费黑线误差控制 yaw，进入/退出各蜂鸣一声 */
+void image_dark_line_apply_yaw(void);
+
+#if defined(CY_CORE_CM7_1)
+/** Bumpy 调试：二值图 + INSIDE 时黑条中心折线叠加（不写 dualcore） */
+void image_dark_line_debug_show(int disp_x, int disp_y, int bw_threshold);
+void image_dark_line_draw_center_overlay(int disp_x, int disp_y, int disp_w, int disp_h);
+
+float image_dark_line_get_center_err(void);
+uint8 image_dark_line_get_track_valid(void);
+uint8 image_dark_line_get_pts_count(void);
+float image_dark_line_get_white_ratio(void);
+uint8 image_dark_line_get_element_active(void);
+int   image_dark_line_get_slope_x1000(void);
+#endif
+
+#endif /* IMAGE_DARK_LINE_VALIDATE_ENABLE */
+
 #endif /* PROJECT_CODE_IMAGE_H_ */

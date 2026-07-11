@@ -374,6 +374,44 @@ uint8 dualcore_vision_guidance_pull_mode(void)
   return v->vision_guidance_mode;
 }
 
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+
+void dualcore_dark_line_pull_snapshot(dualcore_dark_line_snapshot_t *out)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+  static uint32 s_last_dark_line_frame_seq;
+
+  if (out == NULL)
+  {
+    return;
+  }
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  out->center_err = v->dark_line_center_err;
+  out->track_valid = v->dark_line_track_valid;
+  out->element_active = v->dark_line_element_active;
+  out->enter_pulse = v->dark_line_enter_pulse;
+  out->exit_pulse = v->dark_line_exit_pulse;
+  out->white_ratio = v->dark_line_white_ratio;
+  out->fresh = (uint8)((v->dark_line_frame_seq != s_last_dark_line_frame_seq) ? 1u : 0u);
+  if (out->fresh != 0u)
+  {
+    s_last_dark_line_frame_seq = v->dark_line_frame_seq;
+  }
+
+  /* 消费单帧脉冲，防止重复蜂鸣 */
+  if ((v->dark_line_enter_pulse != 0u) || (v->dark_line_exit_pulse != 0u))
+  {
+    v->dark_line_enter_pulse = 0u;
+    v->dark_line_exit_pulse = 0u;
+    __DSB();
+    dualcore_shared_dcache_clean(v, sizeof(*v));
+  }
+}
+
+#endif /* IMAGE_DARK_LINE_VALIDATE_ENABLE */
+
 static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
 {
   switch ((dualcore_ui_cmd_op_t)s->op)
@@ -707,6 +745,59 @@ void dualcore_white_blob_publish_inactive(void)
 
   dualcore_shared_dcache_clean(v, sizeof(*v));
 }
+
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+
+void dualcore_dark_line_publish(float center_err, uint8 track_valid, uint8 element_active,
+                                uint8 enter_pulse, uint8 exit_pulse, float white_ratio,
+                                uint32 frame_seq)
+{
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  v->dark_line_center_err = center_err;
+  v->dark_line_track_valid = track_valid;
+  v->dark_line_element_active = element_active;
+  v->dark_line_enter_pulse = enter_pulse;
+  v->dark_line_exit_pulse = exit_pulse;
+  v->dark_line_white_ratio = white_ratio;
+  v->dark_line_frame_fresh = 1u;
+  v->dark_line_frame_seq = frame_seq;
+  v->vision_guidance_mode = IMAGE_VISION_MODE_DARK_LINE;
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+void dualcore_dark_line_publish_inactive(void)
+{
+  static uint32 s_inactive_seq;
+  dualcore_vision_to_ctrl_t *v = &g_dualcore_blob.vision;
+
+  dualcore_shared_dcache_invalidate(v, sizeof(*v));
+
+  v->dark_line_center_err = 0.0f;
+  v->dark_line_track_valid = 0u;
+  v->dark_line_element_active = 0u;
+  v->dark_line_enter_pulse = 0u;
+  v->dark_line_exit_pulse = 0u;
+  v->dark_line_white_ratio = 0.0f;
+  v->dark_line_frame_fresh = 0u;
+  s_inactive_seq++;
+  v->dark_line_frame_seq = s_inactive_seq;
+  if (v->vision_guidance_mode == IMAGE_VISION_MODE_DARK_LINE)
+  {
+    v->vision_guidance_mode = 0u;
+  }
+  v->seq++;
+  __DSB();
+
+  dualcore_shared_dcache_clean(v, sizeof(*v));
+}
+
+#endif /* IMAGE_DARK_LINE_VALIDATE_ENABLE */
 
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in)
 {

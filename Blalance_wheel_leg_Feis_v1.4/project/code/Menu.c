@@ -142,6 +142,12 @@ void Menu_UpdateImageAeArm(void)
 
     if (!in_image)
     {
+        if (s_was_in_image_section != 0u)
+        {
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+            image_dark_line_reset();
+#endif
+        }
         s_was_in_image_section = 0u;
     }
     else

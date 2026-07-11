@@ -8,6 +8,7 @@
 #include "zf_common_typedef.h"
 #include "step_detection.h"
 #include "my_gps.h"
+#include "image.h"
 
 /* 与 project/iar/icf/linker_directives_tviibh.icf 中 ICFEDIT_region_RAM 起始地址一致 */
 #ifndef DUALCORE_SHARED_PHYS_ADDR
@@ -263,9 +264,30 @@ typedef struct
   uint8 blob_track_valid;
   uint8 blob_frame_fresh;
   uint32 blob_frame_seq;
-  /** 0=无效；1=白块引导 IMAGE_VISION_MODE_BLOB；2=中线 IMAGE_VISION_MODE_MIDLINE */
+  /** 0=无效；1=白块引导 IMAGE_VISION_MODE_BLOB；2=中线 IMAGE_VISION_MODE_MIDLINE；3=黑线 IMAGE_VISION_MODE_DARK_LINE */
   uint8 vision_guidance_mode;
+  /* 白底黑线元素验证（image_dark_line_process_frame / image_dark_line_apply_yaw） */
+  float dark_line_center_err;
+  uint8 dark_line_track_valid;
+  uint8 dark_line_frame_fresh;
+  uint32 dark_line_frame_seq;
+  uint8 dark_line_element_active;
+  uint8 dark_line_enter_pulse;
+  uint8 dark_line_exit_pulse;
+  float dark_line_white_ratio;
 } dualcore_vision_to_ctrl_t;
+
+/** CM7_0 pull 黑线验证快照（enter/exit_pulse 读后清零） */
+typedef struct
+{
+  float center_err;
+  uint8 track_valid;
+  uint8 element_active;
+  uint8 enter_pulse;
+  uint8 exit_pulse;
+  uint8 fresh;
+  float white_ratio;
+} dualcore_dark_line_snapshot_t;
 
 typedef struct
 {
@@ -322,6 +344,9 @@ void dualcore_white_blob_pull(float *center_err, uint8 *track_valid, uint8 *fres
 uint8 dualcore_white_blob_read_track_valid(void);
 /** 读取 CM7_1 当前主导视觉模式（见 IMAGE_VISION_MODE_*） */
 uint8 dualcore_vision_guidance_pull_mode(void);
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+void dualcore_dark_line_pull_snapshot(dualcore_dark_line_snapshot_t *out);
+#endif
 /* 由 cm7_0_isr / 主循环调用：执行队列中所有待处理命令 */
 void dualcore_ui_cmd_consume_all(void);
 void dualcore_remote_pull(dualcore_remote_to_ctrl_t *out);
@@ -343,6 +368,12 @@ void dualcore_bridge_vision_publish_detect(float center_err, uint8 track_valid,
 void dualcore_bridge_vision_publish_inactive(void);
 void dualcore_white_blob_publish(float center_err, uint8 track_valid, uint32 frame_seq);
 void dualcore_white_blob_publish_inactive(void);
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+void dualcore_dark_line_publish(float center_err, uint8 track_valid, uint8 element_active,
+                                uint8 enter_pulse, uint8 exit_pulse, float white_ratio,
+                                uint32 frame_seq);
+void dualcore_dark_line_publish_inactive(void);
+#endif
 void dualcore_remote_publish(const dualcore_remote_to_ctrl_t *in);
 #endif
 

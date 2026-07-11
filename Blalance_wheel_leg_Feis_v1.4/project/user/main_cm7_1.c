@@ -138,7 +138,21 @@ int main(void)
             }
 #endif
         }
-#if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+        /*
+         * 白底黑线元素验证（非回放、非台阶、非桥区）：
+         * 白底出现/消失判定进入退出，元素内黑条中心控制 yaw。
+         */
+        else if (!MenuIsImageSectionPage() && (ctrl.stair_enter_active == 0u) &&
+                 (ctrl.bridge_zone_active == 0u) && (ctrl.nag_system_run_index != 3u))
+        {
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                image_dark_line_process_frame(hd_threshold);
+            }
+        }
+#elif IMAGE_WHITE_BLOB_VALIDATE_ENABLE
         /*
          * 室外验证视觉状态机（仅非回放态 index!=3）：
          * - WHITE_BLOB：上半区最大白连通域 → dualcore blob 通道
@@ -183,6 +197,10 @@ int main(void)
 #endif
         else if (!MenuIsImageSectionPage())
         {
+#if IMAGE_DARK_LINE_VALIDATE_ENABLE
+            dualcore_dark_line_publish_inactive();
+            image_dark_line_reset();
+#endif
 #if IMAGE_WHITE_BLOB_VALIDATE_ENABLE
             s_bridge_zone_prev = 0u;
 #endif
