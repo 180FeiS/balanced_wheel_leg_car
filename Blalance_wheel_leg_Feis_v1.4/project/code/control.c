@@ -49,7 +49,7 @@ float dt_pid_turn_angle = 0.001f;
 float dt_pid_turn_gyro = 0.001f;
 
 // 初始腿高（非跳跃时基准）
-float leg_long = 3.5f; //3.5
+float leg_long = 5.5f; //3.5
 // float leg_high_integral = 0;
 
 /*---------------------------------------------------------------------------
@@ -207,6 +207,8 @@ uint8 g_menu_input_remote_first = 0u;
 uint8 g_menu_vofa_enable = 0u;
 /* 0=关，1=开 GPS+惯导融合；Run→Config 编辑，Run→Save 写 Flash 页 47 V10 */
 uint8 g_menu_nav_fusion_enable = 1u;
+/* 0=关，1=开里程打滑纠偏；Run→Config 编辑，Run→Save 写 Flash 页 47 V13 */
+uint8 g_menu_odo_slip_enable = 0u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)

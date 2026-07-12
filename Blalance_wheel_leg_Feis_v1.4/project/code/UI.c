@@ -964,10 +964,11 @@ void GUI_3_3_1(void)
     uint8 vofa_enable = 0u;
     uint8 vofa_group = 0u;
     uint8 fusion_enable = 0u;
+    uint8 odo_slip_enable = 0u;
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Config");
-    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(16, ROW_15, 223, ROW_15, IPS200_DEFAULT_PENCOLOR);
 
 #if defined(CY_CORE_CM7_1)
     dualcore_ctrl_to_ui_pull(&s_ui_dc);
@@ -975,94 +976,116 @@ void GUI_3_3_1(void)
     vofa_enable = s_ui_dc.menu_vofa_enable;
     vofa_group = (uint8)(s_ui_dc.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
     fusion_enable = s_ui_dc.menu_nav_fusion_enable;
+    odo_slip_enable = s_ui_dc.menu_odo_slip_enable;
 #else
     input_remote = g_menu_input_remote_first;
     vofa_enable = g_menu_vofa_enable;
     vofa_group = (uint8)(Nag_Vofa_Group % NAG_VOFA_GROUP_COUNT);
     fusion_enable = g_menu_nav_fusion_enable;
+    odo_slip_enable = g_menu_odo_slip_enable;
 #endif
 
     if (field_index == Run_Config_Field_InputMode)
     {
-        ips200_show_string(0, ROW_6, "->");
+        ips200_show_string(0, ROW_5, "->");
     }
     else
     {
-        ips200_show_string(0, ROW_6, "  ");
+        ips200_show_string(0, ROW_5, "  ");
     }
-    ips200_show_string(16, ROW_6, "InputMode:");
+    ips200_show_string(16, ROW_5, "InputMode:");
     if (input_remote != 0u)
     {
-        ips200_show_string(112, ROW_6, "Remote");
+        ips200_show_string(112, ROW_5, "Remote");
     }
     else
     {
-        ips200_show_string(112, ROW_6, "Key   ");
+        ips200_show_string(112, ROW_5, "Key   ");
     }
 
     if (field_index == Run_Config_Field_VofaEnable)
     {
-        ips200_show_string(0, ROW_8, "->");
+        ips200_show_string(0, ROW_7, "->");
     }
     else
     {
-        ips200_show_string(0, ROW_8, "  ");
+        ips200_show_string(0, ROW_7, "  ");
     }
-    ips200_show_string(16, ROW_8, "VofaEnable:");
+    ips200_show_string(16, ROW_7, "VofaEnable:");
     if (vofa_enable != 0u)
     {
-        ips200_show_string(112, ROW_8, "On ");
+        ips200_show_string(112, ROW_7, "On ");
     }
     else
     {
-        ips200_show_string(112, ROW_8, "Off");
+        ips200_show_string(112, ROW_7, "Off");
     }
 
     if (field_index == Run_Config_Field_VofaGroup)
     {
-        ips200_show_string(0, ROW_10, "->");
+        ips200_show_string(0, ROW_9, "->");
     }
     else
     {
-        ips200_show_string(0, ROW_10, "  ");
+        ips200_show_string(0, ROW_9, "  ");
     }
-    ips200_show_string(16, ROW_10, "VofaGroup:");
+    ips200_show_string(16, ROW_9, "VofaGroup:");
     if (vofa_group == 1u)
     {
-        ips200_show_string(112, ROW_10, "1:Spd");
+        ips200_show_string(112, ROW_9, "1:Spd");
     }
     else if (vofa_group == 2u)
     {
-        ips200_show_string(112, ROW_10, "2:Fus");
+        ips200_show_string(112, ROW_9, "2:Fus");
     }
     else if (vofa_group == 3u)
     {
-        ips200_show_string(112, ROW_10, "3:Odo");
+        ips200_show_string(112, ROW_9, "3:Odo");
     }
     else
     {
-        ips200_show_string(112, ROW_10, "0:IMU");
+        ips200_show_string(112, ROW_9, "0:IMU");
     }
 
     if (field_index == Run_Config_Field_FusionEnable)
     {
-        ips200_show_string(0, ROW_12, "->");
+        ips200_show_string(0, ROW_11, "->");
     }
     else
     {
-        ips200_show_string(0, ROW_12, "  ");
+        ips200_show_string(0, ROW_11, "  ");
     }
-    ips200_show_string(16, ROW_12, "FusionEn:");
+    ips200_show_string(16, ROW_11, "FusionEn:");
     if (fusion_enable != 0u)
     {
-        ips200_show_string(112, ROW_12, "On ");
+        ips200_show_string(112, ROW_11, "On ");
     }
     else
     {
-        ips200_show_string(112, ROW_12, "Off");
+        ips200_show_string(112, ROW_11, "Off");
     }
 
-    ips200_show_string(8, ROW_15, "K1:nxt K2:chg K4:bk");
+#if Nag_OdoSlip_Enable
+    if (field_index == Run_Config_Field_OdoSlipEnable)
+    {
+        ips200_show_string(0, ROW_13, "->");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_13, "  ");
+    }
+    ips200_show_string(16, ROW_13, "OdoSlipEn:");
+    if (odo_slip_enable != 0u)
+    {
+        ips200_show_string(112, ROW_13, "On ");
+    }
+    else
+    {
+        ips200_show_string(112, ROW_13, "Off");
+    }
+#endif
+
+    ips200_show_string(8, ROW_16, "K1:nxt K2:chg K4:bk");
 }
 
 void ACT_3_3_1()
@@ -1265,6 +1288,8 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_enter_bridge_target_speed;
     case Nag_Launch_Field_BridgeIn_Dec:
         return s_ui_dc.nag_enter_bridge_pre_decel_dist_cm;
+    case Nag_Launch_Field_Bump_Dur:
+        return s_ui_dc.nag_bump_duration_sec;
     case Nag_Launch_Field_Spin_Rate:
         return s_ui_dc.spin_rate_max_dps;
     default:
@@ -1282,12 +1307,12 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
         "BaseSpd", "SpinSpd", "SpinDec",
         "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
         "ConeSpd", "ConeDec", "SpinRt", "StairSp", "StairDec",
-        "BrgInSp", "BrgInDc"
+        "BrgInSp", "BrgInDc", "BumpSec"
     };
     static const int16 rows[Nag_Run_Launch_Param_Count] =
     {
         ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13, ROW_14,
-        ROW_15, ROW_16, ROW_17
+        ROW_15, ROW_16, ROW_17, ROW_18
     };
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();
@@ -1319,13 +1344,15 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
         {
             ips200_show_int(96, rows[field_index], (int32)value, 4);
         }
+        else if (Nag_LaunchParamIsBumpDuration(field_index))
+        {
+            ips200_show_int(96, rows[field_index], (int32)value, 3);
+        }
         else
         {
             ips200_show_int(96, rows[field_index], (int32)value, 4);
         }
     }
-
-    ips200_show_string(8, ROW_18, "K1:nxt K2:+ K3:- K4:bk");
 }
 
 void ACT_3_1_1()

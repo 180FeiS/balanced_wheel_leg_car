@@ -41,6 +41,8 @@
  * 1. 仅在 Nag_GetMileageStep() 走 car_speed 积分路径时启用；融合位移有效时不介入；
  * 2. 策略：瞬时保护 -> 状态确认 -> 回溯纠偏；不处理台阶开环跳跃腾空；
  * 3. 判据：左右轮速度 + gyro_z 重建中心速度一致性；轮距为左右驱动轮中心横向间距（cm）。
+ * 编译期门控：Nag_OdoSlip_Enable=0 时不链接算法；运行时开关见 g_menu_odo_slip_enable（Run→Config OdoSlipEn，Flash V13）。
+ * 调试：VOFA 组 3 观察 odo_slip_state；关闭时状态恒为 0。
  */
 #define Nag_OdoSlip_Enable 1u
 
@@ -174,8 +176,22 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 extern float nag_enter_bridge_target_speed;
 extern float nag_enter_bridge_pre_decel_dist_cm;
 
-#define Nag_Bump_Target_Speed 220.0f
-#define Nag_Bump_PreDecel_Dist_cm 0.0f
+/*
+ * 颠簸路段双点录制（惯导回放）：
+ * 1) KEY4 切 BumpIn，颠簸段前打点（Bin）；
+ * 2) KEY4 切 BumpOut，在期望接回路径处打点（Bout，仅作里程锚点）；
+ * 3) 回放：Bin 触发后 leg=5.5、固定速度、锁 Bin 点 yaw、开启横滚平衡、冻结 Run_index；
+ *    nag_bump_duration_sec 计时到后链式切 EXIT_BUMP，从 Bout+1 接回惯导。
+ * 见 Nag_FindPairedExitBumpMarker / Nag_ComputeBumpResumeIndex（navigation.c）。
+ */
+#define Nag_EnterBump_Target_Speed_Default 500.0f  // 颠簸段目标速度（motor_user_speed_cmd 档位）
+#define Nag_EnterBump_Leg_Long 5.5f                // 元素期内 leg_long
+#define Nag_Bump_Duration_Sec_Default 5.0f           // 颠簸接管时长（秒），仅 ENTER_BUMP 计时
+#define Nag_EnterBump_PreDecel_Dist_cm_Default 0.0f  // 进入颠簸前预减速距离（cm）
+extern float nag_enter_bump_target_speed;
+extern float nag_bump_duration_sec;
+extern float nag_enter_bump_pre_decel_dist_cm;
+#define Nag_HeadingHold_EnterBump_Enable 1u          // 1=颠簸期间锁 Nav_read[Bin] 单点 yaw
 
 /*
  * 台阶双点录制（惯导回放）：
@@ -206,14 +222,16 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 5u            // v5：SINGLE_BRIDGE 拆为 ENTER/EXIT_SINGLE_BRIDGE；旧事件表需重录
+#define Nag_Event_Version 6u            // v6：BUMP 拆为 ENTER/EXIT_BUMP，STAIR type 9/10；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
  * v5：v4 + menu_input_remote_first；v6：v5 + menu_vofa_enable；v7：v6 + enter_stair pre_decel；
  * v8：v7 + bridge_in speed/decel；v9：v8 + Nag_Vofa_Group @ [18]；
  * v10：v9 + g_menu_nav_fusion_enable @ [19]；
- * v11：v10 布局在 [12] 插入 enter_stair target speed，[13..20] 顺延。
+ * v11：v10 布局在 [12] 插入 enter_stair target speed，[13..20] 顺延；
+ * v12：v11 + nag_bump_duration_sec @ [21]；
+ * v13：v12 + g_menu_odo_slip_enable @ [22]。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -228,14 +246,18 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V9 9u      /* v9：v8 + vofa debug group */
 #define Nag_Run_Launch_Params_Version_V10 10u    /* v10：v9 + nav fusion enable */
 #define Nag_Run_Launch_Params_Version_V11 11u    /* v11：v10 + enter_stair target speed @ [12] */
-#define Nag_Run_Launch_Param_Count 14u
+#define Nag_Run_Launch_Params_Version_V12 12u    /* v12：v11 + nag_bump_duration_sec @ [21] */
+#define Nag_Run_Launch_Params_Version_V13 13u    /* v13：v12 + g_menu_odo_slip_enable @ [22] */
+#define Nag_Run_Launch_Param_Count 15u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
 #define Nag_Run_Launch_Config_Word_Count_V7 13u  /* v7：11 float + 2 config word */
 #define Nag_Run_Launch_Config_Word_Count_V8 15u  /* v8：13 float + 2 config word */
 #define Nag_Run_Launch_Config_Word_Count_V9 16u  /* v9：v8 + Nag_Vofa_Group @ [18] */
 #define Nag_Run_Launch_Config_Word_Count_V10 17u /* v10：v9 + g_menu_nav_fusion_enable @ [19] */
-#define Nag_Run_Launch_Config_Word_Count 18u     /* v11：v10 顺延 + enter_stair target @ [12] */
+#define Nag_Run_Launch_Config_Word_Count_V11 18u /* v11：v10 顺延 + enter_stair target @ [12] */
+#define Nag_Run_Launch_Config_Word_Count_V12 19u /* v12：v11 + bump_duration @ [21] */
+#define Nag_Run_Launch_Config_Word_Count 20u     /* v13：v12 + odo_slip_enable @ [22] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -252,6 +274,10 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Launch_Field_Stair_Dec 11u      /* 进入台阶预减速距离（cm） */
 #define Nag_Launch_Field_BridgeIn_Spd 12u   /* 单边桥进目标速度 */
 #define Nag_Launch_Field_BridgeIn_Dec 13u   /* 单边桥进预减速距离（cm） */
+#define Nag_Launch_Field_Bump_Dur 14u       /* 颠簸接管时长（秒），Launch KEY2/3 步进 1s */
+
+#define Nag_Bump_Duration_Sec_Min 1.0f      /* Launch/Set 下限，避免 0s 立即链式退出 */
+#define Nag_Bump_Duration_Sec_Max 60.0f     /* Launch/Set 上限（秒） */
 
 float Nag_LaunchParamGet(uint8 field_index);
 void Nag_LaunchParamSet(uint8 field_index, float value);
@@ -275,11 +301,20 @@ static inline uint8 Nag_LaunchParamIsSpinRate(uint8 field_index)
     return (uint8)(field_index == Nag_Launch_Field_Spin_Rate);
 }
 
+static inline uint8 Nag_LaunchParamIsBumpDuration(uint8 field_index)
+{
+    return (uint8)(field_index == Nag_Launch_Field_Bump_Dur);
+}
+
 static inline float Nag_LaunchParamGetStep(uint8 field_index)
 {
     if (Nag_LaunchParamIsSpinRate(field_index))
     {
         return 10.0f;
+    }
+    if (Nag_LaunchParamIsBumpDuration(field_index))
+    {
+        return 1.0f;
     }
     if (Nag_LaunchParamIsSpeed(field_index))
     {
@@ -321,7 +356,6 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
-#define Nag_HeadingHold_Bump_Enable 0u          // 颠簸/减速带默认整段保持进入元素时的航向
 //********************************************************//
 
 /* 元素类型枚举：
@@ -341,11 +375,12 @@ typedef enum
     NAV_ELEM_CONE_OUT = 5,
     NAV_ELEM_BRIDGE_IN = 6,
     NAV_ELEM_BRIDGE_OUT = 7,
-    NAV_ELEM_BUMP = 8,
-    NAV_ELEM_STAIR_IN = 9,
-    NAV_ELEM_STAIR_OUT = 10,
-    NAV_ELEM_END = 11,
-    NAV_ELEM_COUNT = 12,
+    NAV_ELEM_BUMP_IN = 8,
+    NAV_ELEM_BUMP_OUT = 9,
+    NAV_ELEM_STAIR_IN = 10,
+    NAV_ELEM_STAIR_OUT = 11,
+    NAV_ELEM_END = 12,
+    NAV_ELEM_COUNT = 13,
 } Nav_Unified_Element;
 
 #define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR_OUT
@@ -373,17 +408,19 @@ static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
 {
     return (uint8)((unified == NAV_ELEM_TURN_IN) || (unified == NAV_ELEM_TURN_OUT) ||
                    (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT) ||
-                   (unified == NAV_ELEM_BRIDGE_IN) || (unified == NAV_ELEM_BRIDGE_OUT));
+                   (unified == NAV_ELEM_BRIDGE_IN) || (unified == NAV_ELEM_BRIDGE_OUT) ||
+                   (unified == NAV_ELEM_BUMP_OUT));
 }
 
 static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
 {
-    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_STAIR_IN));
+    return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_STAIR_IN) ||
+                   (unified == NAV_ELEM_BUMP_IN));
 }
 
 static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
 {
-    return (uint8)((unified == NAV_ELEM_NORMAL) || (unified == NAV_ELEM_BUMP));
+    return (uint8)(unified == NAV_ELEM_NORMAL);
 }
 
 static inline const char *Nav_GetUnifiedElementName(uint8 unified)
@@ -398,7 +435,8 @@ static inline const char *Nav_GetUnifiedElementName(uint8 unified)
         case NAV_ELEM_CONE_OUT: return "ConeOut";
         case NAV_ELEM_BRIDGE_IN: return "BridgeIn";
         case NAV_ELEM_BRIDGE_OUT: return "BridgeOut";
-        case NAV_ELEM_BUMP: return "Bump";
+        case NAV_ELEM_BUMP_IN: return "BumpIn";
+        case NAV_ELEM_BUMP_OUT: return "BumpOut";
         case NAV_ELEM_STAIR_IN: return "StairIn";
         case NAV_ELEM_STAIR_OUT: return "StairOut";
         case NAV_ELEM_END: return "End";
@@ -415,10 +453,11 @@ typedef enum
        NAG_EVENT_TYPE_EXIT_CONES = 4,        // 退出锥桶标记（沿路惯导，瞬时完成钩子）
        NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE = 5, // 单边桥进：惯导路径标记，leg=5.5，开横滚平衡
        NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE = 6,  // 单边桥出：惯导路径标记，leg=3.5，关横滚，恢复基准速度
-       NAG_EVENT_TYPE_BUMP = 7,              // 减速带/颠簸元素
-       NAG_EVENT_TYPE_ENTER_STAIR = 8,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
-       NAG_EVENT_TYPE_EXIT_STAIR = 9,        // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
-       NAG_EVENT_TYPE_COUNT = 10,            // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_ENTER_BUMP = 7,        // 进入颠簸：锁 yaw+固定速度/腿长+横滚，计时后链式 EXIT
+       NAG_EVENT_TYPE_EXIT_BUMP = 8,         // 退出颠簸：恢复 speed/leg、关横滚，首拍完成并接回 Bout+1
+       NAG_EVENT_TYPE_ENTER_STAIR = 9,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
+       NAG_EVENT_TYPE_EXIT_STAIR = 10,       // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
+       NAG_EVENT_TYPE_COUNT = 11,            // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
 
 /* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
@@ -433,7 +472,8 @@ static inline const char *Nag_GetEventTypeName(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return "ConeOut";
         case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return "BridgeIn";
         case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return "BridgeOut";
-        case NAG_EVENT_TYPE_BUMP: return "Bump";
+        case NAG_EVENT_TYPE_ENTER_BUMP: return "EnterBump";
+        case NAG_EVENT_TYPE_EXIT_BUMP: return "ExitBump";
         case NAG_EVENT_TYPE_ENTER_STAIR: return "EnterStair";
         case NAG_EVENT_TYPE_EXIT_STAIR: return "ExitStair";
         default: return "Unknown";
@@ -511,6 +551,12 @@ typedef struct{
        uint8 Stair_Jump_Completed_Count; //ENTER_STAIR 内 jump_control 正常结束次数
        uint8 Stair_Chain_To_Exit;  //1=ENTER 完成链式切 EXIT，EnterStair_Stop 跳过恢复速度/腿长
        uint16 Stair_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Ein；0xFFFF=无效 */
+       float Bump_Saved_Leg_Long;     // 进入颠簸前备份 leg_long，Stop/Done 时恢复
+       float Bump_Saved_SetSpeed;     // 进入颠簸前备份 motor_user_speed_cmd
+       float Bump_Locked_Yaw;         // 进入颠簸时锁定的航向（deg），供 VOFA/调试
+       uint32 Bump_Elapsed_Ms;        // ENTER_BUMP 元素期 1ms 计数
+       uint8 Bump_Chain_To_Exit;      // 1=链式切 EXIT_BUMP，EnterBump_Stop 跳过恢复
+       uint16 Bump_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Bin；0xFFFF=无效 */
        float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
        uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
        uint8 Bridge_Zone_Active;      // 1=桥上白块引导中（进桥确认～出桥确认）
@@ -565,6 +611,17 @@ extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命�
 
 void Nag_OdoSlip_ResetState(void); /* 清零里程纠偏运行时态；Init_Nag/回放开始时调用 */
 void Nag_OdoSlip_ApplyPendingRollback(void); /* 将待补扣里程写回 Mileage_All/Run_index */
+
+extern uint8 g_menu_odo_slip_enable; /* 0=关 1=开；Run→Config / Flash V13，见 control.h */
+
+static inline uint8 Nag_OdoSlip_IsRuntimeEnabled(void)
+{
+#if Nag_OdoSlip_Enable
+    return (uint8)(g_menu_odo_slip_enable != 0u);
+#else
+    return 0u;
+#endif
+}
 
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,
@@ -636,10 +693,16 @@ void Nag_Hook_ExitBridge_Run(void);
 bool Nag_Hook_ExitBridge_IsDone(void);
 void Nag_Hook_ExitBridge_Stop(void);
 
-bool Nag_Hook_Bump_Start(void);
-void Nag_Hook_Bump_Run(void);
-bool Nag_Hook_Bump_IsDone(void);
-void Nag_Hook_Bump_Stop(void);
+/* 颠簸进/出：ENTER 开横滚并计时接管后链式 EXIT 关横滚；见 Nag_Hook_EnterBump_* / Nag_Hook_ExitBump_* */
+bool Nag_Hook_EnterBump_Start(void);
+void Nag_Hook_EnterBump_Run(void);
+bool Nag_Hook_EnterBump_IsDone(void);
+void Nag_Hook_EnterBump_Stop(void);
+
+bool Nag_Hook_ExitBump_Start(void);
+void Nag_Hook_ExitBump_Run(void);
+bool Nag_Hook_ExitBump_IsDone(void);
+void Nag_Hook_ExitBump_Stop(void);
 
 bool Nag_Hook_EnterStair_Start(void);
 void Nag_Hook_EnterStair_Run(void);

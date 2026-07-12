@@ -110,7 +110,7 @@ extern uint16 pwm_1;
 extern int16 LO_S;
 extern int16 RO_S;
 
-extern uint8 roll_balance_en;  // 1开启横滚平衡；BridgeIn 元素进入时 navigation 置 1，BridgeOut 置 0
+extern uint8 roll_balance_en;  // 1开启横滚平衡；BridgeIn/EnterBump 置 1，BridgeOut/ExitBump/Abort 清 0
 
 extern uint8 Motor_Runaway_Latch;  /* 失控保护最高优先级关断；清除方式见 dip_switch_motor_sync_from_hw */
 
@@ -230,6 +230,7 @@ extern uint8 g_remote_local_keys_debug; /* 1：板载调试路径；由 remote_l
 extern uint8 g_menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Flash 可配，见 Menu.h */
 extern uint8 g_menu_vofa_enable;         /* 0=关 1=开 VOFA 无线调试；Flash 可配 V6，见 Menu.h */
 extern uint8 g_menu_nav_fusion_enable;   /* 0=关 1=开导航融合；Flash 可配 V10，见 Menu.h */
+extern uint8 g_menu_odo_slip_enable;     /* 0=关 1=开里程打滑纠偏；Flash 可配 V13，见 Menu.h */
 
 uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
 uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */

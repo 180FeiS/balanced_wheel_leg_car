@@ -150,7 +150,7 @@ void Menu_UpdateImageAeArm(void)
     }
 }
 
-/* Launch 页：KEY1 循环选中字段；KEY2/KEY3 按速度±100、距离±10 调节。 */
+/* Launch 页：KEY1 循环选中字段（0..Nag_Run_Launch_Param_Count-1，含 BumpSec）；KEY2/3 按字段步进（速度±100、距离±10、BumpSec±1s）。 */
 static uint8 s_run_launch_field_index = 0u;
 /* Config 页：KEY1 循环选中预配置字段；KEY2 切换当前字段取值。 */
 static uint8 s_run_config_field_index = 0u;
@@ -195,6 +195,16 @@ void Menu_RunConfigToggleField(uint8 field_index)
             NavFusion_Reset();
         }
     }
+#if Nag_OdoSlip_Enable
+    else if (field_index == Run_Config_Field_OdoSlipEnable)
+    {
+        g_menu_odo_slip_enable = (uint8)(g_menu_odo_slip_enable ? 0u : 1u);
+        if (g_menu_odo_slip_enable == 0u)
+        {
+            Nag_OdoSlip_ResetState();
+        }
+    }
+#endif
 #else
     (void)field_index;
 #endif

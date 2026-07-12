@@ -19,6 +19,7 @@
 #include "small_driver_uart_control.h"
 
 #define NAG_STAIR_PAIRED_ENTER_INVALID    0xFFFFu
+#define NAG_BUMP_PAIRED_ENTER_INVALID     0xFFFFu
 #define NAG_BRIDGE_EXIT_INDEX_INVALID     0xFFFFu
 
 static uint8 Nag_FindNextEventOfType(uint16 run_index, uint8 event_type, uint16 *dist_points);
@@ -61,6 +62,9 @@ float nag_enter_stair_target_speed = Nag_EnterStair_Target_Speed_Default;
 float nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
 float nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
 float nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
+float nag_enter_bump_target_speed = Nag_EnterBump_Target_Speed_Default;
+float nag_bump_duration_sec = Nag_Bump_Duration_Sec_Default;
+float nag_enter_bump_pre_decel_dist_cm = Nag_EnterBump_PreDecel_Dist_cm_Default;
 
 void Nag_LaunchParamApplyDefaults(void)
 {
@@ -76,6 +80,9 @@ void Nag_LaunchParamApplyDefaults(void)
     nag_enter_stair_pre_decel_dist_cm = Nag_EnterStair_PreDecel_Dist_cm_Default;
     nag_enter_bridge_target_speed = Nag_EnterBridge_Target_Speed_Default;
     nag_enter_bridge_pre_decel_dist_cm = Nag_EnterBridge_PreDecel_Dist_cm_Default;
+    nag_enter_bump_target_speed = Nag_EnterBump_Target_Speed_Default;
+    nag_bump_duration_sec = Nag_Bump_Duration_Sec_Default;
+    nag_enter_bump_pre_decel_dist_cm = Nag_EnterBump_PreDecel_Dist_cm_Default;
     spin_set_rate_max_dps(Nag_Spin_Rate_Max_Dps_Default);
 }
 
@@ -111,6 +118,8 @@ float Nag_LaunchParamGet(uint8 field_index)
         return nag_enter_bridge_target_speed;
     case Nag_Launch_Field_BridgeIn_Dec:
         return nag_enter_bridge_pre_decel_dist_cm;
+    case Nag_Launch_Field_Bump_Dur:
+        return nag_bump_duration_sec;
     default:
         return 0.0f;
     }
@@ -162,6 +171,17 @@ void Nag_LaunchParamSet(uint8 field_index, float value)
     case Nag_Launch_Field_BridgeIn_Dec:
         nag_enter_bridge_pre_decel_dist_cm = value;
         break;
+    case Nag_Launch_Field_Bump_Dur:
+        if (value < Nag_Bump_Duration_Sec_Min)
+        {
+            value = Nag_Bump_Duration_Sec_Min;
+        }
+        else if (value > Nag_Bump_Duration_Sec_Max)
+        {
+            value = Nag_Bump_Duration_Sec_Max;
+        }
+        nag_bump_duration_sec = value;
+        break;
     default:
         break;
     }
@@ -178,7 +198,7 @@ static bool Nag_GetHeadingHoldConfig(uint8 event_type)
     {
         case NAG_EVENT_TYPE_SPIN: return (Nag_HeadingHold_Spin_Enable != 0u);
         case NAG_EVENT_TYPE_ENTER_TURNAROUND: return (Nag_HeadingHold_EnterTurn_Enable != 0u);
-        case NAG_EVENT_TYPE_BUMP: return (Nag_HeadingHold_Bump_Enable != 0u);
+        case NAG_EVENT_TYPE_ENTER_BUMP: return (Nag_HeadingHold_EnterBump_Enable != 0u);
         case NAG_EVENT_TYPE_ENTER_STAIR: return (Nag_HeadingHold_EnterStair_Enable != 0u);
         case NAG_EVENT_TYPE_EXIT_STAIR: return (Nag_HeadingHold_ExitStair_Enable != 0u);
         default: return false;
@@ -217,8 +237,9 @@ static void Nag_HeadingHold_OnEventEnter(uint8 event_type)
         return;
     }
 
-    /* ENTER_STAIR：锁航向目标在 Nag_Hook_EnterStair_Start 内按 Nav_read[enter_index] 单点设置。 */
-    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR)
+    /* ENTER_STAIR / ENTER_BUMP：锁航向目标在对应 Start 内按 Nav_read[enter_index] 单点设置。 */
+    if (event_type == NAG_EVENT_TYPE_ENTER_STAIR ||
+        event_type == NAG_EVENT_TYPE_ENTER_BUMP)
     {
         return;
     }
@@ -254,6 +275,7 @@ void Nag_EventPrepareEnter(uint8 event_type)
         event_type != NAG_EVENT_TYPE_EXIT_CONES &&
         event_type != NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE &&
         event_type != NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE &&
+        event_type != NAG_EVENT_TYPE_EXIT_BUMP &&
         event_type != NAG_EVENT_TYPE_EXIT_STAIR &&
         event_type != NAG_EVENT_TYPE_SPIN)
     {
@@ -371,10 +393,122 @@ void Nag_Hook_Spin_Stop(void)
     Nag_Spin_RestoreSetSpeed();
 }
 
-bool Nag_Hook_Bump_Start(void) { return false; }
-void Nag_Hook_Bump_Run(void) {}
-bool Nag_Hook_Bump_IsDone(void) { return false; }
-void Nag_Hook_Bump_Stop(void) {}
+/*
+ * 进入颠簸元素：
+ * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
+ * - 固定速度 nag_enter_bump_target_speed、腿长 Nag_EnterBump_Leg_Long；
+ * - 开启横滚平衡 roll_balance_en=1，Run 每拍强制保持；
+ * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
+ * - nag_bump_duration_sec 计时到后链式切入 EXIT_BUMP。
+ */
+bool Nag_Hook_EnterBump_Start(void)
+{
+    uint16 enter_index = 0u;
+    float locked_yaw = 0.0f;
+    float speed_sign = 1.0f;
+
+    N.Bump_Chain_To_Exit = 0u;
+    N.Bump_Elapsed_Ms = 0u;
+
+    if (N.Event_Active_Index < N.Event_Count &&
+        Nag_Event_Table[N.Event_Active_Index].valid)
+    {
+        enter_index = Nag_Event_Table[N.Event_Active_Index].enter_index;
+    }
+    else
+    {
+        enter_index = N.Run_index;
+    }
+
+    N.Bump_Saved_SetSpeed = motor_user_speed_cmd;
+    N.Bump_Saved_Leg_Long = leg_long;
+
+    locked_yaw = (float)euler_angle.yaw;
+    if (enter_index < Read_MaxSize && N.Save_index > 0u && enter_index < N.Save_index)
+    {
+        locked_yaw = (float)(Nav_read[enter_index] / 100.0f);
+    }
+    N.Bump_Locked_Yaw = locked_yaw;
+    Nag_HeadingHold_Enable(locked_yaw);
+
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+
+    if ((float)motor_user_speed_cmd < 0.0f)
+    {
+        speed_sign = -1.0f;
+    }
+    motor_user_speed_cmd = speed_sign * nag_enter_bump_target_speed;
+    leg_long = Nag_EnterBump_Leg_Long;
+    roll_balance_en = 1u;
+    return true;
+}
+
+void Nag_Hook_EnterBump_Run(void)
+{
+    N.Bump_Elapsed_Ms++;
+    roll_balance_en = 1u;
+}
+
+bool Nag_Hook_EnterBump_IsDone(void)
+{
+    uint32 duration_ms = (uint32)(nag_bump_duration_sec * 1000.0f);
+
+    if (duration_ms == 0u)
+    {
+        duration_ms = 1u;
+    }
+    return (N.Bump_Elapsed_Ms >= duration_ms);
+}
+
+void Nag_Hook_EnterBump_Stop(void)
+{
+    if (N.Bump_Chain_To_Exit != 0u)
+    {
+        N.Bump_Locked_Yaw = 0.0f;
+        N.Bump_Elapsed_Ms = 0u;
+        return;
+    }
+
+    motor_user_speed_cmd = N.Bump_Saved_SetSpeed;
+    leg_long = N.Bump_Saved_Leg_Long;
+    roll_balance_en = 0u;
+    N.Bump_Saved_SetSpeed = 0.0f;
+    N.Bump_Saved_Leg_Long = 0.0f;
+    N.Bump_Locked_Yaw = 0.0f;
+    N.Bump_Elapsed_Ms = 0u;
+}
+
+/*
+ * 退出颠簸元素：ENTER_BUMP 计时完成后软件链式切入。
+ * 恢复进入前备份速度与腿长，强制关闭横滚平衡；首拍 IsDone 接回惯导前瞻。
+ */
+bool Nag_Hook_ExitBump_Start(void)
+{
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    motor_user_speed_cmd = N.Bump_Saved_SetSpeed;
+    leg_long = N.Bump_Saved_Leg_Long;
+    roll_balance_en = 0u;
+    return true;
+}
+
+void Nag_Hook_ExitBump_Run(void) {}
+
+bool Nag_Hook_ExitBump_IsDone(void)
+{
+    return true;
+}
+
+void Nag_Hook_ExitBump_Stop(void)
+{
+    N.Bump_Saved_SetSpeed = 0.0f;
+    N.Bump_Saved_Leg_Long = 0.0f;
+    N.Bump_Locked_Yaw = 0.0f;
+    N.Bump_Elapsed_Ms = 0u;
+}
 
 /* 锥桶进/出口：单点路径标记；区段调速由 Nag_ApplyConeZoneSpeed() 按 Run_index 与事件表配对处理，
  * 不依赖 Event_Active 窗口。Start 立刻 true，首拍 IsDone 即 true，尽快恢复惯导前瞻。
@@ -753,6 +887,39 @@ static void Nag_ActivateChainedExitStair(void)
     Nag_EventPrepareEnter(NAG_EVENT_TYPE_EXIT_STAIR);
 }
 
+static void Nag_ConsumeTableExitBumpEvents(void)
+{
+    uint8 event_index = 0u;
+
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        if (Nag_Event_Table[event_index].valid &&
+            (N.Event_Consumed[event_index] == 0u) &&
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_BUMP)
+        {
+            N.Event_Consumed[event_index] = 1u;
+        }
+    }
+}
+
+static void Nag_ActivateChainedExitBump(void)
+{
+    N.Event_Active = 1u;
+    N.Event_Active_Index = 0xFFu;
+    N.Active_Event_Enter = N.Run_index;
+    N.Active_Event_Exit = N.Run_index;
+    N.Event_Active_Type = NAG_EVENT_TYPE_EXIT_BUMP;
+    N.Event_Start_RunIndex = N.Run_index;
+    N.Event_Trigger_RunIndex = N.Run_index;
+    N.Event_Triggered_In_Window = 0u;
+    N.Event_State = NAG_EVENT_STATE_ENTERED;
+    N.Event_Start_Latched = 0u;
+    N.Event_Done_Latched = 0u;
+    N.Bump_Elapsed_Ms = 0u;
+    N.Bump_Chain_To_Exit = 0u;
+    Nag_EventPrepareEnter(NAG_EVENT_TYPE_EXIT_BUMP);
+}
+
 /*
  * 退出台阶元素：ENTER_STAIR 三次跳跃完成后软件链式切入。
  * 恢复进入前基准速度与腿长 3.5；首拍 IsDone 接回惯导前瞻。
@@ -798,7 +965,8 @@ bool Nag_Element_Start(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_Start();
         case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_Start();
         case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_Start();
-        case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_Start();
+        case NAG_EVENT_TYPE_ENTER_BUMP: return Nag_Hook_EnterBump_Start();
+        case NAG_EVENT_TYPE_EXIT_BUMP: return Nag_Hook_ExitBump_Start();
         case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_Start();
         case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_Start();
         default: return false;
@@ -817,7 +985,8 @@ void Nag_Element_Run(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Run(); break;
         case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Run(); break;
         case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Run(); break;
-        case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Run(); break;
+        case NAG_EVENT_TYPE_ENTER_BUMP: Nag_Hook_EnterBump_Run(); break;
+        case NAG_EVENT_TYPE_EXIT_BUMP: Nag_Hook_ExitBump_Run(); break;
         case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Run(); break;
         case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Run(); break;
         default: break;
@@ -839,7 +1008,8 @@ bool Nag_Element_IsDone(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: return Nag_Hook_ExitCones_IsDone();
         case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: return Nag_Hook_EnterBridge_IsDone();
         case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: return Nag_Hook_ExitBridge_IsDone();
-        case NAG_EVENT_TYPE_BUMP: return Nag_Hook_Bump_IsDone();
+        case NAG_EVENT_TYPE_ENTER_BUMP: return Nag_Hook_EnterBump_IsDone();
+        case NAG_EVENT_TYPE_EXIT_BUMP: return Nag_Hook_ExitBump_IsDone();
         case NAG_EVENT_TYPE_ENTER_STAIR: return Nag_Hook_EnterStair_IsDone();
         case NAG_EVENT_TYPE_EXIT_STAIR: return Nag_Hook_ExitStair_IsDone();
         default: return false;
@@ -861,7 +1031,8 @@ void Nag_Element_Stop(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_CONES: Nag_Hook_ExitCones_Stop(); break;
         case NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE: Nag_Hook_EnterBridge_Stop(); break;
         case NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE: Nag_Hook_ExitBridge_Stop(); break;
-        case NAG_EVENT_TYPE_BUMP: Nag_Hook_Bump_Stop(); break;
+        case NAG_EVENT_TYPE_ENTER_BUMP: Nag_Hook_EnterBump_Stop(); break;
+        case NAG_EVENT_TYPE_EXIT_BUMP: Nag_Hook_ExitBump_Stop(); break;
         case NAG_EVENT_TYPE_ENTER_STAIR: Nag_Hook_EnterStair_Stop(); break;
         case NAG_EVENT_TYPE_EXIT_STAIR: Nag_Hook_ExitStair_Stop(); break;
         default: break;
@@ -980,6 +1151,12 @@ static void Nag_ClearEventRuntimeState(void)
     N.Stair_Jump_Completed_Count = 0u;
     N.Stair_Chain_To_Exit = 0u;
     N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
+    N.Bump_Saved_SetSpeed = 0.0f;
+    N.Bump_Saved_Leg_Long = 0.0f;
+    N.Bump_Locked_Yaw = 0.0f;
+    N.Bump_Elapsed_Ms = 0u;
+    N.Bump_Chain_To_Exit = 0u;
+    N.Bump_Paired_Enter_Index = NAG_BUMP_PAIRED_ENTER_INVALID;
 }
 
 void Nag_EventForceReset(void)
@@ -1014,7 +1191,8 @@ static void Nag_Element_StateMachine(void)
         }
     }
     else if (event_index >= N.Event_Count &&
-             !(event_index == 0xFFu && event_type == NAG_EVENT_TYPE_EXIT_STAIR))
+             !(event_index == 0xFFu && event_type == NAG_EVENT_TYPE_EXIT_STAIR) &&
+             !(event_index == 0xFFu && event_type == NAG_EVENT_TYPE_EXIT_BUMP))
     {
         return;
     }
@@ -1240,6 +1418,40 @@ static uint16 Nag_FindPairedExitStairMarker(uint16 enter_stair_marker)
     return best_marker;
 }
 
+/*
+ * 双点录制：找 Bin 之后最近的 EXIT_BUMP 标记索引 Bout（不依赖 Event_Consumed）。
+ */
+static uint16 Nag_FindPairedExitBumpMarker(uint16 bump_in_marker)
+{
+    uint8 event_index = 0u;
+    uint16 best_marker = NAG_BUMP_PAIRED_ENTER_INVALID;
+
+    if (bump_in_marker == NAG_BUMP_PAIRED_ENTER_INVALID)
+    {
+        return NAG_BUMP_PAIRED_ENTER_INVALID;
+    }
+
+    for (event_index = 0u; event_index < N.Event_Count; event_index++)
+    {
+        uint16 exit_marker;
+
+        if (!Nag_Event_Table[event_index].valid ||
+            Nag_Event_Table[event_index].type != NAG_EVENT_TYPE_EXIT_BUMP)
+        {
+            continue;
+        }
+
+        exit_marker = Nag_Event_Table[event_index].enter_index;
+        if (exit_marker > bump_in_marker &&
+            exit_marker < best_marker)
+        {
+            best_marker = exit_marker;
+        }
+    }
+
+    return best_marker;
+}
+
 /* EXIT_STAIR 完成后：从 Eout+1 接回；链式 EXIT 用锁存的 Ein 查表；无 EXIT 标记则 fallback Ein+1。 */
 static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_index)
 {
@@ -1261,6 +1473,46 @@ static uint16 Nag_ComputeStairResumeIndex(uint8 event_index, uint16 event_enter_
         else
         {
             resume_index = (uint16)(N.Stair_Paired_Enter_Index + 1u);
+        }
+    }
+    else
+    {
+        resume_index = N.Run_index;
+    }
+
+    if (N.Save_index >= 2u)
+    {
+        max_run_index = (uint16)(N.Save_index - 2u);
+        if (resume_index > max_run_index)
+        {
+            resume_index = max_run_index;
+        }
+    }
+
+    return resume_index;
+}
+
+/* EXIT_BUMP 完成后：从 Bout+1 接回；链式 EXIT 用锁存的 Bin 查表；无 EXIT 标记则 fallback Bin+1。 */
+static uint16 Nag_ComputeBumpResumeIndex(uint8 event_index, uint16 event_enter_index)
+{
+    uint16 exit_marker;
+    uint16 resume_index;
+    uint16 max_run_index;
+
+    if (event_index != 0xFFu)
+    {
+        resume_index = (uint16)(event_enter_index + 1u);
+    }
+    else if (N.Bump_Paired_Enter_Index != NAG_BUMP_PAIRED_ENTER_INVALID)
+    {
+        exit_marker = Nag_FindPairedExitBumpMarker(N.Bump_Paired_Enter_Index);
+        if (exit_marker != NAG_BUMP_PAIRED_ENTER_INVALID)
+        {
+            resume_index = (uint16)(exit_marker + 1u);
+        }
+        else
+        {
+            resume_index = (uint16)(N.Bump_Paired_Enter_Index + 1u);
         }
     }
     else
@@ -1370,10 +1622,10 @@ bool Nav_GetEventSpeedProfileConfig(uint8 event_type,
             *pre_decel_dist_cm = nag_enter_bridge_pre_decel_dist_cm;
             *pre_accel_dist_cm = 0.0f;
             return true;
-        case NAG_EVENT_TYPE_BUMP:
-            *target_speed = Nag_Bump_Target_Speed;
-            *pre_decel_dist_cm = Nag_Bump_PreDecel_Dist_cm;
-            return (*pre_decel_dist_cm > 0.0f);
+        case NAG_EVENT_TYPE_ENTER_BUMP:
+            *target_speed = nag_enter_bump_target_speed;
+            *pre_decel_dist_cm = nag_enter_bump_pre_decel_dist_cm;
+            return true;
         case NAG_EVENT_TYPE_ENTER_STAIR:
             *target_speed = nag_enter_stair_target_speed;
             *pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
@@ -1645,13 +1897,15 @@ static uint8 Nag_FindRecentPassedEventForPostAccel(uint16 run_index,
             continue;
         }
 
-        /* 折返/锥桶/单边桥标记由区段逻辑处理，不走元素后恢复。 */
+        /* 折返/锥桶/单边桥/颠簸标记由区段或链式逻辑处理，不走元素后恢复。 */
         if (Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_TURNAROUND ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_CONES ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_CONES ||
             Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE ||
-            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE)
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_ENTER_BUMP ||
+            Nag_Event_Table[event_index].type == NAG_EVENT_TYPE_EXIT_BUMP)
         {
             continue;
         }
@@ -1920,7 +2174,9 @@ static float Nag_ApplyGenericEventSpeed(float nav_speed)
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_CONES ||
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_CONES ||
         Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_SINGLE_BRIDGE ||
-        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE)
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_SINGLE_BRIDGE ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_ENTER_BUMP ||
+        Nag_Event_Table[next_event].type == NAG_EVENT_TYPE_EXIT_BUMP)
     {
         return adjusted;
     }
@@ -2342,6 +2598,7 @@ static float Nag_GetMileageStep(void)
     }
 
 #if Nag_OdoSlip_Enable
+    if (Nag_OdoSlip_IsRuntimeEnabled() != 0u)
     {
         float corrected_step_cm = Nag_GetCorrectedMileageStepCm(speed_forward);
         N.Mileage_Step = corrected_step_cm;
@@ -2678,8 +2935,18 @@ float Nag_GetControlSpeedTarget(void)
                 case NAG_EVENT_TYPE_ENTER_STAIR:
                     nav_speed = nag_enter_stair_target_speed;
                     break;
+                case NAG_EVENT_TYPE_ENTER_BUMP:
+                    nav_speed = nag_enter_bump_target_speed;
+                    break;
                 case NAG_EVENT_TYPE_EXIT_STAIR:
                     nav_speed = fabsf(N.Stair_Saved_SetSpeed);
+                    if (nav_speed <= 0.0f)
+                    {
+                        nav_speed = abs_user_speed;
+                    }
+                    break;
+                case NAG_EVENT_TYPE_EXIT_BUMP:
+                    nav_speed = fabsf(N.Bump_Saved_SetSpeed);
                     if (nav_speed <= 0.0f)
                     {
                         nav_speed = abs_user_speed;
@@ -2765,8 +3032,18 @@ float Nag_GetControlSpeedTarget(void)
             case NAG_EVENT_TYPE_ENTER_STAIR:
                 nav_speed = nag_enter_stair_target_speed;
                 break;
+            case NAG_EVENT_TYPE_ENTER_BUMP:
+                nav_speed = nag_enter_bump_target_speed;
+                break;
             case NAG_EVENT_TYPE_EXIT_STAIR:
                 nav_speed = fabsf(N.Stair_Saved_SetSpeed);
+                if (nav_speed <= 0.0f)
+                {
+                    nav_speed = abs_user_speed;
+                }
+                break;
+            case NAG_EVENT_TYPE_EXIT_BUMP:
+                nav_speed = fabsf(N.Bump_Saved_SetSpeed);
                 if (nav_speed <= 0.0f)
                 {
                     nav_speed = abs_user_speed;
@@ -2874,7 +3151,8 @@ void Nag_Run()
     }
 
     if (N.Event_Active && !Nag_Spin_ShouldTrackInsYaw() &&
-        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR)
+        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_STAIR &&
+        N.Event_Active_Type != NAG_EVENT_TYPE_EXIT_BUMP)
     {
         /* 非 Spin 等待态 / 非 EXIT：ENTER_STAIR 等不再发惯导 yaw；HeadingHold 元素走 ISR 补登。 */
         N.Final_Out = 0.0f;
@@ -2918,9 +3196,10 @@ void Run_Nag_Save()
 {
     N.Mileage_All += Nag_GetMileageStep();
     N.Mileage_Debug_Total += N.Mileage_Step;
-#if Nag_OdoSlip_Enable
-    Nag_OdoSlip_ApplyPendingRollback();
-#endif
+    if (Nag_OdoSlip_IsRuntimeEnabled() != 0u)
+    {
+        Nag_OdoSlip_ApplyPendingRollback();
+    }
 
     while(N.Mileage_All >= Nag_Set_mileage)    //当里程超过设定值时
     {
@@ -2979,9 +3258,10 @@ void Run_Nag_GPS()
 
     N.Mileage_All += Nag_GetMileageStep();
     N.Mileage_Debug_Total += N.Mileage_Step;
-#if Nag_OdoSlip_Enable
-    Nag_OdoSlip_ApplyPendingRollback();
-#endif
+    if (Nag_OdoSlip_IsRuntimeEnabled() != 0u)
+    {
+        Nag_OdoSlip_ApplyPendingRollback();
+    }
     max_run_index = (uint16)(N.Save_index - 2);
     while(N.Mileage_All >= Nag_Set_mileage)
     {
@@ -3011,6 +3291,7 @@ void Init_Nag()
 {
     memset(&N, 0, sizeof(N));
     N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
+    N.Bump_Paired_Enter_Index = NAG_BUMP_PAIRED_ENTER_INVALID;
     N.Bridge_Exit_Run_Index = NAG_BRIDGE_EXIT_INDEX_INVALID;
     memset(Nag_Event_Table, 0, sizeof(Nag_Event_Table));
     N.Flash_page_index=Nag_Start_Page;
@@ -3018,9 +3299,7 @@ void Init_Nag()
     N.Event_Record_Type = NAG_EVENT_TYPE_SPIN;
     flash_Nag_ResetReadState();
     flash_buffer_clear();
-#if Nag_OdoSlip_Enable
     Nag_OdoSlip_ResetState();
-#endif
 }
 
 void Nag_Begin_Record(void)
@@ -3185,9 +3464,13 @@ void Nag_Notify_Event_Done(void)
     uint8 event_index = N.Event_Active_Index;
     uint8 event_type = N.Event_Active_Type;
     uint8 chain_exit_stair = 0u;
+    uint8 chain_exit_bump = 0u;
     float preserved_saved_speed = 0.0f;
     float preserved_saved_leg = 0.0f;
+    float preserved_bump_saved_speed = 0.0f;
+    float preserved_bump_saved_leg = 0.0f;
     uint16 preserved_stair_enter_index = NAG_STAIR_PAIRED_ENTER_INVALID;
+    uint16 preserved_bump_enter_index = NAG_BUMP_PAIRED_ENTER_INVALID;
     uint16 enter_index = 0;
     uint16 exit_index = 0;
     uint16 resume_index = 0;
@@ -3218,6 +3501,14 @@ void Nag_Notify_Event_Done(void)
         N.Stair_Chain_To_Exit = 1u;
     }
 
+    if (event_type == NAG_EVENT_TYPE_ENTER_BUMP)
+    {
+        chain_exit_bump = 1u;
+        preserved_bump_saved_speed = N.Bump_Saved_SetSpeed;
+        preserved_bump_saved_leg = N.Bump_Saved_Leg_Long;
+        N.Bump_Chain_To_Exit = 1u;
+    }
+
     if (event_type == NAG_EVENT_TYPE_ENTER_STAIR &&
         event_index != 0xFFu && event_index < N.Event_Count)
     {
@@ -3225,6 +3516,15 @@ void Nag_Notify_Event_Done(void)
         N.Stair_Paired_Enter_Index = enter_index;
         preserved_stair_enter_index = enter_index;
         /* 链式切 EXIT 前保持 Ein，不推到 Ein+1。 */
+        resume_index = N.Run_index;
+    }
+    else if (event_type == NAG_EVENT_TYPE_ENTER_BUMP &&
+             event_index != 0xFFu && event_index < N.Event_Count)
+    {
+        enter_index = Nag_Event_Table[event_index].enter_index;
+        N.Bump_Paired_Enter_Index = enter_index;
+        preserved_bump_enter_index = enter_index;
+        /* 链式切 EXIT 前保持 Bin，不推到 Bin+1。 */
         resume_index = N.Run_index;
     }
     else if (event_type == NAG_EVENT_TYPE_EXIT_STAIR)
@@ -3235,6 +3535,15 @@ void Nag_Notify_Event_Done(void)
         }
         resume_index = Nag_ComputeStairResumeIndex(event_index, enter_index);
         N.Stair_Paired_Enter_Index = NAG_STAIR_PAIRED_ENTER_INVALID;
+    }
+    else if (event_type == NAG_EVENT_TYPE_EXIT_BUMP)
+    {
+        if (event_index != 0xFFu && event_index < N.Event_Count)
+        {
+            enter_index = Nag_Event_Table[event_index].enter_index;
+        }
+        resume_index = Nag_ComputeBumpResumeIndex(event_index, enter_index);
+        N.Bump_Paired_Enter_Index = NAG_BUMP_PAIRED_ENTER_INVALID;
     }
     else if (event_index != 0xFFu && event_index < N.Event_Count)
     {
@@ -3271,7 +3580,8 @@ void Nag_Notify_Event_Done(void)
     }
 
     if (event_type == NAG_EVENT_TYPE_SPIN ||
-        event_type == NAG_EVENT_TYPE_EXIT_STAIR)
+        event_type == NAG_EVENT_TYPE_EXIT_STAIR ||
+        event_type == NAG_EVENT_TYPE_EXIT_BUMP)
     {
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
         /* 丢弃元素期融合位移增量，防止恢复后第一拍 Run_index 异常跳点。 */
@@ -3286,9 +3596,7 @@ void Nag_Notify_Event_Done(void)
 
     N.Run_index = resume_index;
     N.Mileage_All = 0.0f;
-#if Nag_OdoSlip_Enable
     Nag_OdoSlip_ResetState();
-#endif
     N.Target_Request_Valid = 0;
     Nag_Element_Stop(event_type);
     Nag_ClearEventRuntimeState();
@@ -3301,6 +3609,14 @@ void Nag_Notify_Event_Done(void)
         Nag_ConsumeTableExitStairEvents();
         Nag_ActivateChainedExitStair();
     }
+    else if (chain_exit_bump != 0u)
+    {
+        N.Bump_Saved_SetSpeed = preserved_bump_saved_speed;
+        N.Bump_Saved_Leg_Long = preserved_bump_saved_leg;
+        N.Bump_Paired_Enter_Index = preserved_bump_enter_index;
+        Nag_ConsumeTableExitBumpEvents();
+        Nag_ActivateChainedExitBump();
+    }
 
     Nag_UpdatePreviewAndSpeedTarget();
     N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
@@ -3311,6 +3627,22 @@ void Nag_Element_Abort(void)
     if (!N.Event_Active)
     {
         return;
+    }
+
+    /* 颠簸区中途 Abort：恢复进入前备份的速度/腿长，强制关闭横滚平衡。 */
+    if (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_BUMP &&
+        N.Bump_Chain_To_Exit == 0u)
+    {
+        if (N.Bump_Saved_Leg_Long > 0.01f)
+        {
+            leg_long = N.Bump_Saved_Leg_Long;
+        }
+        motor_user_speed_cmd = N.Bump_Saved_SetSpeed;
+        roll_balance_en = 0u;
+        N.Bump_Saved_Leg_Long = 0.0f;
+        N.Bump_Saved_SetSpeed = 0.0f;
+        N.Bump_Locked_Yaw = 0.0f;
+        N.Bump_Elapsed_Ms = 0u;
     }
 
     /* 桥区中途 Abort：恢复进入桥前备份并清桥区状态。 */
@@ -3408,9 +3740,7 @@ void NagFlashRead(){
   N.Mileage_All = 0;
   N.Mileage_Step = 0;
   N.Mileage_Debug_Total = 0;
-#if Nag_OdoSlip_Enable
   Nag_OdoSlip_ResetState();
-#endif
   N.Run_index = 0;
   N.Prospect_index = 0;
   N.Nag_Stop_f = 0;

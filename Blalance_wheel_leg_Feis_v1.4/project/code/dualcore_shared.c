@@ -87,6 +87,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nag_enter_stair_pre_decel_dist_cm = nag_enter_stair_pre_decel_dist_cm;
   c->nag_enter_bridge_target_speed = nag_enter_bridge_target_speed;
   c->nag_enter_bridge_pre_decel_dist_cm = nag_enter_bridge_pre_decel_dist_cm;
+  c->nag_bump_duration_sec = nag_bump_duration_sec;
   c->spin_rate_max_dps = spin_rate_max_dps;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
@@ -116,6 +117,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;
   c->menu_nav_fusion_enable = g_menu_nav_fusion_enable;
+  c->menu_odo_slip_enable = g_menu_odo_slip_enable;
   c->jump_takeoff_p = jump_takeoff_p;
   c->jump_retract_p = jump_retract_p;
   c->jump_prepare_p = jump_prepare_p;

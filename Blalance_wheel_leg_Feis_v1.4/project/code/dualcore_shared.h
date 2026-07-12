@@ -78,7 +78,7 @@ typedef struct
   uint8 nav_recording_active; /* Nag_SystemRun_Index==1 && End_f==0 */
   uint8 event_active;
   uint8 event_state;
-  uint8 event_active_type; /* 0=SPIN … 5=BRIDGE_IN 6=BRIDGE_OUT 7=BUMP 8=ENTER_STAIR 9=EXIT_STAIR … */
+  uint8 event_active_type; /* 0=SPIN … 6=BRIDGE_OUT 7=ENTER_BUMP 8=EXIT_BUMP 9=ENTER_STAIR 10=EXIT_STAIR … */
   uint8 event_record_type; /* N.Event_Record_Type，录制时 KEY3 循环切换 */
   uint8 nag_vofa_group;
   float mileage_debug_total;
@@ -98,6 +98,7 @@ typedef struct
   float nag_enter_stair_pre_decel_dist_cm;
   float nag_enter_bridge_target_speed;      /* 单边桥进目标速度（Launch/Flash） */
   float nag_enter_bridge_pre_decel_dist_cm; /* 单边桥进预减速距离 cm */
+  float nag_bump_duration_sec;            /* 颠簸接管时长（秒，Launch/Flash V12） */
   float spin_rate_max_dps;
   float speed_target_effective;
   uint8 spin_enable;
@@ -108,6 +109,7 @@ typedef struct
   uint8 menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Run Config 可配，Save 写 Flash */
   uint8 menu_vofa_enable;      /* 0=关 1=开 VOFA 无线调试；Run Config 可配，Save 写 Flash V6 */
   uint8 menu_nav_fusion_enable; /* 0=关 1=开 GPS+惯导融合；Run Config 可配，Save 写 Flash V10 */
+  uint8 menu_odo_slip_enable;    /* 0=关 1=开里程打滑纠偏；Run Config 可配，Save 写 Flash V13 */
   float jump_takeoff_p;
   float jump_retract_p;
   float jump_prepare_p;
