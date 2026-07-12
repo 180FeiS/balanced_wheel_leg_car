@@ -264,9 +264,6 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_RATE_SETTLE_DPS        6.0f   // 接近目标时，实测角速度也要足够小才允许结束
 #define STEER_RATE_TARGET_MAX_DPS   200.0f   // 外环生成的目标角速度上限，限制普通转向的灵敏度
 #define STEER_CMD_MAX              1500.0f   // 最终差速限幅，防止普通转向输出过猛影响平衡
-#define STEER_HOLD_ANGLE_GAIN_SCALE   5.0f   // 锁航向 continuous 外环增益倍率，提高抗外界扰动能力
-#define STEER_HOLD_RATE_TARGET_MAX_DPS 360.0f // 锁航向 continuous 目标角速度上限
-#define STEER_HOLD_CMD_MAX          2300.0f   // 锁航向 continuous 差速上限
 
 #define BRIDGE_STEER_KP            0.015f
 #define BRIDGE_STEER_KPP           0.00008f
@@ -518,8 +515,8 @@ void spin_task_stop(void)
 /* 设置绝对航向目标：
  * 1. 这是“立即执行”接口，若当前在自旋，会直接停掉自旋并切入普通转向；
  * 2. 约定 target_yaw_deg 使用 [-180, 180] 度，函数内部仍会做一次包角保护；
- * 3. 不要在周期里重复调用，否则会不断刷新任务状态、reset PID，影响闭环收敛；
- *    元素锁航向 continuous 模式见 Nag_HeadingHold_IsContinuousActive + pid_ctrl_Run 持久双环。
+ * 3. 普通点转不要在周期里重复调用，否则会不断刷新任务状态、reset PID；
+ *    锁航向元素实测需要这个“每 ms 重下发目标”的硬锁航效果，见 pit0_ch0_isr。
  */
 void steer_set_target_yaw(float target_yaw_deg)
 {
@@ -1277,9 +1274,6 @@ void pid_ctrl_Run(void)
         {
             static uint8 steer_settle_count = 0;
             uint8 heading_hold_continuous = Nag_HeadingHold_IsContinuousActive() ? 1u : 0u;
-            float angle_err_for_pid;
-            float rate_target_max;
-            float steer_cmd_max;
 
             steer_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
             steer_rate_target_dps = 0.0f;
@@ -1295,32 +1289,20 @@ void pid_ctrl_Run(void)
 
             /* 普通转向用“目标航向 - 当前航向”的归一化误差做外环输入。 */
             steer_angle_err = (float)ange_deviation1(steer_target_yaw_deg, euler_angle.yaw);
-            if (heading_hold_continuous != 0u)
-            {
-                angle_err_for_pid = steer_angle_err * STEER_HOLD_ANGLE_GAIN_SCALE;
-                rate_target_max = STEER_HOLD_RATE_TARGET_MAX_DPS;
-                steer_cmd_max = STEER_HOLD_CMD_MAX;
-            }
-            else
-            {
-                angle_err_for_pid = steer_angle_err;
-                rate_target_max = STEER_RATE_TARGET_MAX_DPS;
-                steer_cmd_max = STEER_CMD_MAX;
-            }
 
             /* 外环：航向误差 -> 目标角速度。 */
             pid_set_target(&turn_angle, 0.0f);
-            pid_get_observation(&turn_angle, -angle_err_for_pid);
+            pid_get_observation(&turn_angle, -steer_angle_err);
             pid_set_dt(&turn_angle, dt_pid_turn_angle);
             pid_run(&turn_angle);
-            steer_rate_target_dps = clip(turn_angle.out, -rate_target_max, rate_target_max);
+            steer_rate_target_dps = clip(turn_angle.out, -STEER_RATE_TARGET_MAX_DPS, STEER_RATE_TARGET_MAX_DPS);
 
             /* 内环：目标角速度 -> 左右轮差速输出。 */
             pid_set_target(&turn_gyro, steer_rate_target_dps);
             pid_get_observation(&turn_gyro, steer_rate_meas_dps);
             pid_set_dt(&turn_gyro, dt_pid_turn_gyro);
             pid_run(&turn_gyro);
-            set_steer_cmd(clip(turn_gyro.out, -steer_cmd_max, steer_cmd_max));
+            set_steer_cmd(clip(turn_gyro.out, -STEER_CMD_MAX, STEER_CMD_MAX));
 
             /* 角度和角速度都进入收敛窗口后，再连续确认若干个周期再结束，
              * 可以避免刚到目标附近时因为摆头/噪声导致“到位-没到位”反复抖动。

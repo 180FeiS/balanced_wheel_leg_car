@@ -78,7 +78,12 @@ void pit0_ch0_isr() // 定时器通道 0 周期中断服务函数
      * 2. 自旋时：只保留最新目标并延迟，避免请求式转向打断 spin_task_start()；
      * 3. 元素锁航向模块也在这里前置补登请求，但仍复用同一套 pending 消费链路。
      */
-    if (Nag_HeadingHold_ShouldRequest())
+    if (Nag_HeadingHold_IsContinuousActive())
+    {
+        /* 锁航向元素期每 1ms 重登记目标，复现旧版“目标持续刷新”的硬锁航效果。 */
+        steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());
+    }
+    else if (Nag_HeadingHold_ShouldRequest())
     {
         steer_request_target_yaw(Nag_HeadingHold_GetTargetYaw());
     }
