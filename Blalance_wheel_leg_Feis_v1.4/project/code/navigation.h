@@ -348,12 +348,12 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
  */
 
 /* 元素航向保持配置：
- * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw；
- * 2. ISR 会在 steer_yaw_request_pending 消费前，按需重新登记该固定目标；
+ * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw（或 Bin/enter_index 单点 yaw）；
+ * 2. ISR 首次 arm 后 steer_request → steer_set_target_yaw 引导；continuous 期间由 pid_ctrl_Run 每 ms 双环纠偏（见 Nag_HeadingHold_IsContinuousActive）；
  * 3. 自旋元素：等待期由 Nag_Run 继续跟踪 Angle_Run；起转后 spin_enable 接管，见 Nag_HeadingHold_Spin_Enable 说明；
  * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
  */
-#define Nag_HeadingHold_Reissue_Error 2.0f      // 已解锁普通转向后，实际 yaw 偏离锁定目标超过该阈值才重新登记保持请求
+#define Nag_HeadingHold_Reissue_Error 2.0f      // 非 continuous 兜底：steer_finish 后偏离超过该阈值才重新登记；continuous 期间基本不依赖
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
 //********************************************************//
@@ -661,6 +661,7 @@ void Nag_EventForceReset(void);
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
 bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
 float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标
+bool Nag_HeadingHold_IsContinuousActive(void); //1=锁航向元素期持续双环纠偏（pid_ctrl_Run 不 steer_finish）
 bool Nag_Element_Start(uint8 event_type); /* event_type：N.Event_Active_Type；true 则进入 RUNNING */
 void Nag_Element_Run(uint8 event_type);
 bool Nag_Element_IsDone(uint8 event_type); /* true：本周期转入 DONE 并随后 Nag_Notify_Event_Done */

@@ -210,9 +210,9 @@ static void Nag_HeadingHold_Enable(float target_yaw)
     N.HeadingHold_Target_Yaw = target_yaw;
     N.HeadingHold_Target_Latched = 1u;
     N.HeadingHold_Enable = 1u;
-    /* 这里不直接反复调用 steer_set_target_yaw()。
-     * 统一通过 ISR 前置登记请求，再走现有 pending -> consume 链路，
-     * 可以继续复用 spin_enable 的互斥保护，避免普通转向与自旋直接抢控制权。
+    /* 不每 ms 直接调 steer_set_target_yaw()（会 reset turn_angle/turn_gyro）。
+     * 首次由 ISR ShouldRequest -> steer_request -> steer_set_target_yaw 引导；
+     * continuous 期间 pid_ctrl_Run 每 ms 刷新目标并跑双环，见 Nag_HeadingHold_IsContinuousActive()。
      */
     N.HeadingHold_Request_Armed = 1u;
 }
@@ -2637,6 +2637,21 @@ float Nag_HeadingHold_GetTargetYaw(void)
         return (float)euler_angle.yaw;
     }
     return N.HeadingHold_Target_Yaw;
+}
+
+bool Nag_HeadingHold_IsContinuousActive(void)
+{
+    if (!N.HeadingHold_Enable ||
+        !N.HeadingHold_Target_Latched ||
+        !N.HeadingHold_Event_Allowed)
+    {
+        return false;
+    }
+    if (spin_enable)
+    {
+        return false;
+    }
+    return true;
 }
 
 bool Nag_HeadingHold_ShouldRequest(void)
