@@ -99,6 +99,8 @@ typedef struct
   float nag_enter_bridge_target_speed;      /* 单边桥进目标速度（Launch/Flash） */
   float nag_enter_bridge_pre_decel_dist_cm; /* 单边桥进预减速距离 cm */
   float nag_bump_duration_sec;            /* 颠簸接管时长（秒，Launch/Flash V12） */
+  float nag_enter_bump_target_speed;    /* 颠簸段目标速度（Launch/Flash V14） */
+  float nag_enter_stair2_target_speed;  /* 台阶2白块引导目标速度（Launch/Flash V15） */
   float spin_rate_max_dps;
   float speed_target_effective;
   uint8 spin_enable;
@@ -196,6 +198,8 @@ typedef struct
   uint8 fusion_calib_failed;
   /* 1=惯导 ENTER_STAIR 接管中；CM7_1 仅此时跑 step_detect / step_visual_jump_after_step */
   uint8 stair_enter_active;
+  /* 1=惯导 ENTER_STAIR2 白块引导中；CM7_1 跑 image_bridge_blob_process_frame */
+  uint8 stair2_enter_active;
   /* 1=桥上白块引导中（BridgeIn 确认～白块丢失出桥） */
   uint8 bridge_zone_active;
   /* 1=同 bridge_zone_active；CM7_1 跑 image_bridge_blob_process_frame */

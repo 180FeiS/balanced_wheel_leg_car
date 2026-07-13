@@ -96,6 +96,17 @@ int main(void)
             image_vision_guidance_reset();
 #endif
         }
+        /* 台阶2元素：stair2_enter_active 时白块寻迹（复用桥区 blob 检测） */
+        else if (!MenuIsImageSectionPage() && (ctrl.stair2_enter_active != 0u))
+        {
+#if IMAGE_BRIDGE_WHITE_BLOB_ENABLE
+            if (mt9v03x_finish_flag != 0u)
+            {
+                mt9v03x_finish_flag = 0u;
+                image_bridge_blob_process_frame(hd_threshold);
+            }
+#endif
+        }
         /* 单边桥元素：bridge_zone_active 时仅白块寻迹（IMAGE_BRIDGE_WHITE_BLOB_ENABLE） */
         else if (!MenuIsImageSectionPage() && (ctrl.bridge_zone_active != 0u))
         {

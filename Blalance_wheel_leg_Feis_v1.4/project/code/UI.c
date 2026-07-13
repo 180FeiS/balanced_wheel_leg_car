@@ -1290,6 +1290,10 @@ static float GUI_RunLaunchParamValue(uint8 field_index)
         return s_ui_dc.nag_enter_bridge_pre_decel_dist_cm;
     case Nag_Launch_Field_Bump_Dur:
         return s_ui_dc.nag_bump_duration_sec;
+    case Nag_Launch_Field_Bump_Spd:
+        return s_ui_dc.nag_enter_bump_target_speed;
+    case Nag_Launch_Field_Stair2_Spd:
+        return s_ui_dc.nag_enter_stair2_target_speed;
     case Nag_Launch_Field_Spin_Rate:
         return s_ui_dc.spin_rate_max_dps;
     default:
@@ -1306,53 +1310,97 @@ void GUI_3_1_1(void) /* Launch 三级页：KEY1 选字段，KEY2/3 调值，KEY4 返回 */
     {
         "BaseSpd", "SpinSpd", "SpinDec",
         "TrnInSp", "TrnInDc", "TrnOutSp", "TrnOutAc",
-        "ConeSpd", "ConeDec", "SpinRt", "StairSp", "StairDec",
-        "BrgInSp", "BrgInDc", "BumpSec"
+        "ConeSpd", "ConeDec", "SpinRt", "StairSp", "StairDc",
+        "BrgInSp", "BrgInDc", "BumpSec", "BumpSpd", "St2Spd"
     };
-    static const int16 rows[Nag_Run_Launch_Param_Count] =
+    static const int16 rows[8] =
     {
-        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11, ROW_12, ROW_13, ROW_14,
-        ROW_15, ROW_16, ROW_17, ROW_18
+        ROW_4, ROW_5, ROW_6, ROW_7, ROW_8, ROW_9, ROW_10, ROW_11
     };
+    static const int16 left_arrow_x = 0;
+    static const int16 left_label_x = 16;
+    static const int16 left_val_x = 74;
+    static const int16 right_arrow_x = 120;
+    static const int16 right_label_x = 132;
+    static const int16 right_val_x = 180;
+    static const uint8 launch_fields_per_page = 16u;
     uint8 field_index = 0u;
     uint8 selected = Menu_GetRunLaunchFieldIndex();
+    uint8 display_start = 0u;
+    uint8 display_end = 0u;
+    uint8 row = 0u;
+    int16 arrow_x = 0;
+    int16 label_x = 0;
+    int16 val_x = 0;
+
+    if (selected >= launch_fields_per_page)
+    {
+        display_start = (uint8)(Nag_Run_Launch_Param_Count - launch_fields_per_page);
+    }
+    display_end = (uint8)(display_start + launch_fields_per_page);
+    if (display_end > Nag_Run_Launch_Param_Count)
+    {
+        display_end = Nag_Run_Launch_Param_Count;
+    }
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Launch");
-    ips200_draw_line(16, ROW_17, 223, ROW_17, IPS200_DEFAULT_PENCOLOR);
+    ips200_draw_line(16, ROW_12, 223, ROW_12, IPS200_DEFAULT_PENCOLOR);
 
-    for (field_index = 0u; field_index < Nag_Run_Launch_Param_Count; field_index++)
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+#endif
+
+    for (field_index = display_start; field_index < display_end; field_index++)
     {
         float value = GUI_RunLaunchParamValue(field_index);
+        uint8 slot = (uint8)(field_index - display_start);
+
+        if (slot < 8u)
+        {
+            row = slot;
+            arrow_x = left_arrow_x;
+            label_x = left_label_x;
+            val_x = left_val_x;
+        }
+        else
+        {
+            row = (uint8)(slot - 8u);
+            arrow_x = right_arrow_x;
+            label_x = right_label_x;
+            val_x = right_val_x;
+        }
 
         /* 每帧全页重绘时须擦除旧箭头，否则 KEY1 切换后上一行 "->" 仍残留 */
         if (selected == field_index)
         {
-            ips200_show_string(0, rows[field_index], "->");
+            ips200_show_string(arrow_x, rows[row], "->");
         }
         else
         {
-            ips200_show_string(0, rows[field_index], "  ");
+            ips200_show_string(arrow_x, rows[row], "  ");
         }
-        ips200_show_string(16, rows[field_index], labels[field_index]);
-        /* ips200_show_float 要求 pointnum 为 1~6，不可为 0 */
+        ips200_show_string(label_x, rows[row], labels[field_index]);
+        /* 8x16 字体宽 8px；240 屏右列数值起点须 <=184，速度用 4 位整数避免越界 */
         if (Nag_LaunchParamIsSpeed(field_index))
         {
-            ips200_show_float(96, rows[field_index], (double)value, 5, 1);
+            ips200_show_float(val_x, rows[row], (double)value, 4, 1);
         }
         else if (Nag_LaunchParamIsSpinRate(field_index))
         {
-            ips200_show_int(96, rows[field_index], (int32)value, 4);
+            ips200_show_int(val_x, rows[row], (int32)value, 4);
         }
         else if (Nag_LaunchParamIsBumpDuration(field_index))
         {
-            ips200_show_int(96, rows[field_index], (int32)value, 3);
+            ips200_show_int(val_x, rows[row], (int32)value, 3);
         }
         else
         {
-            ips200_show_int(96, rows[field_index], (int32)value, 4);
+            ips200_show_int(val_x, rows[row], (int32)value, 4);
         }
     }
+
+    ips200_show_string(8, ROW_13, "K1:nxt K2:+ K3:- K4:bk");
 }
 
 void ACT_3_1_1()

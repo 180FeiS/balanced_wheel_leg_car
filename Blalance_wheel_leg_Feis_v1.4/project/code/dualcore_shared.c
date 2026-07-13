@@ -88,6 +88,8 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nag_enter_bridge_target_speed = nag_enter_bridge_target_speed;
   c->nag_enter_bridge_pre_decel_dist_cm = nag_enter_bridge_pre_decel_dist_cm;
   c->nag_bump_duration_sec = nag_bump_duration_sec;
+  c->nag_enter_bump_target_speed = nag_enter_bump_target_speed;
+  c->nag_enter_stair2_target_speed = nag_enter_stair2_target_speed;
   c->spin_rate_max_dps = spin_rate_max_dps;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
@@ -96,6 +98,9 @@ void dualcore_ctrl_to_ui_publish(void)
   c->jump_active = (uint8)(jump_flag ? 1u : 0u);
   c->stair_enter_active = (uint8)((N.Event_Active != 0u) &&
                                   (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR));
+  c->stair2_enter_active = (uint8)((N.Stair2_Zone_Active != 0u) ||
+                                   ((N.Event_Active != 0u) &&
+                                    (N.Event_Active_Type == NAG_EVENT_TYPE_ENTER_STAIR2)));
   c->bridge_zone_active = N.Bridge_Zone_Active;
   c->bridge_detect_arm = N.Bridge_Zone_Active;
   c->odo_wheel_left_cmps = N.Odo_Wheel_Left_Cmps;

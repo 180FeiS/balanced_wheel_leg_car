@@ -161,7 +161,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_EnterBridge_Target_Speed_Default 500.0f   // 桥进目标速度（Launch/Flash 可调）
 #define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f // 桥进前预减速距离（cm）
 #define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
-#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出标记：恢复腿长
+#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出兜底腿长（正常路径恢复 Bridge_Saved_Leg_Long）
 #define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
 /** 宽限后 track_valid=0 连续该时间（ms）确认出桥；1ms ISR 读快照，不依赖 fresh */
 #define BRIDGE_BLOB_LOST_EXIT_MS        250u
@@ -209,9 +209,32 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 Nav_read[enter_index]）
 
 /* 退出台阶元素（EXIT_STAIR）：三次跳跃完成后软件链式切入；见 Nag_Hook_ExitStair_* */
-#define Nag_ExitStair_Leg_Long 3.5f              // 退出后恢复腿长
+#define Nag_ExitStair_Leg_Long 3.5f              // 台阶出兜底腿长（正常路径恢复 Stair_Saved_Leg_Long）
 #define Nag_Stair_Jump_Exit_Count 3u             // 进入台阶内完成该次数跳跃后切 EXIT
 #define Nag_HeadingHold_ExitStair_Enable 0u      // 退出后立即交还惯导 yaw
+
+/*
+ * 台阶2双点录制（白块引导，惯导回放）：
+ * 1) KEY4 切 Stair2In，上台阶2前打点（S2in）；
+ * 2) KEY4 切 Stair2Out，期望接回路径处打点（S2out，仅作里程锚点）；
+ * 3) 回放：S2in 触发后先沿惯导寻第一白块；找到后冻结 Run_index 并按白块修正 yaw；
+ *    第一白块连续丢失 STAIR2_BLOB_LOST_CONFIRM_MS 后锁消失时 yaw 过深色路面（不退出元素）；
+ *    第二白块出现后继续白块引导；第二白块连续丢失 STAIR2_BLOB_LOST_CONFIRM_MS 后链式切 EXIT_STAIR2，
+ *    从 S2out 录制点接回惯导。
+ * 见 Nag_FindPairedExitStair2Marker / Nag_ComputeStair2ResumeIndex（navigation.c）。
+ */
+#define Nag_EnterStair2_Target_Speed_Default 500.0f  // 台阶2元素期目标速度（Launch/Flash 可调）
+extern float nag_enter_stair2_target_speed;
+/** 白块 track_valid=0 连续该时间（ms）确认丢失；第一块→锁 yaw，第二块→链式 EXIT */
+#define STAIR2_BLOB_LOST_CONFIRM_MS     250u
+/** 元素激活后该时间内禁止丢失判定（ms），给 CM7_1 启动 blob 留时间 */
+#define STAIR2_ENTER_GRACE_MS           400u
+/** 激活后该时间仍无 CM7_1 白块新帧，则中止元素，避免视觉任务关闭时卡死 */
+#define STAIR2_BLOB_NO_FRAME_EXIT_MS    1000u
+/** 白块 center_err → yaw 偏移系数（与单边桥同量级） */
+#define Nag_Stair2Blob_Yaw_K_Pixel      0.22f
+#define Nag_Stair2Blob_Yaw_Max_Offset   30.0f
+#define Nag_Stair2Blob_Yaw_Deadband      0.1f
 
 /* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
  * 1. yaw 轨迹仍放在页 2~45；
@@ -222,7 +245,7 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Event_Max 8u
 #define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
-#define Nag_Event_Version 6u            // v6：BUMP 拆为 ENTER/EXIT_BUMP，STAIR type 9/10；旧事件表需重录
+#define Nag_Event_Version 7u            // v7：新增 ENTER/EXIT_STAIR2 type 11/12；旧事件表需重录
 
 /* Run Launch 参数页（页 47）：
  * v1：仅 run_launch_speed；v2：7 个 float；v3：9 个 float（折返进/出口各两项）；v4：10 个 float（含自旋角速度）；
@@ -231,7 +254,9 @@ extern float nag_enter_stair_pre_decel_dist_cm;
  * v10：v9 + g_menu_nav_fusion_enable @ [19]；
  * v11：v10 布局在 [12] 插入 enter_stair target speed，[13..20] 顺延；
  * v12：v11 + nag_bump_duration_sec @ [21]；
- * v13：v12 + g_menu_odo_slip_enable @ [22]。
+ * v13：v12 + g_menu_odo_slip_enable @ [22]；
+ * v14：v13 + nag_enter_bump_target_speed @ [23]；
+ * v15：v14 + nag_enter_stair2_target_speed @ [24]。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -248,7 +273,9 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Run_Launch_Params_Version_V11 11u    /* v11：v10 + enter_stair target speed @ [12] */
 #define Nag_Run_Launch_Params_Version_V12 12u    /* v12：v11 + nag_bump_duration_sec @ [21] */
 #define Nag_Run_Launch_Params_Version_V13 13u    /* v13：v12 + g_menu_odo_slip_enable @ [22] */
-#define Nag_Run_Launch_Param_Count 15u
+#define Nag_Run_Launch_Params_Version_V14 14u    /* v14：v13 + nag_enter_bump_target_speed @ [23] */
+#define Nag_Run_Launch_Params_Version_V15 15u    /* v15：v14 + nag_enter_stair2_target_speed @ [24] */
+#define Nag_Run_Launch_Param_Count 17u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
 #define Nag_Run_Launch_Config_Word_Count_V7 13u  /* v7：11 float + 2 config word */
@@ -257,7 +284,9 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Run_Launch_Config_Word_Count_V10 17u /* v10：v9 + g_menu_nav_fusion_enable @ [19] */
 #define Nag_Run_Launch_Config_Word_Count_V11 18u /* v11：v10 顺延 + enter_stair target @ [12] */
 #define Nag_Run_Launch_Config_Word_Count_V12 19u /* v12：v11 + bump_duration @ [21] */
-#define Nag_Run_Launch_Config_Word_Count 20u     /* v13：v12 + odo_slip_enable @ [22] */
+#define Nag_Run_Launch_Config_Word_Count_V13 20u /* v13：v12 + odo_slip_enable @ [22] */
+#define Nag_Run_Launch_Config_Word_Count_V14 21u /* v14：v13 + bump_target_speed @ [23] */
+#define Nag_Run_Launch_Config_Word_Count 22u     /* v15：v14 + stair2_target_speed @ [24] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -275,6 +304,8 @@ extern float nag_enter_stair_pre_decel_dist_cm;
 #define Nag_Launch_Field_BridgeIn_Spd 12u   /* 单边桥进目标速度 */
 #define Nag_Launch_Field_BridgeIn_Dec 13u   /* 单边桥进预减速距离（cm） */
 #define Nag_Launch_Field_Bump_Dur 14u       /* 颠簸接管时长（秒），Launch KEY2/3 步进 1s */
+#define Nag_Launch_Field_Bump_Spd 15u       /* 颠簸段目标速度（motor_user_speed_cmd 档位） */
+#define Nag_Launch_Field_Stair2_Spd 16u     /* 台阶2白块引导目标速度（motor_user_speed_cmd 档位） */
 
 #define Nag_Bump_Duration_Sec_Min 1.0f      /* Launch/Set 下限，避免 0s 立即链式退出 */
 #define Nag_Bump_Duration_Sec_Max 60.0f     /* Launch/Set 上限（秒） */
@@ -293,7 +324,9 @@ static inline uint8 Nag_LaunchParamIsSpeed(uint8 field_index)
                    (field_index == Nag_Launch_Field_TurnOut_Spd) ||
                    (field_index == Nag_Launch_Field_Cone_Spd) ||
                    (field_index == Nag_Launch_Field_Stair_Spd) ||
-                   (field_index == Nag_Launch_Field_BridgeIn_Spd));
+                   (field_index == Nag_Launch_Field_BridgeIn_Spd) ||
+                   (field_index == Nag_Launch_Field_Bump_Spd) ||
+                   (field_index == Nag_Launch_Field_Stair2_Spd));
 }
 
 static inline uint8 Nag_LaunchParamIsSpinRate(uint8 field_index)
@@ -356,6 +389,13 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 #define Nag_HeadingHold_Reissue_Error 2.0f      // 非 continuous 兜底：steer_finish 后偏离超过该阈值才重新登记；continuous 期间基本不依赖
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
+#define Nag_Element_Enter_Beep_Enable 1u        // 1=回放/GPS 切入任意元素时蜂鸣一声
+#ifndef BRIDGE_BEEP_MS
+#define BRIDGE_BEEP_MS 100u                   // 与 init.h 一致；未包含 init.h 时的兜底
+#endif
+#ifndef NAG_ELEMENT_ENTER_BEEP_MS
+#define NAG_ELEMENT_ENTER_BEEP_MS BRIDGE_BEEP_MS
+#endif
 //********************************************************//
 
 /* 元素类型枚举：
@@ -379,11 +419,13 @@ typedef enum
     NAV_ELEM_BUMP_OUT = 9,
     NAV_ELEM_STAIR_IN = 10,
     NAV_ELEM_STAIR_OUT = 11,
-    NAV_ELEM_END = 12,
-    NAV_ELEM_COUNT = 13,
+    NAV_ELEM_STAIR2_IN = 12,
+    NAV_ELEM_STAIR2_OUT = 13,
+    NAV_ELEM_END = 14,
+    NAV_ELEM_COUNT = 14,
 } Nav_Unified_Element;
 
-#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR_OUT
+#define NAV_ELEM_RECORD_CYCLE_MAX NAV_ELEM_STAIR2_OUT
 
 static inline uint8 Nav_UnifiedToInsEvent(uint8 unified)
 {
@@ -409,13 +451,14 @@ static inline uint8 Nav_UnifiedIsMarker(uint8 unified)
     return (uint8)((unified == NAV_ELEM_TURN_IN) || (unified == NAV_ELEM_TURN_OUT) ||
                    (unified == NAV_ELEM_CONE_IN) || (unified == NAV_ELEM_CONE_OUT) ||
                    (unified == NAV_ELEM_BRIDGE_IN) || (unified == NAV_ELEM_BRIDGE_OUT) ||
-                   (unified == NAV_ELEM_BUMP_OUT));
+                   (unified == NAV_ELEM_BUMP_OUT) ||
+                   (unified == NAV_ELEM_STAIR2_OUT));
 }
 
 static inline uint8 Nav_UnifiedIsTakeover(uint8 unified)
 {
     return (uint8)((unified == NAV_ELEM_SPIN) || (unified == NAV_ELEM_STAIR_IN) ||
-                   (unified == NAV_ELEM_BUMP_IN));
+                   (unified == NAV_ELEM_BUMP_IN) || (unified == NAV_ELEM_STAIR2_IN));
 }
 
 static inline uint8 Nav_UnifiedIsPassThrough(uint8 unified)
@@ -439,6 +482,8 @@ static inline const char *Nav_GetUnifiedElementName(uint8 unified)
         case NAV_ELEM_BUMP_OUT: return "BumpOut";
         case NAV_ELEM_STAIR_IN: return "StairIn";
         case NAV_ELEM_STAIR_OUT: return "StairOut";
+        case NAV_ELEM_STAIR2_IN: return "Stair2In";
+        case NAV_ELEM_STAIR2_OUT: return "Stair2Out";
         case NAV_ELEM_END: return "End";
         default: return "Unknown";
     }
@@ -457,8 +502,19 @@ typedef enum
        NAG_EVENT_TYPE_EXIT_BUMP = 8,         // 退出颠簸：恢复 speed/leg、关横滚，首拍完成并接回 Bout+1
        NAG_EVENT_TYPE_ENTER_STAIR = 9,       // 进入台阶：锁航向+固定速度/腿长+台阶视觉；3 跳后链式 EXIT
        NAG_EVENT_TYPE_EXIT_STAIR = 10,       // 退出台阶：恢复基准速度与腿长 3.5，首拍完成
-       NAG_EVENT_TYPE_COUNT = 11,            // 元素类型数量，录制时用于循环切换
+       NAG_EVENT_TYPE_ENTER_STAIR2 = 11,    // 进入台阶2：白块引导；第二白块丢失后链式 EXIT
+       NAG_EVENT_TYPE_EXIT_STAIR2 = 12,      // 退出台阶2：从 S2out 里程点接回惯导，首拍完成
+       NAG_EVENT_TYPE_COUNT = 13,            // 元素类型数量，录制时用于循环切换
 } Nag_Event_Type;
+
+/** ENTER_STAIR2 内部阶段（N.Stair2_Phase） */
+typedef enum
+{
+       NAG_STAIR2_PHASE_SEEK_FIRST = 0,   /* 沿惯导寻第一白块，Run_index 仍推进 */
+       NAG_STAIR2_PHASE_TRACK_FIRST = 1,  /* 跟第一白块，里程已冻结 */
+       NAG_STAIR2_PHASE_DARK_HOLD = 2,    /* 第一白块丢失，锁 yaw 过深色路面 */
+       NAG_STAIR2_PHASE_TRACK_SECOND = 3, /* 跟第二白块 */
+} Nag_Stair2_Phase;
 
 /* CM7_1 不链接 navigation.c，元素类型名映射放头文件内联 */
 static inline const char *Nag_GetEventTypeName(uint8 event_type)
@@ -476,6 +532,8 @@ static inline const char *Nag_GetEventTypeName(uint8 event_type)
         case NAG_EVENT_TYPE_EXIT_BUMP: return "ExitBump";
         case NAG_EVENT_TYPE_ENTER_STAIR: return "EnterStair";
         case NAG_EVENT_TYPE_EXIT_STAIR: return "ExitStair";
+        case NAG_EVENT_TYPE_ENTER_STAIR2: return "Stair2In";
+        case NAG_EVENT_TYPE_EXIT_STAIR2: return "Stair2Out";
         default: return "Unknown";
     }
 }
@@ -566,6 +624,17 @@ typedef struct{
        uint8 Bridge_Exit_Beep_Done;   // 本段桥已响出桥蜂鸣
        float Bridge_Locked_Yaw;       // 保留字段；新方案不再使用 IMU 锁航
        uint16 Bridge_Exit_Run_Index;  // 进桥时缓存配对 BridgeOut enter_index；0xFFFF=未配对
+       /* 台阶2白块引导（ENTER_STAIR2～EXIT_STAIR2） */
+       uint8 Stair2_Zone_Active;       // 1=台阶2元素期白块引导中
+       uint8 Stair2_Detect_Arm;        // 1=CM7_1 跑白块 detect（同 Zone_Active）
+       uint8 Stair2_Phase;             // Nag_Stair2_Phase：寻第一白块/跟第一/锁 yaw/跟第二
+       uint8 Stair2_First_Blob_Latched;// 1=已找到第一白块并冻结 Run_index
+       uint8 Stair2_Second_Blob_Seen;  // 1=深色段后已重新捕获第二白块
+       uint8 Stair2_Chain_To_Exit;    // 1=链式切 EXIT_STAIR2，EnterStair2_Stop 跳过恢复
+       float Stair2_Saved_SetSpeed;    // 进入台阶2前备份 motor_user_speed_cmd
+       float Stair2_Hold_Yaw;          // DARK_HOLD 阶段锁定的航向（deg）
+       uint16 Stair2_Exit_Run_Index;   // 进元素时缓存配对 Stair2Out enter_index；0xFFFF=未配对
+       uint16 Stair2_Paired_Enter_Index; /* 链式 EXIT 时锁存 S2in；0xFFFF=无效 */
        uint8 HeadingHold_Enable; //1表示当前元素期间已启用“锁定固定航向”模块
        uint8 HeadingHold_Request_Armed; //1表示 ISR 下一次应优先登记一次锁航向请求
        uint8 HeadingHold_Target_Latched; //1表示 HeadingHold_Target_Yaw 已锁存有效目标
@@ -632,6 +701,9 @@ void Nag_Run(); //偏航角控制总函数
 uint8 Nag_BridgeDetectShouldArm(void); /* 1=Bridge_Zone_Active，供 CM7_1 白块门控 */
 void Nag_BridgeDetectUpdate(void);     /* 桥区白块 yaw + 新帧复位无帧超时 */
 void Nag_BridgeTimeoutTick1ms(void);
+uint8 Nag_Stair2DetectShouldArm(void); /* 1=Stair2_Zone_Active，供 CM7_1 白块门控 */
+void Nag_Stair2DetectUpdate(void);     /* 台阶2白块 yaw / 锁 yaw / 阶段推进 */
+void Nag_Stair2TimeoutTick1ms(void);
 void Run_Nag_GPS();//偏航角读取
 
 void NagFlashRead();   //Flash读取目标点数组
@@ -714,6 +786,17 @@ bool Nag_Hook_ExitStair_Start(void);
 void Nag_Hook_ExitStair_Run(void);
 bool Nag_Hook_ExitStair_IsDone(void);
 void Nag_Hook_ExitStair_Stop(void);
+
+/* 台阶2进/出：白块双段引导；S2out 为里程锚点，第二白块丢失后链式 EXIT 接回 */
+bool Nag_Hook_EnterStair2_Start(void);
+void Nag_Hook_EnterStair2_Run(void);
+bool Nag_Hook_EnterStair2_IsDone(void);
+void Nag_Hook_EnterStair2_Stop(void);
+
+bool Nag_Hook_ExitStair2_Start(void);
+void Nag_Hook_ExitStair2_Run(void);
+bool Nag_Hook_ExitStair2_IsDone(void);
+void Nag_Hook_ExitStair2_Stop(void);
 
 /* 锥桶：仅路径标记，Start 置真、首拍 IsDone 真以尽快接回惯导，供后续按 Run_index/事件表做区段限速 */
 bool Nag_Hook_EnterCones_Start(void);

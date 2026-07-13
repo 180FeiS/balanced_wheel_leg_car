@@ -33,7 +33,7 @@ pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
 float pitch_mid = 1.5;  // pitch机械中值（俯仰平衡）1.0
-float roll_mid = 4.2; // roll机械中值（横滚平衡，leg_hight PID目标） -0.5
+float roll_mid = -0.7; // roll机械中值（横滚平衡，leg_hight PID目标） -0.5
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -264,7 +264,7 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_RATE_SETTLE_DPS        6.0f   // 接近目标时，实测角速度也要足够小才允许结束
 #define STEER_RATE_TARGET_MAX_DPS   200.0f   // 外环生成的目标角速度上限，限制普通转向的灵敏度
 #define STEER_CMD_MAX              1500.0f   // 最终差速限幅，防止普通转向输出过猛影响平衡
-#define STEER_HOLD_ANGLE_GAIN_SCALE   5.0f   // 锁航向 continuous 外环增益倍率，提高抗外界扰动能力
+#define STEER_HOLD_ANGLE_GAIN_SCALE   4.0f   // 锁航向 continuous 外环增益倍率，提高抗外界扰动能力
 #define STEER_HOLD_RATE_TARGET_MAX_DPS 360.0f // 锁航向 continuous 目标角速度上限
 #define STEER_HOLD_CMD_MAX          2300.0f   // 锁航向 continuous 差速上限
 
