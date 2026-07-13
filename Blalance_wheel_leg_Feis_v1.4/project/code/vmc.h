@@ -11,7 +11,9 @@
 #define L4  6.0f    //右小腿长
 #define L5  3.7f    //舵机间距
 
-/* 腿倾角查表外推上限，须与 vmc.c 中 A_EXT_MAX 一致 */
+/* PWM 查表角度范围（vmc.c A_max/A_min），与 pwm_table 标定一致，全局生效，勿改 */
+#define VMC_A_TABLE_MAX   25.0f
+/* 腿倾角查表外推上限，须与 vmc.c 中 A_EXT_MAX 一致；非颠簸场景 control 层限幅用 */
 #define VMC_A_EXT_MAX   60.0f
 
 

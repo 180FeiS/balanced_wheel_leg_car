@@ -124,6 +124,9 @@ extern float roll_debug_out_left;
 extern float roll_debug_out_right;
 extern float roll_debug_left_offset;
 extern float roll_debug_right_offset;
+extern float leg_debug_desired_angle;  /* 腿俯仰期望角（°），供 VOFA/调试 */
+extern float leg_debug_tilt_max;       /* 当前有效腿倾角上限（°） */
+extern uint8 leg_debug_bump_zone;      /* Nag_IsEnterBumpActive() 快照 */
 
 /* 转向/自旋差速指令。
  * turn_mix_cmd 是最终真正参与左右轮差速的量：

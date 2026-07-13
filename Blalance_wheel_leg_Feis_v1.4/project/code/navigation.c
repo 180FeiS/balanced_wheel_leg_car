@@ -442,15 +442,26 @@ void Nag_Hook_Spin_Stop(void)
  * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
  * - 固定速度 nag_enter_bump_target_speed、腿长 Nag_EnterBump_Leg_Long；
  * - 开启横滚平衡 roll_balance_en=1，Run 每拍强制保持；
+ * - 腿俯仰倾角由 control.c 经 Nag_GetEffectiveLegTiltMax() 限制为 25°；
  * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
  * - nag_bump_duration_sec 计时到后链式切入 EXIT_BUMP。
  */
+float Nag_GetEffectiveLegTiltMax(void)
+{
+    if (Nag_IsEnterBumpActive() != 0u)
+    {
+        return Nag_EnterBump_Leg_Tilt_Max;
+    }
+    return VMC_A_EXT_MAX;
+}
+
 bool Nag_Hook_EnterBump_Start(void)
 {
     uint16 enter_index = 0u;
     float locked_yaw = 0.0f;
     float speed_sign = 1.0f;
 
+    N.Bump_Zone_Active = 1u;
     N.Bump_Chain_To_Exit = 0u;
     N.Bump_Elapsed_Ms = 0u;
 
@@ -518,6 +529,7 @@ void Nag_Hook_EnterBump_Stop(void)
     motor_user_speed_cmd = N.Bump_Saved_SetSpeed;
     leg_long = N.Bump_Saved_Leg_Long;
     roll_balance_en = 0u;
+    N.Bump_Zone_Active = 0u;
     N.Bump_Saved_SetSpeed = 0.0f;
     N.Bump_Saved_Leg_Long = 0.0f;
     N.Bump_Locked_Yaw = 0.0f;
@@ -552,6 +564,7 @@ void Nag_Hook_ExitBump_Stop(void)
     N.Bump_Saved_Leg_Long = 0.0f;
     N.Bump_Locked_Yaw = 0.0f;
     N.Bump_Elapsed_Ms = 0u;
+    N.Bump_Zone_Active = 0u;
 }
 
 /* 锥桶进/出口：单点路径标记；区段调速由 Nag_ApplyConeZoneSpeed() 按 Run_index 与事件表配对处理，
@@ -1546,6 +1559,7 @@ static void Nag_ClearEventRuntimeState(void)
     N.Bump_Locked_Yaw = 0.0f;
     N.Bump_Elapsed_Ms = 0u;
     N.Bump_Chain_To_Exit = 0u;
+    N.Bump_Zone_Active = 0u;
     N.Bump_Paired_Enter_Index = NAG_BUMP_PAIRED_ENTER_INVALID;
     N.Stair2_Saved_SetSpeed = 0.0f;
     N.Stair2_Hold_Yaw = 0.0f;
@@ -4288,6 +4302,7 @@ void Nag_Element_Abort(void)
         }
         motor_user_speed_cmd = N.Bump_Saved_SetSpeed;
         roll_balance_en = 0u;
+        N.Bump_Zone_Active = 0u;
         N.Bump_Saved_Leg_Long = 0.0f;
         N.Bump_Saved_SetSpeed = 0.0f;
         N.Bump_Locked_Yaw = 0.0f;

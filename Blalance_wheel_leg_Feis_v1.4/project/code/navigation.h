@@ -180,12 +180,13 @@ extern float nag_enter_bridge_pre_decel_dist_cm;
  * 颠簸路段双点录制（惯导回放）：
  * 1) KEY4 切 BumpIn，颠簸段前打点（Bin）；
  * 2) KEY4 切 BumpOut，在期望接回路径处打点（Bout，仅作里程锚点）；
- * 3) 回放：Bin 触发后 leg=5.5、固定速度、锁 Bin 点 yaw、开启横滚平衡、冻结 Run_index；
+ * 3) 回放：Bin 触发后 leg=6.5、固定速度、锁 Bin 点 yaw、开启横滚平衡、腿倾角限 25°、冻结 Run_index；
  *    nag_bump_duration_sec 计时到后链式切 EXIT_BUMP，从 Bout+1 接回惯导。
  * 见 Nag_FindPairedExitBumpMarker / Nag_ComputeBumpResumeIndex（navigation.c）。
  */
 #define Nag_EnterBump_Target_Speed_Default 500.0f  // 颠簸段目标速度（motor_user_speed_cmd 档位）
 #define Nag_EnterBump_Leg_Long 5.5f                // 元素期内 leg_long
+#define Nag_EnterBump_Leg_Tilt_Max  25.0f          // 颠簸元素内腿俯仰倾角上限（°），仅 control 层限幅，勿改 VMC_A_TABLE_MAX
 #define Nag_Bump_Duration_Sec_Default 5.0f           // 颠簸接管时长（秒），仅 ENTER_BUMP 计时
 #define Nag_EnterBump_PreDecel_Dist_cm_Default 0.0f  // 进入颠簸前预减速距离（cm）
 extern float nag_enter_bump_target_speed;
@@ -614,6 +615,7 @@ typedef struct{
        float Bump_Locked_Yaw;         // 进入颠簸时锁定的航向（deg），供 VOFA/调试
        uint32 Bump_Elapsed_Ms;        // ENTER_BUMP 元素期 1ms 计数
        uint8 Bump_Chain_To_Exit;      // 1=链式切 EXIT_BUMP，EnterBump_Stop 跳过恢复
+       uint8 Bump_Zone_Active;        // 1=颠簸区腿倾角限 25°（EnterBump_Start～ExitBump_Stop），速度环仍闭环
        uint16 Bump_Paired_Enter_Index; /* ENTER 完成链式 EXIT 时锁存 Bin；0xFFFF=无效 */
        float Bridge_Saved_Leg_Long;   // 桥进前备份 leg_long，仅人工 Abort 时恢复
        uint8 Bridge_Saved_RollBalance; // 桥进前备份 roll_balance_en，仅人工 Abort 时恢复
@@ -692,6 +694,13 @@ static inline uint8 Nag_OdoSlip_IsRuntimeEnabled(void)
 #endif
 }
 
+static inline uint8 Nag_IsEnterBumpActive(void)
+{
+    return N.Bump_Zone_Active;
+}
+
+float Nag_GetEffectiveLegTiltMax(void); /* 颠簸内 25°，否则 VMC_A_EXT_MAX */
+
 typedef enum {
     NAV_HEADING_MODE_INS = 0u,
     NAV_HEADING_MODE_GPS = 1u,
@@ -766,7 +775,7 @@ void Nag_Hook_ExitBridge_Run(void);
 bool Nag_Hook_ExitBridge_IsDone(void);
 void Nag_Hook_ExitBridge_Stop(void);
 
-/* 颠簸进/出：ENTER 开横滚并计时接管后链式 EXIT 关横滚；见 Nag_Hook_EnterBump_* / Nag_Hook_ExitBump_* */
+/* 颠簸进/出：ENTER 开横滚、腿倾角限 25°、计时接管后链式 EXIT 关横滚；见 Nag_Hook_EnterBump_* / Nag_Hook_ExitBump_* */
 bool Nag_Hook_EnterBump_Start(void);
 void Nag_Hook_EnterBump_Run(void);
 bool Nag_Hook_EnterBump_IsDone(void);

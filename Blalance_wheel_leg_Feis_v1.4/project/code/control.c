@@ -150,6 +150,9 @@ float roll_debug_out_left = 0;      // out_left_p
 float roll_debug_out_right = 0;     // out_right_p
 float roll_debug_left_offset = 0;    // left_offset
 float roll_debug_right_offset = 0;  // right_offset
+float leg_debug_desired_angle = 0.0f;
+float leg_debug_tilt_max = 0.0f;
+uint8 leg_debug_bump_zone = 0u;
 
 // 旧版 LQR 转向实验参数，当前普通转向/自旋互斥链路不依赖这些量
 float turn_out = 0;
@@ -1443,6 +1446,11 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
     /* 腿长/倾角限幅后输出 */
     current_left_p = clip(current_left_p, LEG_P_MIN, LEG_P_MAX);
     current_right_p = clip(current_right_p, LEG_P_MIN, LEG_P_MAX);
+    {
+        float tilt_max = Nag_GetEffectiveLegTiltMax();
+        current_left_angle = clip(current_left_angle, -tilt_max, tilt_max);
+        current_right_angle = clip(current_right_angle, -tilt_max, tilt_max);
+    }
 
     *out_left_p = current_left_p;
     *out_right_p = current_right_p;
@@ -1457,9 +1465,14 @@ static void leg_servo_step_update(float desired_left_p, float desired_right_p, f
 static float leg_servo_get_desired_tilt_angle(void)
 {
 #if LEG_SERVO_SPEED_TILT_EN
-    // 车向前→腿后倾，取反使极性正确
+    float tilt_max = Nag_GetEffectiveLegTiltMax();
+    /* 车向前→腿后倾，取反使极性正确；颠簸区仍跟速度环，仅上限收至 25° */
     float a = LEG_TILT_K * speed_loop_leg_tilt;
-    return clip(a, -LEG_TILT_MAX, LEG_TILT_MAX);
+
+    leg_debug_tilt_max = tilt_max;
+    leg_debug_bump_zone = Nag_IsEnterBumpActive();
+    leg_debug_desired_angle = clip(a, -tilt_max, tilt_max);
+    return leg_debug_desired_angle;
 #else
     return 0.0f;
 #endif
@@ -1672,6 +1685,8 @@ void dead_compensate(int16 *input_L, int16 *input_R)
 void left_leg_control(float p, float angle)
 {
 #if !LEG_DEBUG_MODE
+    float tilt_max = Nag_GetEffectiveLegTiltMax();
+    angle = clip(angle, -tilt_max, tilt_max);
     // 调用五连杆姿态解算函数
     servo_control_table(p, -angle, &pwm_ph4, &pwm_ph3);
 #endif
@@ -1697,6 +1712,8 @@ void left_leg_control(float p, float angle)
 void right_leg_control(float p, float angle)
 {
 #if !LEG_DEBUG_MODE
+    float tilt_max = Nag_GetEffectiveLegTiltMax();
+    angle = clip(angle, -tilt_max, tilt_max);
     // 调用五连杆姿态解算函数
     servo_control_table(p, -angle, &pwm_ph1, &pwm_ph2);
 #endif
