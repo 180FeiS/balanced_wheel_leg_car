@@ -1370,7 +1370,7 @@ void pid_ctrl_Run(void)
 
     if(Motor_Switch)
     {
-        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 3000 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -3000)
+        if ((-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 > 4000 || (-motor_value.receive_left_speed_data + motor_value.receive_right_speed_data) / 2 < -4000)
         {
             Motor_Switch = 0;
             Motor_Runaway_Latch = 1;
