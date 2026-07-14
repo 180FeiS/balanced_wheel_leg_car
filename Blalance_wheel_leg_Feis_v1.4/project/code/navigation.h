@@ -26,13 +26,13 @@
  *    当前 Nag_System() 固定在 pit0_ch0_isr 的 1ms 中断里跑，因此这里必须是 0.001s。
  *    若 car_speed 非 RPM 或有减速比，改半径后仍建议卷尺短距离实测微调。
  */
-#define WHEEL_RADIUS_CM 3.73f             //驱动轮半径（cm）；3.64 为卡尺值，60cm 实车微调 +2.5%
+#define WHEEL_RADIUS_CM 4.325f            //驱动轮半径（cm）；直径 8.65cm 卡尺值，实车可卷尺短距微调
 #define Nag_Set_mileage 2.0f              //每隔 2cm 记录一次 yaw
 #define Nag_Prev 200                      //保留的历史/预读缓存长度
 #define Nag_Yaw euler_angle.yaw           //航向角度取偏航角
 #define Nag_Sample_Dt 0.001f              //Nag_System 当前固定 1ms 运行一次
 #define Nag_Speed_Source car_speed        //默认优先使用车体平均速度
-#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.391，RPM→cm/s
+#define Nag_Speed_To_Mileage_Scale (2.0f * 3.1415926f * WHEEL_RADIUS_CM / 60.0f)  //≈0.453，RPM→cm/s
 #define Nag_Speed_Deadband 3.0f           //速度死区，抑制静止噪声
 #define Nag_Reissue_Error 0.2f            //转向收敛后若再次偏离该角度，则重新下发目标 yaw
 

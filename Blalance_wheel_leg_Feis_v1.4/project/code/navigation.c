@@ -440,6 +440,7 @@ void Nag_Hook_Spin_Stop(void)
 /*
  * 进入颠簸元素：
  * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
+ * - 经 Nag_HeadingHold + steer_request_target_yaw() 锁航向（1ms ISR 消费，勿放 main while 每轮）；
  * - 固定速度 nag_enter_bump_target_speed、腿长 Nag_EnterBump_Leg_Long；
  * - 开启横滚平衡 roll_balance_en=1，Run 每拍强制保持；
  * - 腿俯仰倾角由 control.c 经 Nag_GetEffectiveLegTiltMax() 限制为 25°；
@@ -485,6 +486,8 @@ bool Nag_Hook_EnterBump_Start(void)
     }
     N.Bump_Locked_Yaw = locked_yaw;
     Nag_HeadingHold_Enable(locked_yaw);
+    /* 进入瞬间登记一次绝对航向；持续纠偏由 pid_ctrl_Run continuous 双环承担，不在 Run 里每 ms 重复登记。 */
+    steer_request_target_yaw(locked_yaw);
 
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
     NavFusion_SyncMileageSnapshot();
@@ -3229,6 +3232,12 @@ bool Nag_HeadingHold_ShouldRequest(void)
     {
         N.HeadingHold_Request_Armed = 0u;
         return true;
+    }
+
+    /* 颠簸/台阶等 continuous 元素：pid_ctrl_Run 每 ms 维持双环，勿再 steer_set_target_yaw 重置 PID。 */
+    if (Nag_HeadingHold_IsContinuousActive())
+    {
+        return false;
     }
 
     if (steer_yaw_request_pending)
