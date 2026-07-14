@@ -112,6 +112,7 @@ typedef struct
   uint8 menu_vofa_enable;      /* 0=关 1=开 VOFA 无线调试；Run Config 可配，Save 写 Flash V6 */
   uint8 menu_nav_fusion_enable; /* 0=关 1=开 GPS+惯导融合；Run Config 可配，Save 写 Flash V10 */
   uint8 menu_odo_slip_enable;    /* 0=关 1=开里程打滑纠偏；Run Config 可配，Save 写 Flash V13 */
+  uint8 menu_init_leg_long_sel;  /* 0=3.5 1=5.5 初始腿长；Run Config 可配，Save 写 Flash V16 */
   float jump_takeoff_p;
   float jump_retract_p;
   float jump_prepare_p;

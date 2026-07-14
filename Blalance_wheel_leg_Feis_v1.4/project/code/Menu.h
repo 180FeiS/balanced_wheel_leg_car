@@ -42,7 +42,8 @@
 #define Run_Config_Field_VofaGroup 2u  /* VOFA 调试组 0=IMU 1=速度 2=融合 3=里程纠偏；Flash V9 可配 */
 #define Run_Config_Field_FusionEnable 3u /* 导航融合开关 0=关 1=开；Flash V10 可配 */
 #define Run_Config_Field_OdoSlipEnable 4u /* 里程打滑纠偏 0=关 1=开；Flash V13 可配 */
-#define Run_Config_Field_Count 5u
+#define Run_Config_Field_InitLegLong 5u   /* 初始腿长 0=3.5 1=5.5；Flash V16 可配 */
+#define Run_Config_Field_Count 6u
 
 extern uint8 g_menu_input_remote_first;
 /*
@@ -64,6 +65,13 @@ extern uint8 g_menu_nav_fusion_enable;
  * 运行时变量 g_menu_odo_slip_enable（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
  */
 extern uint8 g_menu_odo_slip_enable;
+/*
+ * 初始腿长（Flash 可配，Run→Config 编辑、Run→Save 持久化 V16）。
+ * 0 = 3.5；1 = 5.5（默认）。退出元素兜底与 jump_stop 恢复均跟随本配置。
+ * 运行时变量 g_menu_init_leg_long_sel（CM7_0 持有，CM7_1 经 dualcore 快照读取）。
+ */
+extern uint8 g_menu_init_leg_long_sel;
+float Menu_GetInitLegLong(void);
 
 /*
  * 【导航 API 约定】hashMenu.vPtr->searchUp/Down/Left/Right 表示菜单树操作，不是按键“上下左右”。

@@ -167,6 +167,11 @@ uint8 Menu_GetRunConfigFieldIndex(void)
     return s_run_config_field_index;
 }
 
+float Menu_GetInitLegLong(void)
+{
+    return (g_menu_init_leg_long_sel == 0u) ? 3.5f : 5.5f;
+}
+
 uint8 Menu_GetRunJumpFieldIndex(void)
 {
     return s_run_jump_field_index;
@@ -205,6 +210,11 @@ void Menu_RunConfigToggleField(uint8 field_index)
         }
     }
 #endif
+    else if (field_index == Run_Config_Field_InitLegLong)
+    {
+        g_menu_init_leg_long_sel = (uint8)(g_menu_init_leg_long_sel ? 0u : 1u);
+        leg_long = Menu_GetInitLegLong();
+    }
 #else
     (void)field_index;
 #endif

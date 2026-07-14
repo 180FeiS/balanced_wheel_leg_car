@@ -4,6 +4,7 @@
 #include "control.h"
 #include "navigation.h"
 #include "ekf.h"
+#include "Menu.h"
 
 static uint8 nag_flash_index_read = 0;
 
@@ -48,6 +49,7 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[22].uint32_type = (g_menu_odo_slip_enable != 0u) ? 1u : 0u;
     flash_union_buffer[23].float_type = nag_enter_bump_target_speed;
     flash_union_buffer[24].float_type = nag_enter_stair2_target_speed;
+    flash_union_buffer[25].uint32_type = (g_menu_init_leg_long_sel != 0u) ? 1u : 0u;
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -64,7 +66,7 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V15,
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V16,
                                            Nag_Run_Launch_Config_Word_Count);
 }
 
@@ -173,6 +175,13 @@ static void flash_RunLaunchParamsUnpackV15(void)
 {
     flash_RunLaunchParamsUnpackV14();
     nag_enter_stair2_target_speed = flash_union_buffer[24].float_type;
+}
+
+static void flash_RunLaunchParamsUnpackV16(void)
+{
+    flash_RunLaunchParamsUnpackV15();
+    g_menu_init_leg_long_sel = (uint8)(flash_union_buffer[25].uint32_type & 1u);
+    leg_long = Menu_GetInitLegLong();
 }
 
 static void flash_RunLaunchParamsUnpackV7(void)
@@ -434,12 +443,12 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关 + VOFA 组 + 融合开关 + 颠簸时长 + 打滑纠偏 + 颠簸速度 + 台阶2速度（页 47 V15）。 */
+/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关 + VOFA 组 + 融合开关 + 颠簸时长 + 打滑纠偏 + 颠簸速度 + 台阶2速度 + 初始腿长（页 47 V16）。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V15;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V16;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -477,9 +486,15 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V15) &&
-        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V15,
+    if ((speed_version == Nag_Run_Launch_Params_Version_V16) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V16,
                                                            Nag_Run_Launch_Config_Word_Count)))
+    {
+        flash_RunLaunchParamsUnpackV16();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V15) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V15,
+                                                           Nag_Run_Launch_Config_Word_Count_V15)))
     {
         flash_RunLaunchParamsUnpackV15();
     }

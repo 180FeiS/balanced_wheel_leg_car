@@ -123,6 +123,7 @@ void dualcore_ctrl_to_ui_publish(void)
   c->menu_vofa_enable = g_menu_vofa_enable;
   c->menu_nav_fusion_enable = g_menu_nav_fusion_enable;
   c->menu_odo_slip_enable = g_menu_odo_slip_enable;
+  c->menu_init_leg_long_sel = g_menu_init_leg_long_sel;
   c->jump_takeoff_p = jump_takeoff_p;
   c->jump_retract_p = jump_retract_p;
   c->jump_prepare_p = jump_prepare_p;

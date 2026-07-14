@@ -9,6 +9,7 @@
  * - 非录制中：左上/侧向键切换横滚平衡 roll_balance_en，右上/侧向键触发跳跃；
  * - 左拨码：首帧只同步前态不判沿，避免首包/掉线重连假沿进回放；沿 1→0 → Nag_Begin_Replay（可改 REMOTE_LORA_REPLAY_ON_SW0_RISING）；[0]=1 时 [1] 录/停沿（见 remote_lora.h）；
  * - MENU_INPUT_REMOTE_MENU_FIRST==1：遥控拨码 4（switch_key[REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX]）电平=REMOTE_LORA_LOCAL_KEYS_ACTIVE_LEVEL 时为板载调试，本函数不再映射摇杆/键/左拨码（仅拨码 4 仍被读入用于切换）。
+ * - MENU_INPUT_REMOTE_MENU_FIRST==1 且 LORA 掉线（online=0，约 500ms 无帧）：自动置 g_remote_local_keys_debug=1，板载按键/拨码接管；清零转向；录制态（index==1）另清零 motor_user_speed_cmd 作保护，发车/回放（KEY3 后 index>=2）不干预已装载的 run_launch_speed；信号恢复后自动回到遥控映射。
  * - 失控锁存时禁止用遥控将电机从 OFF 置 ON。
  *********************************************************************************************************************/
 #include "dualcore_shared.h"
@@ -73,12 +74,18 @@ void remote_lora_apply_validate_motor(void)
     uint8 nav_recording_active;
 
     dualcore_remote_pull(&r);
+    nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0));
 
     if (g_menu_input_remote_first != 0u)
     {
-        if ((r.enabled == 0u) || (r.online == 0u))
+        if (r.enabled == 0u)
         {
             g_remote_local_keys_debug = 0u;
+        }
+        else if (r.online == 0u)
+        {
+            /* 掉线：自动切板载按键/拨码，等同按键模式路径 */
+            g_remote_local_keys_debug = 1u;
         }
         else
         {
@@ -93,6 +100,14 @@ void remote_lora_apply_validate_motor(void)
         {
             remote_lora_steer_snapshot_valid = 0u;
             remote_lora_steer_rate_cmd_dps = 0.0f;
+            if (r.online == 0u)
+            {
+                if (nav_recording_active != 0u)
+                {
+                    motor_user_speed_cmd = 0.0f;
+                }
+                s_left_dip_synced = 0u; /* 掉线后重连需重新同步，否则会误认沿 */
+            }
             return;
         }
     }
@@ -100,6 +115,11 @@ void remote_lora_apply_validate_motor(void)
     if ((r.enabled == 0u) || (r.online == 0u))
     {
         remote_lora_steer_snapshot_valid = 0u;
+        remote_lora_steer_rate_cmd_dps = 0.0f;
+        if (nav_recording_active != 0u)
+        {
+            motor_user_speed_cmd = 0.0f;
+        }
         s_left_dip_synced = 0u; /* 掉线/禁遥控后重连需重新同步，否则会误认沿 */
         return;
     }
@@ -114,7 +134,6 @@ void remote_lora_apply_validate_motor(void)
     rate_cmd = (float)r.right_x * (REMOTE_LORA_VALIDATE_STEER_RATE_MAX_DPS / (float)REMOTE_LORA_JOYSTICK_ABS_MAX);
     remote_lora_steer_rate_cmd_dps = remote_lora_clamp_steer_rate_dps(rate_cmd);
     remote_lora_steer_snapshot_valid = 1u;
-    nav_recording_active = (uint8)((N.Nag_SystemRun_Index == 1u) && (N.End_f == 0));
 
     k0 = (r.key[0] != 0u) ? 1u : 0u;
     rising = (uint8)((k0 != 0u) && (s_prev_key0 == 0u));

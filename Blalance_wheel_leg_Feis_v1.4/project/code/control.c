@@ -1,4 +1,5 @@
 #include "zf_common_headfile.h"
+#include "Menu.h"
 
 ins_struct ins;  //惯性导航结构体
 double TempLat_Now=0,TempLon_Now=0;     // 二维坐标系下的实时位置
@@ -129,7 +130,7 @@ void jump_stop(void)
     jump_flag = 0u;
     jump_step_index = 0u;
     jump_time = 0;
-    leg_long = 5.5f;
+    leg_long = Menu_GetInitLegLong();
 }
 
 void motor_user_speed_cmd_set_from_pc(float cmd)
@@ -212,6 +213,8 @@ uint8 g_menu_vofa_enable = 0u;
 uint8 g_menu_nav_fusion_enable = 1u;
 /* 0=关，1=开里程打滑纠偏；Run→Config 编辑，Run→Save 写 Flash 页 47 V13 */
 uint8 g_menu_odo_slip_enable = 0u;
+/* 0=3.5，1=5.5 初始腿长；Run→Config 编辑，Run→Save 写 Flash 页 47 V16 */
+uint8 g_menu_init_leg_long_sel = 1u;
 
 /** 是否允许 LORA 横向覆盖航向/角速度环（导航任务态、事件停车等情况下返回 0）。 */
 uint8 remote_lora_nav_allows_heading_override(void)
@@ -267,7 +270,7 @@ uint8 remote_lora_nav_allows_spin_request(void)
 #define STEER_RATE_SETTLE_DPS        6.0f   // 接近目标时，实测角速度也要足够小才允许结束
 #define STEER_RATE_TARGET_MAX_DPS   200.0f   // 外环生成的目标角速度上限，限制普通转向的灵敏度
 #define STEER_CMD_MAX              1500.0f   // 最终差速限幅，防止普通转向输出过猛影响平衡
-#define STEER_HOLD_ANGLE_GAIN_SCALE   4.0f   // 锁航向 continuous 外环增益倍率，提高抗外界扰动能力
+#define STEER_HOLD_ANGLE_GAIN_SCALE   3.0f   // 锁航向 continuous 外环增益倍率，提高抗外界扰动能力
 #define STEER_HOLD_RATE_TARGET_MAX_DPS 360.0f // 锁航向 continuous 目标角速度上限
 #define STEER_HOLD_CMD_MAX          2300.0f   // 锁航向 continuous 差速上限
 
@@ -522,7 +525,7 @@ void spin_task_stop(void)
  * 1. 这是“立即执行”接口，若当前在自旋，会直接停掉自旋并切入普通转向；
  * 2. 约定 target_yaw_deg 使用 [-180, 180] 度，函数内部仍会做一次包角保护；
  * 3. 不要在周期里重复调用，否则会不断刷新任务状态、reset PID，影响闭环收敛；
- *    元素锁航向 continuous 模式见 Nag_HeadingHold_IsContinuousActive + pid_ctrl_Run 持久双环。
+ *    元素锁航向 continuous 模式（仅 ENTER_BUMP）见 Nag_HeadingHold_IsContinuousActive + pid_ctrl_Run 持久双环。
  */
 void steer_set_target_yaw(float target_yaw_deg)
 {

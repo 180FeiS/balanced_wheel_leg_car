@@ -243,7 +243,7 @@ static void Nag_HeadingHold_Enable(float target_yaw)
     N.HeadingHold_Enable = 1u;
     /* 不每 ms 直接调 steer_set_target_yaw()（会 reset turn_angle/turn_gyro）。
      * 首次由 ISR ShouldRequest -> steer_request -> steer_set_target_yaw 引导；
-     * continuous 期间 pid_ctrl_Run 每 ms 刷新目标并跑双环，见 Nag_HeadingHold_IsContinuousActive()。
+     * 仅 ENTER_BUMP 在 continuous 期间由 pid_ctrl_Run 每 ms 刷新目标并跑双环（见 Nag_HeadingHold_IsContinuousActive）。
      */
     N.HeadingHold_Request_Armed = 1u;
 }
@@ -440,7 +440,7 @@ void Nag_Hook_Spin_Stop(void)
 /*
  * 进入颠簸元素：
  * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
- * - 经 Nag_HeadingHold + steer_request_target_yaw() 锁航向（1ms ISR 消费，勿放 main while 每轮）；
+ * - 经 Nag_HeadingHold continuous + steer_request_target_yaw() 持续锁绝对航向（仅颠簸，1ms ISR 消费）；
  * - 固定速度 nag_enter_bump_target_speed、腿长 Nag_EnterBump_Leg_Long；
  * - 开启横滚平衡 roll_balance_en=1，Run 每拍强制保持；
  * - 腿俯仰倾角由 control.c 经 Nag_GetEffectiveLegTiltMax() 限制为 25°；
@@ -666,7 +666,7 @@ static void Nag_BridgeConfirmExit(uint8 allow_beep)
     }
     else
     {
-        leg_long = Nag_ExitBridge_Leg_Long;
+        leg_long = Menu_GetInitLegLong();
     }
     roll_balance_en = N.Bridge_Saved_RollBalance;
 
@@ -1162,7 +1162,7 @@ static void Nag_ActivateChainedExitStair2(void)
 
 /*
  * 进入台阶元素：
- * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw；
+ * - 锁 enter_index 录制点 Nav_read[enter_index] 单点 yaw（普通锁航，非 continuous）；
  * - 固定速度 nag_enter_stair_target_speed、腿长 Nag_EnterStair_Leg_Long；
  * - 融合里程快照同步；Run_index 在 Event_Active 期间冻结（Run_Nag_GPS）；
  * - CM7_1 经 stair_enter_active 门控 step_detect / 视觉自动跳。
@@ -1327,7 +1327,7 @@ bool Nag_Hook_ExitStair_Start(void)
     }
     else
     {
-        leg_long = Nag_ExitStair_Leg_Long;
+        leg_long = Menu_GetInitLegLong();
     }
     stair_jump_reset_boost_phase();
     return true;
@@ -3209,6 +3209,12 @@ bool Nag_HeadingHold_IsContinuousActive(void)
     {
         return false;
     }
+    /* 持续绝对航向维护仅用于颠簸段；台阶等仍走普通锁航（一次引导 + 收敛/补发）。 */
+    if (!N.Event_Active ||
+        N.Event_Active_Type != NAG_EVENT_TYPE_ENTER_BUMP)
+    {
+        return false;
+    }
     return true;
 }
 
@@ -3234,7 +3240,7 @@ bool Nag_HeadingHold_ShouldRequest(void)
         return true;
     }
 
-    /* 颠簸/台阶等 continuous 元素：pid_ctrl_Run 每 ms 维持双环，勿再 steer_set_target_yaw 重置 PID。 */
+    /* 颠簸 continuous 期间 pid_ctrl_Run 每 ms 维持双环，勿再 steer_set_target_yaw 重置 PID。 */
     if (Nag_HeadingHold_IsContinuousActive())
     {
         return false;

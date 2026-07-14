@@ -161,7 +161,7 @@ extern float nag_enter_cones_pre_decel_dist_cm;
 #define Nag_EnterBridge_Target_Speed_Default 500.0f   // 桥进目标速度（Launch/Flash 可调）
 #define Nag_EnterBridge_PreDecel_Dist_cm_Default 0.0f // 桥进前预减速距离（cm）
 #define Nag_EnterBridge_Leg_Long 5.5f                 // 桥进标记：目标腿长
-#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出兜底腿长（正常路径恢复 Bridge_Saved_Leg_Long）
+#define Nag_ExitBridge_Leg_Long 3.5f                  // 桥出兜底腿长（已废弃：请用 Menu_GetInitLegLong()）
 #define Nag_ExitBridge_Recovery_Speed 0.0f            // 0=过桥出后恢复基准速度；无出口 pre_accel
 /** 宽限后 track_valid=0 连续该时间（ms）确认出桥；1ms ISR 读快照，不依赖 fresh */
 #define BRIDGE_BLOB_LOST_EXIT_MS        250u
@@ -192,7 +192,7 @@ extern float nag_enter_bridge_pre_decel_dist_cm;
 extern float nag_enter_bump_target_speed;
 extern float nag_bump_duration_sec;
 extern float nag_enter_bump_pre_decel_dist_cm;
-#define Nag_HeadingHold_EnterBump_Enable 1u          // 1=颠簸期间锁 Nav_read[Bin] 单点 yaw
+#define Nag_HeadingHold_EnterBump_Enable 1u          // 1=颠簸期间锁 Nav_read[Bin] 单点 yaw + continuous 绝对航向维护
 
 /*
  * 台阶双点录制（惯导回放）：
@@ -207,10 +207,10 @@ extern float nag_enter_bump_pre_decel_dist_cm;
 #define Nag_EnterStair_PreDecel_Dist_cm_Default 0.0f  // 进入台阶预减速默认（cm）；Launch/Flash 可调
 extern float nag_enter_stair_target_speed;
 extern float nag_enter_stair_pre_decel_dist_cm;
-#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=进入台阶期间启用航向保持（目标为 Nav_read[enter_index]）
+#define Nag_HeadingHold_EnterStair_Enable 1u       // 1=台阶期间普通锁航（目标 Nav_read[enter_index]，非 continuous）
 
 /* 退出台阶元素（EXIT_STAIR）：三次跳跃完成后软件链式切入；见 Nag_Hook_ExitStair_* */
-#define Nag_ExitStair_Leg_Long 3.5f              // 台阶出兜底腿长（正常路径恢复 Stair_Saved_Leg_Long）
+#define Nag_ExitStair_Leg_Long 3.5f              // 台阶出兜底腿长（已废弃：请用 Menu_GetInitLegLong()）
 #define Nag_Stair_Jump_Exit_Count 3u             // 进入台阶内完成该次数跳跃后切 EXIT
 #define Nag_HeadingHold_ExitStair_Enable 0u      // 退出后立即交还惯导 yaw
 
@@ -257,7 +257,8 @@ extern float nag_enter_stair2_target_speed;
  * v12：v11 + nag_bump_duration_sec @ [21]；
  * v13：v12 + g_menu_odo_slip_enable @ [22]；
  * v14：v13 + nag_enter_bump_target_speed @ [23]；
- * v15：v14 + nag_enter_stair2_target_speed @ [24]。
+ * v15：v14 + nag_enter_stair2_target_speed @ [24]；
+ * v16：v15 + g_menu_init_leg_long_sel @ [25]。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -276,6 +277,7 @@ extern float nag_enter_stair2_target_speed;
 #define Nag_Run_Launch_Params_Version_V13 13u    /* v13：v12 + g_menu_odo_slip_enable @ [22] */
 #define Nag_Run_Launch_Params_Version_V14 14u    /* v14：v13 + nag_enter_bump_target_speed @ [23] */
 #define Nag_Run_Launch_Params_Version_V15 15u    /* v15：v14 + nag_enter_stair2_target_speed @ [24] */
+#define Nag_Run_Launch_Params_Version_V16 16u    /* v16：v15 + g_menu_init_leg_long_sel @ [25] */
 #define Nag_Run_Launch_Param_Count 17u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
@@ -287,7 +289,8 @@ extern float nag_enter_stair2_target_speed;
 #define Nag_Run_Launch_Config_Word_Count_V12 19u /* v12：v11 + bump_duration @ [21] */
 #define Nag_Run_Launch_Config_Word_Count_V13 20u /* v13：v12 + odo_slip_enable @ [22] */
 #define Nag_Run_Launch_Config_Word_Count_V14 21u /* v14：v13 + bump_target_speed @ [23] */
-#define Nag_Run_Launch_Config_Word_Count 22u     /* v15：v14 + stair2_target_speed @ [24] */
+#define Nag_Run_Launch_Config_Word_Count_V15 22u /* v15：v14 + stair2_target_speed @ [24] */
+#define Nag_Run_Launch_Config_Word_Count 23u     /* v16：v15 + init_leg_long_sel @ [25] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -383,11 +386,12 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
 
 /* 元素航向保持配置：
  * 1. 这里的“保持航向”指元素接管后，锁定进入元素瞬间的实测 yaw（或 Bin/enter_index 单点 yaw）；
- * 2. ISR 首次 arm 后 steer_request → steer_set_target_yaw 引导；continuous 期间由 pid_ctrl_Run 每 ms 双环纠偏（见 Nag_HeadingHold_IsContinuousActive）；
- * 3. 自旋元素：等待期由 Nag_Run 继续跟踪 Angle_Run；起转后 spin_enable 接管，见 Nag_HeadingHold_Spin_Enable 说明；
- * 4. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
+ * 2. ISR 首次 arm 后 steer_request → steer_set_target_yaw 引导；仅 ENTER_BUMP 在 continuous 期间由 pid_ctrl_Run 每 ms 双环纠偏（见 Nag_HeadingHold_IsContinuousActive）；
+ * 3. ENTER_STAIR 等其它锁航元素走普通模式：一次引导、收敛后可 steer_finish，偏离超阈值再补发；
+ * 4. 自旋元素：等待期由 Nag_Run 继续跟踪 Angle_Run；起转后 spin_enable 接管，见 Nag_HeadingHold_Spin_Enable 说明；
+ * 5. 其它元素可按需要独立开关，后续新增元素时优先在这里配策略，不要把判断散到 ISR。
  */
-#define Nag_HeadingHold_Reissue_Error 2.0f      // 非 continuous 兜底：steer_finish 后偏离超过该阈值才重新登记；continuous 期间基本不依赖
+#define Nag_HeadingHold_Reissue_Error 2.0f      // 普通锁航兜底：steer_finish 后偏离超过该阈值才重新登记；颠簸 continuous 期间不依赖
 #define Nag_HeadingHold_Spin_Enable 0u          // 自旋元素在减速等待阶段保持进入元素时的航向
 #define Nag_HeadingHold_EnterTurn_Enable 0u     // 折返入弯若需主动改航向则不保持锁定，默认关闭
 #define Nag_Element_Enter_Beep_Enable 1u        // 1=回放/GPS 切入任意元素时蜂鸣一声
@@ -742,7 +746,7 @@ void Nag_EventForceReset(void);
 uint16 Nag_GetDebugProspectIndex(void); //安全读取当前前瞻索引
 bool Nag_HeadingHold_ShouldRequest(void); //供 1ms ISR 查询：当前元素是否需要在消费 pending 前补登一次锁航向请求
 float Nag_HeadingHold_GetTargetYaw(void); //安全读取当前锁定的元素航向保持目标
-bool Nag_HeadingHold_IsContinuousActive(void); //1=锁航向元素期持续双环纠偏（pid_ctrl_Run 不 steer_finish）
+bool Nag_HeadingHold_IsContinuousActive(void); //1=仅 ENTER_BUMP 持续双环纠偏（pid_ctrl_Run 不 steer_finish）
 bool Nag_Element_Start(uint8 event_type); /* event_type：N.Event_Active_Type；true 则进入 RUNNING */
 void Nag_Element_Run(uint8 event_type);
 bool Nag_Element_IsDone(uint8 event_type); /* true：本周期转入 DONE 并随后 Nag_Notify_Event_Done */

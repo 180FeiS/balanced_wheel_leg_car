@@ -965,6 +965,7 @@ void GUI_3_3_1(void)
     uint8 vofa_group = 0u;
     uint8 fusion_enable = 0u;
     uint8 odo_slip_enable = 0u;
+    uint8 init_leg_long_sel = 1u;
 
     GUI_Display_Level2_Common3();
     ips200_show_string(56, ROW_3, "Config");
@@ -977,12 +978,14 @@ void GUI_3_3_1(void)
     vofa_group = (uint8)(s_ui_dc.nag_vofa_group % NAG_VOFA_GROUP_COUNT);
     fusion_enable = s_ui_dc.menu_nav_fusion_enable;
     odo_slip_enable = s_ui_dc.menu_odo_slip_enable;
+    init_leg_long_sel = s_ui_dc.menu_init_leg_long_sel;
 #else
     input_remote = g_menu_input_remote_first;
     vofa_enable = g_menu_vofa_enable;
     vofa_group = (uint8)(Nag_Vofa_Group % NAG_VOFA_GROUP_COUNT);
     fusion_enable = g_menu_nav_fusion_enable;
     odo_slip_enable = g_menu_odo_slip_enable;
+    init_leg_long_sel = g_menu_init_leg_long_sel;
 #endif
 
     if (field_index == Run_Config_Field_InputMode)
@@ -1084,6 +1087,24 @@ void GUI_3_3_1(void)
         ips200_show_string(112, ROW_13, "Off");
     }
 #endif
+
+    if (field_index == Run_Config_Field_InitLegLong)
+    {
+        ips200_show_string(0, ROW_14, "->");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_14, "  ");
+    }
+    ips200_show_string(16, ROW_14, "InitLeg:");
+    if (init_leg_long_sel == 0u)
+    {
+        ips200_show_string(112, ROW_14, "3.5");
+    }
+    else
+    {
+        ips200_show_string(112, ROW_14, "5.5");
+    }
 
     ips200_show_string(8, ROW_16, "K1:nxt K2:chg K4:bk");
 }

@@ -68,7 +68,8 @@ struct dualcore_remote_to_ctrl;
 #define REMOTE_LORA_REPLAY_ON_SW0_RISING  (0u)
 #endif
 
-/* MENU_INPUT_REMOTE_MENU_FIRST==1 时：switch_key 下标 REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX 与宏一致电平 = 板载按键/拨码调试 */
+/* MENU_INPUT_REMOTE_MENU_FIRST==1 时：switch_key 下标 REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX 与宏一致电平 = 板载按键/拨码调试；
+ * 遥控掉线（online=0，约 LORA3A22_LINK_LOST_MS）时 remote_lora_apply 自动置板载调试；录制态清零速度作保护，发车/回放不干预 run_launch_speed。 */
 #ifndef REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX
 #define REMOTE_LORA_DEBUG_MODE_SWITCH_INDEX  (3u)
 #endif
@@ -86,7 +87,7 @@ uint8 remote_lora_is_remote_menu_enabled(void);
 void remote_lora_get_last_published(struct dualcore_remote_to_ctrl *out);
 
 #if defined(CY_CORE_CM7_0)
-/* 验证用：CM7_0 读 remote；左拨码 0/1 录/停/回放见 REMOTE_LORA_LEFT_SWITCH* */
+/* CM7_0 读 remote 并映射摇杆/键；掉线自动切板载按键；左拨码 0/1 录/停/回放见 REMOTE_LORA_LEFT_SWITCH* */
 void remote_lora_apply_validate_motor(void);
 #endif
 

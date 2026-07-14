@@ -234,6 +234,7 @@ extern uint8 g_menu_input_remote_first; /* 0=按键+拨码 1=遥控优先；Flas
 extern uint8 g_menu_vofa_enable;         /* 0=关 1=开 VOFA 无线调试；Flash 可配 V6，见 Menu.h */
 extern uint8 g_menu_nav_fusion_enable;   /* 0=关 1=开导航融合；Flash 可配 V10，见 Menu.h */
 extern uint8 g_menu_odo_slip_enable;     /* 0=关 1=开里程打滑纠偏；Flash 可配 V13，见 Menu.h */
+extern uint8 g_menu_init_leg_long_sel;   /* 0=3.5 1=5.5 初始腿长；Flash 可配 V16，见 Menu.h */
 
 uint8 remote_lora_nav_allows_heading_override(void); /* 非回放/非元素/非终点停止时可遥控横向（角速度） */
 uint8 remote_lora_nav_allows_spin_request(void);       /* 在上一条件基础上再要求电机已使能且无失控锁存 */
