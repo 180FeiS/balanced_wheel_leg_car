@@ -59,7 +59,8 @@ float leg_long = 5.5f; //3.5
  * - run_launch_speed：发车速度设定值；串口 V、菜单/Run、双核调速命令只改这个值；
  * - motor_user_speed_cmd：运行中的用户速度基准；只有惯导回放进入执行态时从 run_launch_speed 装载，
  *   LORA 遥控和导航元素临时接管等实时路径仍可直接写入；
- * - motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发 yaw 零点重置（任意时刻）；成功时翻转 LED1。
+ * - motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发显示航向对齐（任意时刻，非车辆转向）；
+ *   上升沿→当前朝向显示为 0°，下降沿→当前朝向显示为 180°；成功时翻转 LED1。
  * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 更新发车速度设定值；
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
@@ -664,7 +665,7 @@ void steer_task_stop(void)
     steer_finish(0);
 }
 
-/* SWITCH2 yaw 零点重置：任意时刻边沿触发；成功时翻转 LED1 反馈 */
+/* SWITCH2 显示航向对齐后的控制层同步：清转向/自旋任务，并把航向保持参考更新为对齐后的 euler_angle.yaw */
 static void control_yaw_soft_reset_sync(void)
 {
     steer_yaw_request_pending = 0u;
@@ -673,6 +674,7 @@ static void control_yaw_soft_reset_sync(void)
     steer_task_stop();
     spin_task_stop();
 
+    /* 对齐后 euler_angle.yaw 已是新显示角，上电保持/转向目标与之同步 */
     yaw_poweron_ref = (float)euler_angle.yaw;
     yaw_poweron_ref_latched = 1u;
     yaw_poweron_latch_count = YAW_POWERON_REF_LATCH_MS;
@@ -680,10 +682,22 @@ static void control_yaw_soft_reset_sync(void)
     steer_angle_err = 0.0f;
 }
 
+#define SWITCH2_YAW_ALIGN_ZERO_DEG   0.0f    /* 上升沿：当前朝向重新标记为 0°（显示航向） */
+#define SWITCH2_YAW_ALIGN_REVERSE_DEG 180.0f /* 下降沿：当前朝向重新标记为 180°（±180° 坐标系） */
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     SWITCH2 边沿触发显示航向对齐
+// 参数说明     null
+// 返回参数     null
+// 使用示例     motor_poll_switch2_speed_baseline();
+// 备注信息     GPIO_LOW→sw2_now=0，GPIO_HIGH→sw2_now=1。
+//              上升沿（0→1）：Yaw_AlignDisplayDeg(0°)；下降沿（1→0）：Yaw_AlignDisplayDeg(180°)。
+//              仅改 yaw_zero_offset_deg，不驱动车辆转向；首次采样只同步 s_switch2_prev，不改变 yaw。
+-------------------------------------------------------------------------------------------------------------------*/
 void motor_poll_switch2_speed_baseline(void)
 {
-    static uint8 s_switch2_synced = 0u;
-    static uint8 s_switch2_prev = 1u;
+    static uint8 s_switch2_synced = 0u; /* 1=已完成上电首次采样，之后才响应边沿 */
+    static uint8 s_switch2_prev = 1u;   /* 上一拍逻辑电平：0=低 1=高 */
     uint8 sw2_now;
 
     sw2_now = (gpio_get_level(SWITCH2) == GPIO_LOW) ? 0u : 1u;
@@ -700,7 +714,14 @@ void motor_poll_switch2_speed_baseline(void)
     }
     s_switch2_prev = sw2_now;
 
-    Yaw_ResetZero();
+    if (sw2_now == 1u)
+    {
+        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_ZERO_DEG);
+    }
+    else
+    {
+        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_REVERSE_DEG);
+    }
     control_yaw_soft_reset_sync();
     gpio_toggle_level(LED1);
 }
