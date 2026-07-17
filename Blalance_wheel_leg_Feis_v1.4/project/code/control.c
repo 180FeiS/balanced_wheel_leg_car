@@ -1,5 +1,6 @@
 #include "zf_common_headfile.h"
 #include "Menu.h"
+#include "ekf.h"
 
 ins_struct ins;  //惯性导航结构体
 double TempLat_Now=0,TempLon_Now=0;     // 二维坐标系下的实时位置
@@ -315,40 +316,59 @@ uint8 control_bridge_vision_track_valid(void)
 #define SPIN_RATE_MIN_DPS               30.0f  /* spin_rate_max_dps 下限 */
 #define SPIN_RATE_MAX_DPS              1000.0f /* spin_rate_max_dps 上限 */
 /*
- * 剩余角度 |spin_angle_err| 进入该窗口后开始收角速度（spin_brake_phase=1）。
+ * 剩余角度 |spin_angle_err| 进入该窗口后开始减速补角（不再直接收为 0 角速度）。
  * 与 spin_target_deg/spin_accum_deg 配合：spin_angle_err = spin_target_deg - spin_accum_deg。
- * 闭环航向校正 gate（SPIN_YAW_CORRECT_MAX_ERR_DEG）建议 >= 本值。
  */
 #define SPIN_ANGLE_SETTLE_DEG         35.0f
-#define SPIN_RATE_SETTLE_DPS         20.0f  /* 收刹后实测 |spin_rate_meas_dps| 低于该值才累计停稳计数 */
+#define SPIN_ANGLE_COMPLETE_DEG        8.0f  /* 成功结束要求 |spin_angle_err| <= 该值 */
+#define SPIN_ANGLE_TRIM_RATE_DPS      60.0f  /* 减速区内低速补角上限 */
+#define SPIN_ANGLE_TRIM_SCALE_DEG     15.0f  /* 距目标小于该值时按比例降低补角速度 */
+#define SPIN_ACCUM_MISMATCH_DEG       25.0f  /* 连续航向累计与陀螺积分允许的最大偏差 */
+#define SPIN_MIN_RUNTIME_RATIO        0.85f  /* 最短运行时间 = 理论时间 * 该比例，防跳变假完成 */
+#define SPIN_RATE_SETTLE_DPS         20.0f  /* 终态 |spin_rate_meas_dps| 低于该值才累计停稳计数 */
 #define SPIN_SETTLE_COUNT_MAX        25u    /* 连续满足停稳条件的 1ms 拍数，达到后 spin_finish(1) */
 #define SPIN_TIMEOUT_BASE_MS       3000u
 #define SPIN_PITCH_ABORT_DEG         20.0f  /* 自旋中 pitch 偏离过大则 spin_finish(0)，不校正航向 */
 
 /* 自旋成功结束时的航向闭环校正（660RC 6 轴 EKF yaw 漂移补偿，见 Yaw_AlignDisplayDeg） */
 #define SPIN_YAW_CORRECT_ENABLE           1u    /* 1=spin_finish(1) 且误差在门限内时校正显示 yaw */
-#define SPIN_YAW_CORRECT_MAX_ERR_DEG     70.0f  /* 允许校正的最大 |spin_angle_err|；须 >= SPIN_ANGLE_SETTLE_DEG */
+#define SPIN_YAW_CORRECT_MAX_ERR_DEG     10.0f  /* 允许校正的最大 |spin_angle_err|；须 <= SPIN_ANGLE_COMPLETE_DEG */
+
+#define SPIN_DONE_IDLE                    0u
+#define SPIN_DONE_SUCCESS                 1u
+#define SPIN_DONE_FAILED                  2u
+
+#define SPIN_FAIL_NONE                    0u
+#define SPIN_FAIL_PITCH                   1u
+#define SPIN_FAIL_TIMEOUT                 2u
+#define SPIN_FAIL_ACCUM_MISMATCH          3u
 
 float spin_rate_max_dps = SPIN_ANGLE_OUT_MAX_DPS_DEFAULT;
 uint8 spin_enable = 0;
 uint8 spin_done = 0;
 int8 spin_dir = 1;
 float spin_target_deg = 0.0f;   /* 任务目标总转角（deg），如 2 圈 * dir => ±720 */
-float spin_accum_deg = 0.0f;    /* 自旋过程中累计的 euler_yaw 增量（±180° 解包） */
+float spin_accum_deg = 0.0f;    /* 自旋过程中累计的连续航向增量（Yaw_GetUnwrappedDeg 基准） */
+float spin_accum_gyro_deg = 0.0f; /* 补偿后 gyro_z 积分累计，供一致性监测 */
 float spin_angle_err = 0.0f;    /* spin_target_deg - spin_accum_deg，供收刹与航向校正 gate */
 float spin_rate_target_dps = 0.0f;
 float spin_rate_meas_dps = 0.0f;
 
 float spin_start_yaw_deg = 0.0f;           /* 起转瞬间显示航向 euler_angle.yaw，供闭环校正 */
+float spin_start_unwrapped_deg = 0.0f;     /* 起转瞬间连续航向，供主累计基准 */
 uint8 spin_yaw_correct_applied = 0u;       /* 最近一次 spin_finish(1) 是否已做航向校正 */
 uint8 spin_yaw_correct_skipped = 0u;       /* 1=成功结束但 |spin_angle_err| 超门限，跳过校正 */
 float spin_yaw_correct_delta_deg = 0.0f; /* 校正量：对齐後 yaw − 校正前 yaw（deg） */
+uint8 spin_failed = 0u;                    /* 1=最近一次自旋失败（超时/姿态/累计失配） */
+uint8 spin_fail_reason = SPIN_FAIL_NONE;   /* 失败原因码，供 VOFA/导航诊断 */
+uint8 spin_phase = 0u;                     /* 0=巡航 1=减速补角 2=终态收敛 */
 
 static float spin_last_yaw = 0.0f;
-static uint8 spin_brake_phase = 0;
 static uint8 spin_settle_count = 0;
 static uint32 spin_timeout_ms = 0;
 static uint32 spin_timeout_limit_ms = 0;
+static uint32 spin_min_runtime_ms = 0;
+static uint16 spin_mismatch_count = 0;
 
 static void spin_reset_pid_state(pid_t *pid)
 {
@@ -424,26 +444,31 @@ static void spin_apply_yaw_closed_loop_correct(void)
 #endif
 }
 
-/* 统一收尾：结束自旋任务并清空双环内部状态。done=1 时尝试航向闭环校正。 */
+/* 统一收尾：结束自旋任务并清空双环内部状态。done=1 成功；done=0 失败/取消。 */
 static void spin_finish(uint8 done)
 {
     if (done != 0u)
     {
         spin_apply_yaw_closed_loop_correct();
+        spin_done = SPIN_DONE_SUCCESS;
+        spin_failed = 0u;
+        spin_fail_reason = SPIN_FAIL_NONE;
     }
     else
     {
         spin_yaw_correct_applied = 0u;
         spin_yaw_correct_skipped = 0u;
         spin_yaw_correct_delta_deg = 0.0f;
+        spin_done = SPIN_DONE_FAILED;
+        spin_failed = 1u;
     }
 
     spin_enable = 0;
-    spin_done = done;
     spin_rate_target_dps = 0.0f;
     spin_settle_count = 0;
     spin_timeout_ms = 0;
-    spin_brake_phase = 0;
+    spin_phase = 0u;
+    spin_mismatch_count = 0;
     spin_cmd = 0.0f;
     turn_mix_cmd = 0.0f;
     spin_reset_pid_state(&turn_angle);
@@ -455,39 +480,44 @@ void spin_task_start(float turns, int8 dir)
 {
     if (turns <= 0.0f)
     {
-        spin_finish(0);
-        spin_target_deg = 0.0f;
-        spin_accum_deg = 0.0f;
-        spin_angle_err = 0.0f;
+        spin_task_stop();
         return;
     }
 
     spin_dir = (dir >= 0) ? 1 : -1;
     spin_enable = 1;
-    spin_done = 0;
+    spin_done = SPIN_DONE_IDLE;
+    spin_failed = 0u;
+    spin_fail_reason = SPIN_FAIL_NONE;
     spin_target_deg = turns * 360.0f * (float)spin_dir;
     spin_accum_deg = 0.0f;
+    spin_accum_gyro_deg = 0.0f;
     spin_angle_err = spin_target_deg;
     spin_rate_target_dps = 0.0f;
     spin_rate_meas_dps = 0.0f;
     spin_start_yaw_deg = (float)euler_angle.yaw;
+    spin_start_unwrapped_deg = Yaw_GetUnwrappedDeg();
     spin_yaw_correct_applied = 0u;
     spin_yaw_correct_skipped = 0u;
     spin_yaw_correct_delta_deg = 0.0f;
     spin_last_yaw = (float)euler_angle.yaw;
-    spin_brake_phase = 0;
+    spin_phase = 0u;
     spin_settle_count = 0;
     spin_timeout_ms = 0;
+    spin_mismatch_count = 0;
     {
         float rate_dps = spin_rate_max_dps;
         uint32 per_turn_ms = 0u;
+        uint32 expected_ms = 0u;
 
         if (rate_dps < SPIN_RATE_MIN_DPS)
         {
             rate_dps = SPIN_RATE_MIN_DPS;
         }
         per_turn_ms = (uint32)(360.0f / rate_dps * 1000.0f);
-        spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + (uint32)(turns * (float)per_turn_ms);
+        expected_ms = (uint32)(turns * (float)per_turn_ms);
+        spin_timeout_limit_ms = SPIN_TIMEOUT_BASE_MS + expected_ms;
+        spin_min_runtime_ms = (uint32)((float)expected_ms * SPIN_MIN_RUNTIME_RATIO);
     }
     spin_reset_pid_state(&turn_angle);
     spin_reset_pid_state(&turn_gyro);
@@ -517,8 +547,24 @@ void spin_task_stop(void)
 {
     spin_target_deg = 0.0f;
     spin_accum_deg = 0.0f;
+    spin_accum_gyro_deg = 0.0f;
     spin_angle_err = 0.0f;
-    spin_finish(0);
+    spin_failed = 0u;
+    spin_fail_reason = SPIN_FAIL_NONE;
+    spin_yaw_correct_applied = 0u;
+    spin_yaw_correct_skipped = 0u;
+    spin_yaw_correct_delta_deg = 0.0f;
+    spin_enable = 0;
+    spin_done = SPIN_DONE_IDLE;
+    spin_rate_target_dps = 0.0f;
+    spin_settle_count = 0;
+    spin_timeout_ms = 0;
+    spin_phase = 0u;
+    spin_mismatch_count = 0;
+    spin_cmd = 0.0f;
+    turn_mix_cmd = 0.0f;
+    spin_reset_pid_state(&turn_angle);
+    spin_reset_pid_state(&turn_gyro);
 }
 
 /* 设置绝对航向目标：
@@ -1166,41 +1212,49 @@ void pid_ctrl_Run(void)
     pid_run(&gyro);
 
     /* 自旋控制：
-     * 1. 用相邻yaw增量累计总角度，跨 ±180° 时靠 ange_deviation1 解包。
-     * 2. 远离目标时固定角速度巡航，接近目标后直接把目标角速度收为 0。
-     * 3. 内环只负责把实际 gyro_z 跟踪到目标角速度。
+     * 1. 主累计用 Yaw_GetUnwrappedDeg() 相对起转基准，不受显示 yaw 校正影响。
+     * 2. gyro_z 积分作辅累计，与主累计偏差过大则判失败。
+     * 3. 35° 内进入减速补角区，8° 内进入终态收敛；只有角度/角速度/一致性全部满足才 spin_finish(1)。
      */
     spin_rate_meas_dps = imu_data.gyro_z * DEG_TO_RAD;
     if (spin_enable)
     {
         if (Motor_Switch)
         {
-            float curr_yaw = (float)euler_angle.yaw;
-            float delta_yaw = (float)ange_deviation1(curr_yaw, spin_last_yaw);
+            float curr_unwrapped_yaw = Yaw_GetUnwrappedDeg();
             float abs_spin_err = 0.0f;
-            spin_last_yaw = curr_yaw;
-            spin_accum_deg += delta_yaw;
+            float trim_rate_dps = 0.0f;
+            float accum_mismatch_deg = 0.0f;
+
+            spin_accum_deg = curr_unwrapped_yaw - spin_start_unwrapped_deg;
+            spin_accum_gyro_deg += spin_rate_meas_dps * dt_pid_turn_gyro;
             spin_angle_err = spin_target_deg - spin_accum_deg;
             abs_spin_err = ABS(spin_angle_err);
+            accum_mismatch_deg = ABS(spin_accum_deg - spin_accum_gyro_deg);
 
-            if (!spin_brake_phase)
+            if (abs_spin_err <= SPIN_ANGLE_COMPLETE_DEG)
             {
-                if ((spin_target_deg >= 0.0f && spin_angle_err <= 0.0f) ||
-                    (spin_target_deg < 0.0f && spin_angle_err >= 0.0f) ||
-                    abs_spin_err <= SPIN_ANGLE_SETTLE_DEG)
-                {
-                    spin_brake_phase = 1;
-                }
-            }
-
-            if (spin_brake_phase)
-            {
+                spin_phase = 2u;
                 spin_rate_target_dps = 0.0f;
+            }
+            else if (abs_spin_err <= SPIN_ANGLE_SETTLE_DEG)
+            {
+                trim_rate_dps = SPIN_ANGLE_TRIM_RATE_DPS;
+                if (abs_spin_err < SPIN_ANGLE_TRIM_SCALE_DEG)
+                {
+                    trim_rate_dps *= (abs_spin_err / SPIN_ANGLE_TRIM_SCALE_DEG);
+                }
+                if (trim_rate_dps < 15.0f)
+                {
+                    trim_rate_dps = 15.0f;
+                }
+                spin_phase = 1u;
+                spin_rate_target_dps = ((spin_angle_err >= 0.0f) ? 1.0f : -1.0f) * trim_rate_dps;
             }
             else
             {
-                float spin_err_sign = (spin_angle_err >= 0.0f) ? 1.0f : -1.0f;
-                spin_rate_target_dps = spin_err_sign * spin_rate_max_dps;
+                spin_phase = 0u;
+                spin_rate_target_dps = ((spin_angle_err >= 0.0f) ? 1.0f : -1.0f) * spin_rate_max_dps;
             }
 
             pid_set_target(&turn_gyro, spin_rate_target_dps);
@@ -1210,18 +1264,46 @@ void pid_ctrl_Run(void)
             spin_cmd = turn_gyro.out;
 
             spin_timeout_ms++;
-            if (ABS(euler_angle.pitch - pitch_mid) > SPIN_PITCH_ABORT_DEG || spin_timeout_ms > spin_timeout_limit_ms)
+            if (ABS(euler_angle.pitch - pitch_mid) > SPIN_PITCH_ABORT_DEG)
             {
+                spin_fail_reason = SPIN_FAIL_PITCH;
                 spin_finish(0);
             }
-            else if (spin_brake_phase && ABS(spin_rate_meas_dps) < SPIN_RATE_SETTLE_DPS)
+            else if (spin_timeout_ms > spin_timeout_limit_ms)
+            {
+                spin_fail_reason = SPIN_FAIL_TIMEOUT;
+                spin_finish(0);
+            }
+            else if (accum_mismatch_deg > SPIN_ACCUM_MISMATCH_DEG)
+            {
+                if (spin_mismatch_count < 0xFFFFu)
+                {
+                    spin_mismatch_count++;
+                }
+                if (spin_mismatch_count >= 200u)
+                {
+                    spin_fail_reason = SPIN_FAIL_ACCUM_MISMATCH;
+                    spin_finish(0);
+                }
+            }
+            else
+            {
+                spin_mismatch_count = 0u;
+            }
+
+            if (spin_enable &&
+                spin_phase == 2u &&
+                abs_spin_err <= SPIN_ANGLE_COMPLETE_DEG &&
+                accum_mismatch_deg <= SPIN_ACCUM_MISMATCH_DEG &&
+                spin_timeout_ms >= spin_min_runtime_ms &&
+                ABS(spin_rate_meas_dps) < SPIN_RATE_SETTLE_DPS)
             {
                 if (++spin_settle_count >= SPIN_SETTLE_COUNT_MAX)
                 {
                     spin_finish(1);
                 }
             }
-            else
+            else if (spin_enable)
             {
                 spin_settle_count = 0;
             }

@@ -102,6 +102,8 @@ typedef struct
   float nag_enter_bump_target_speed;    /* 颠簸段目标速度（Launch/Flash V14） */
   float nag_enter_stair2_target_speed;  /* 台阶2白块引导目标速度（Launch/Flash V15） */
   float spin_rate_max_dps;
+  float spin_rate_meas_dps_snap;   /* 实时 Z 轴角速度 deg/s，自旋内外均有值 */
+  float spin_rate_target_dps_snap; /* 自旋/转向目标角速度 deg/s */
   float speed_target_effective;
   uint8 spin_enable;
   uint8 spin_done;
@@ -230,6 +232,10 @@ typedef struct
   uint8 spin_yaw_correct_skipped;
   float spin_accum_deg_snap;
   float spin_angle_err_snap;
+  float spin_accum_gyro_deg_snap;
+  uint8 spin_phase_snap;
+  uint8 spin_fail_reason_snap;
+  uint8 spin_failed_snap;
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

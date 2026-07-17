@@ -154,15 +154,20 @@ void yaw_hold_poweron_request_if_needed(void);
 
 /* 自旋任务调试变量 */
 extern uint8 spin_enable;
-extern uint8 spin_done;
+extern uint8 spin_done;          /* 0=进行中/空闲 1=成功 2=失败 */
+extern uint8 spin_failed;        /* 1=最近一次自旋失败 */
+extern uint8 spin_fail_reason;    /* SPIN_FAIL_* 原因码 */
+extern uint8 spin_phase;          /* 0=巡航 1=减速补角 2=终态收敛 */
 extern int8 spin_dir;
 extern float spin_target_deg;   /* 任务目标总转角 (deg)，如 ±720 */
-extern float spin_accum_deg;    /* 自旋累计 euler_yaw 增量 */
+extern float spin_accum_deg;    /* 自旋主累计：连续航向相对起转基准 */
+extern float spin_accum_gyro_deg; /* 自旋辅累计：gyro_z 积分 */
 extern float spin_angle_err;    /* spin_target_deg - spin_accum_deg */
 extern float spin_rate_max_dps;
 extern float spin_rate_target_dps;
 extern float spin_rate_meas_dps;
 extern float spin_start_yaw_deg;           /* 起转瞬间显示航向，供闭环校正与 VOFA */
+extern float spin_start_unwrapped_deg;     /* 起转瞬间连续航向基准 */
 extern uint8 spin_yaw_correct_applied;     /* 最近一次 spin_finish(1) 是否已校正航向 */
 extern uint8 spin_yaw_correct_skipped;     /* 1=结束误差超 SPIN_YAW_CORRECT_MAX_ERR_DEG */
 extern float spin_yaw_correct_delta_deg;   /* 校正前后显示 yaw 差 (deg) */

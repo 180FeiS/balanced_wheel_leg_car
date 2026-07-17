@@ -270,10 +270,10 @@ void vofa_send_nav_from_dualcore_snapshot(void)
     SendDataStreamToVOFA(6,
                          c.spin_angle_err_snap,
                          c.spin_accum_deg_snap,
-                         c.spin_start_yaw_deg,
-                         c.spin_yaw_correct_delta_deg,
-                         (float)c.spin_yaw_correct_applied,
-                         (float)c.spin_yaw_correct_skipped);
+                         c.spin_accum_gyro_deg_snap,
+                         c.spin_rate_meas_dps_snap,
+                         (float)c.spin_enable,
+                         (float)c.spin_done);
     break;
   default:
     break;

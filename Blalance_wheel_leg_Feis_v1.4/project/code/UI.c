@@ -1033,21 +1033,23 @@ void GUI_3_3_1(void)
         ips200_show_string(0, ROW_9, "  ");
     }
     ips200_show_string(16, ROW_9, "VofaGroup:");
-    if (vofa_group == 1u)
+    switch (vofa_group)
     {
+    case 1u:
         ips200_show_string(112, ROW_9, "1:Spd");
-    }
-    else if (vofa_group == 2u)
-    {
+        break;
+    case 2u:
         ips200_show_string(112, ROW_9, "2:Fus");
-    }
-    else if (vofa_group == 3u)
-    {
+        break;
+    case 3u:
         ips200_show_string(112, ROW_9, "3:Odo");
-    }
-    else
-    {
+        break;
+    case 4u:
+        ips200_show_string(112, ROW_9, "4:Spn");
+        break;
+    default:
         ips200_show_string(112, ROW_9, "0:IMU");
+        break;
     }
 
     if (field_index == Run_Config_Field_FusionEnable)

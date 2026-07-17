@@ -91,6 +91,8 @@ void dualcore_ctrl_to_ui_publish(void)
   c->nag_enter_bump_target_speed = nag_enter_bump_target_speed;
   c->nag_enter_stair2_target_speed = nag_enter_stair2_target_speed;
   c->spin_rate_max_dps = spin_rate_max_dps;
+  c->spin_rate_meas_dps_snap = spin_rate_meas_dps;
+  c->spin_rate_target_dps_snap = spin_rate_target_dps;
   c->speed_target_effective = speed_target_effective;
   c->spin_enable = spin_enable;
   c->spin_done = spin_done;
@@ -118,6 +120,10 @@ void dualcore_ctrl_to_ui_publish(void)
   c->spin_yaw_correct_skipped = spin_yaw_correct_skipped;
   c->spin_accum_deg_snap = spin_accum_deg;
   c->spin_angle_err_snap = spin_angle_err;
+  c->spin_accum_gyro_deg_snap = spin_accum_gyro_deg;
+  c->spin_phase_snap = spin_phase;
+  c->spin_fail_reason_snap = spin_fail_reason;
+  c->spin_failed_snap = spin_failed;
   c->remote_local_keys_debug = g_remote_local_keys_debug;
   c->menu_input_remote_first = g_menu_input_remote_first;
   c->menu_vofa_enable = g_menu_vofa_enable;

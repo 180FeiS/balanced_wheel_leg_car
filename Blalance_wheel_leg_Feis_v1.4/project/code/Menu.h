@@ -39,7 +39,7 @@
 
 #define Run_Config_Field_InputMode 0u
 #define Run_Config_Field_VofaEnable 1u
-#define Run_Config_Field_VofaGroup 2u  /* VOFA 调试组 0=IMU 1=速度 2=融合 3=里程纠偏；Flash V9 可配 */
+#define Run_Config_Field_VofaGroup 2u  /* VOFA 调试组 0=IMU 1=速度 2=融合 3=里程纠偏 4=自旋；Flash V9 可配 */
 #define Run_Config_Field_FusionEnable 3u /* 导航融合开关 0=关 1=开；Flash V10 可配 */
 #define Run_Config_Field_OdoSlipEnable 4u /* 里程打滑纠偏 0=关 1=开；Flash V13 可配 */
 #define Run_Config_Field_InitLegLong 5u   /* 初始腿长 0=3.5 1=5.5；Flash V16 可配 */

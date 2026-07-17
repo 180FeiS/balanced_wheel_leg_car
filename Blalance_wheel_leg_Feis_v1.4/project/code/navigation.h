@@ -380,7 +380,8 @@ static inline float Nag_LaunchParamGetStep(uint8 field_index)
  * Spin 分阶段策略（实现见 Nag_Spin_ShouldTrackInsYaw / Run_Nag_GPS / Nag_Hook_Spin_Run）：
  * - 等待减速期：Run_index 与 Angle_Run 仍按里程/前瞻推进；
  * - spin_task_start 起转后：冻结 Run_index，锁存 Spin_Resume_RunIndex，融合里程快照同步；
- * - 自旋完成（spin_done，control 层 spin_finish(1) 含航向校正）：从 Spin_Resume_RunIndex 接回惯导；
+ * - 自旋成功（spin_done==1，control 严格角度门限 + spin_finish(1) 航向校正）：从 Spin_Resume_RunIndex 接回惯导；
+ * - 自旋失败（spin_failed==1）：恢复 Spin_Resume_RunIndex，不消费该元素；
  * - 起转后（spin_enable==1）：释放惯导航向，由 spin_cmd 控制。
  */
 

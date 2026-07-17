@@ -55,7 +55,7 @@
 *    - 3_1  Launch 二级列表（进入 3_1_1）
 *    - 3_2  Save（KEY3 保存 Run 参数：Launch + Config + Jump）
  *    - 3_3  Config 预配置（进入 3_3_1：KEY1 选字段 KEY2 改值）
- *      - 3_3_1. InputMode + VofaEnable + VofaGroup + InitLeg 预配置项
+ *      - 3_3_1. InputMode + VofaEnable + VofaGroup(0~4) + InitLeg 预配置项
 *    - 3_4  Jump 跳跃参数（进入 3_4_1：KEY1 选字段 KEY2/3 ±0.5）
 *      - 3_4_1. 四阶段腿长 + 四阶段时长（20ms 格）
 *      - 3_1_1. Launch 参数子页（15 字段：速度/距离/BumpSec 等，无底部 K 提示）

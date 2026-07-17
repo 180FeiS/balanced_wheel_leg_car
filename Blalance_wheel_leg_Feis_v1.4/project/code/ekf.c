@@ -39,6 +39,11 @@ static uint32_t gyro_z_count = 0u;
 float yaw_raw_deg = 0.0f;
 float yaw_zero_offset_deg = 0.0f;
 
+/* 连续航向：由 raw yaw 相邻最短角差累计，不受 Yaw_AlignDisplayDeg / Yaw_ResetZero 影响 */
+static float yaw_unwrapped_deg = 0.0f;
+static float yaw_unwrapped_last_raw_deg = 0.0f;
+static uint8 yaw_unwrapped_init_done = 0u;
+
 static float PK[4] = {1000, 100, 100, 1000};
 static float Kk[2] = {0, 0};
 float Q_ekf[4] = {0.3, 0.001, 0.001, 0.2};
@@ -97,6 +102,35 @@ static float yaw_apply_zero_offset(float raw_yaw_deg)
   return yaw_wrap180_deg(raw_yaw_deg - yaw_zero_offset_deg);
 }
 
+static float yaw_delta_shortest_deg(float curr_raw_deg, float prev_raw_deg)
+{
+  float delta = curr_raw_deg - prev_raw_deg;
+
+  while (delta > 180.0f)
+  {
+    delta -= 360.0f;
+  }
+  while (delta < -180.0f)
+  {
+    delta += 360.0f;
+  }
+  return delta;
+}
+
+static void yaw_unwrapped_update(float raw_yaw_deg)
+{
+  if (yaw_unwrapped_init_done == 0u)
+  {
+    yaw_unwrapped_deg = raw_yaw_deg;
+    yaw_unwrapped_last_raw_deg = raw_yaw_deg;
+    yaw_unwrapped_init_done = 1u;
+    return;
+  }
+
+  yaw_unwrapped_deg += yaw_delta_shortest_deg(raw_yaw_deg, yaw_unwrapped_last_raw_deg);
+  yaw_unwrapped_last_raw_deg = raw_yaw_deg;
+}
+
 float Yaw_GetDeg(void)
 {
   return (float)euler_angle.yaw;
@@ -105,6 +139,11 @@ float Yaw_GetDeg(void)
 float Yaw_GetRawDeg(void)
 {
   return yaw_raw_deg;
+}
+
+float Yaw_GetUnwrappedDeg(void)
+{
+  return yaw_unwrapped_deg;
 }
 
 float Yaw_GetZeroOffsetDeg(void)
@@ -286,6 +325,7 @@ static void quaternion_to_euler(void)
   yaw_raw_deg =
       atan2f(2 * q1 * q2 + 2 * q0 * q3, -2 * q1 * q1 - 2 * q3 * q3 + 1) *
       DEG_TO_RAD;
+  yaw_unwrapped_update(yaw_raw_deg);
   euler_angle.yaw = yaw_apply_zero_offset(yaw_raw_deg);
 }
 

@@ -39,6 +39,8 @@ static bool Nag_GetActiveBridgeZone(uint16 run_index,
                                     uint8 *exit_event_index);
 
 static void Nag_UpdatePreviewAndSpeedTarget(void);
+static void Nag_ClearEventRuntimeState(void);
+static void Nag_Spin_HandleFailure(void);
 static void Nag_BridgeConfirmEnter(void);
 static void Nag_BridgeConfirmExit(uint8 allow_beep);
 static void Nag_BridgeApplyBlobYaw(float center_err, uint8 track_valid);
@@ -370,8 +372,9 @@ void Nag_Hook_ExitTurn_Stop(void) {}
 /* 自转元素接法：
  * 1. Start：先接管全局速度档位，把 motor_user_speed_cmd 清零，给车一个“先刹停”的阶段；
  * 2. Run：速度连续多拍低于 Nag_Spin_Stop_Speed_Threshold 后 spin_task_start()（起转前低速区）；
- * 3. IsDone：自旋已启动且 spin_done!=0（control 收刹结束；成功时 spin_finish(1) 会做航向校正）；
+ * 3. IsDone：自旋已启动且 spin_done==1（control 严格角度门限成功后 spin_finish(1) 才做航向校正）；
  * 4. Stop：恢复 Spin_Saved_SetSpeed；航向校正结果由 control 层保留在 euler_angle.yaw。
+ *    失败时 Nag_Spin_HandleFailure() 恢复路径索引且不消费该元素。
  */
 bool Nag_Hook_Spin_Start(void)
 {
@@ -390,6 +393,10 @@ void Nag_Hook_Spin_Run(void)
 
     if (N.Spin_Task_Started)
     {
+        if (spin_failed != 0u)
+        {
+            Nag_Spin_HandleFailure();
+        }
         return;
     }
 
@@ -423,10 +430,10 @@ void Nag_Hook_Spin_Run(void)
     spin_task_start(Nag_Spin_Demo_Turns, Nag_Spin_Demo_Dir);
     N.Spin_Task_Started = 1;
 }
-/* spin_done 由 control spin_finish 置位；成功结束时会 gated 校正显示 yaw，再由此返回 true 给元素状态机 */
+/* spin_done==1 由 control spin_finish(1) 置位；失败走 Nag_Spin_HandleFailure()，不进入 DONE */
 bool Nag_Hook_Spin_IsDone(void)
 {
-    return (N.Spin_Task_Started && (spin_done != 0));
+    return (N.Spin_Task_Started && (spin_done == 1u));
 }
 void Nag_Hook_Spin_Stop(void)
 {
@@ -435,6 +442,26 @@ void Nag_Hook_Spin_Stop(void)
         spin_task_stop();
     }
     Nag_Spin_RestoreSetSpeed();
+}
+
+/* 自旋失败：恢复起转前路径索引与速度，不消费该元素，便于后续重试。 */
+static void Nag_Spin_HandleFailure(void)
+{
+    if ((N.Event_Active_Type != NAG_EVENT_TYPE_SPIN) || (N.Spin_Task_Started == 0u))
+    {
+        return;
+    }
+
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
+    N.Run_index = N.Spin_Resume_RunIndex;
+#if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE
+    NavFusion_SyncMileageSnapshot();
+#endif
+    Nag_Hook_Spin_Stop();
+    Nag_ClearEventRuntimeState();
+    Nag_UpdatePreviewAndSpeedTarget();
+    N.Angle_Run = (float)(Nav_read[N.Prospect_index] / 100.0f);
 }
 
 /*
@@ -4252,6 +4279,8 @@ void Nag_Notify_Event_Done(void)
     N.Mileage_All = 0.0f;
     Nag_OdoSlip_ResetState();
     N.Target_Request_Valid = 0;
+    steer_yaw_request_pending = 0u;
+    steer_yaw_delayed_by_spin = 0u;
     Nag_Element_Stop(event_type);
     Nag_ClearEventRuntimeState();
 
@@ -4342,6 +4371,17 @@ void Nag_Element_Abort(void)
         s_bridge_blob_lost_ms = 0u;
         s_bridge_enter_grace_ms = 0u;
         s_bridge_blob_no_frame_ms = 0u;
+    }
+
+    if (N.Event_Active_Type == NAG_EVENT_TYPE_SPIN)
+    {
+        Nag_Spin_RestoreSetSpeed();
+        if (N.Spin_Task_Started)
+        {
+            spin_task_stop();
+        }
+        steer_yaw_request_pending = 0u;
+        steer_yaw_delayed_by_spin = 0u;
     }
 
     N.Event_State = NAG_EVENT_STATE_ABORT;

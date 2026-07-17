@@ -48,13 +48,14 @@ void vofa_send_nav_from_dualcore_snapshot(void);
 #define VOFA_GROUP_ODO_SLIP_DEBUG (3u)
 
 /*
- * VOFA 组 4 — 自旋航向闭环校正（菜单 n 切组至 4）：
- *   ch1 spin_angle_err_snap      剩余角 spin_target - spin_accum (deg)
- *   ch2 spin_accum_deg_snap      自旋累计角 (deg)
- *   ch3 spin_start_yaw_deg        起转显示航向 (deg)
- *   ch4 spin_yaw_correct_delta_deg  最近一次校正量 (deg)
- *   ch5 spin_yaw_correct_applied  1=上次 spin_finish(1) 已校正
- *   ch6 spin_yaw_correct_skipped  1=误差超门限跳过校正
+ * VOFA 组 4 — 自旋闭环（菜单 n / Config 切组至 4）：
+ *   ch1 spin_angle_err_snap       剩余角；自旋中应逐步趋近 0（空闲时为 0）
+ *   ch2 spin_accum_deg_snap       主累计 deg；2 圈成功应接近 ±720
+ *   ch3 spin_accum_gyro_deg_snap  辅累计 deg（gyro_z 积分）
+ *   ch4 spin_rate_meas_dps_snap   实时 Z 角速度 deg/s（空闲时手转车身也应有值，用于验证链路）
+ *   ch5 spin_enable               1=自旋任务进行中
+ *   ch6 spin_done                 0=空闲 1=成功 2=失败
+ * 注意：ch1~ch3 仅在 spin_task_start() 后才有意义；请用菜单 o 或惯导自旋元素触发。
  */
 #define VOFA_GROUP_SPIN_YAW_DEBUG (4u)
 #endif
