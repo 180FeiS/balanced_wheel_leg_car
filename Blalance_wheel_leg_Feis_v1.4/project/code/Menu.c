@@ -67,8 +67,8 @@
 #include "image.h"
 #include "control.h"
 #include "init.h"
-#if defined(CY_CORE_CM7_0)
 #include "navigation.h"
+#if defined(CY_CORE_CM7_0)
 #include "flash.h"
 #include "nav_fusion.h"
 #if !defined(CY_CORE_CM7_1)
@@ -116,12 +116,16 @@ static uint8 MenuIsRunJumpPage(void);
 static uint8 MenuIsRunFlashPage(void);
 static uint8 MenuIsRunConfigPage(void);
 static uint8 MenuIsRunGyroBiasPage(void);
+static uint8 MenuIsRunRecSubjPage(void);
+static uint8 MenuIsRunPlaySubjPage(void);
 static void MenuAdjustRunLaunchParam(float delta);
 static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void);
 static uint8 MenuTryHandleRunJumpKeyEvent(void);
 static uint8 MenuTryHandleRunFlashKeyEvent(void);
 static uint8 MenuTryHandleRunConfigKeyEvent(void);
 static uint8 MenuTryHandleRunGyroBiasKeyEvent(void);
+static uint8 MenuTryHandleRunRecSubjKeyEvent(void);
+static uint8 MenuTryHandleRunPlaySubjKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
 static uint8 MenuIsPathFixPage(void);
 static uint8 MenuTryHandlePathFixKeyEvent(void);
@@ -180,6 +184,43 @@ static uint8 s_run_launch_field_index = 0u;
 static uint8 s_run_config_field_index = 0u;
 /* Jump 页：KEY1 循环选中字段；KEY2/KEY3 按 ±0.5 调节。 */
 static uint8 s_run_jump_field_index = 0u;
+/* RecSubj/PlaySubj：KEY1/2 改预览，KEY3 确认写 Flash V17；KEY4 丢弃预览返回。 */
+static uint8 s_run_rec_subj_preview = 1u;
+static uint8 s_run_play_subj_preview = 1u;
+
+/* CM7_1 不链接 navigation.c：科目钳位/预览循环在菜单侧本地实现，避免 Li005。 */
+static uint8 Menu_ClampSubject(uint8 subject)
+{
+    if (subject < 1u)
+    {
+        return 1u;
+    }
+    if (subject > NAG_SUBJECT_COUNT)
+    {
+        return NAG_SUBJECT_COUNT;
+    }
+    return subject;
+}
+
+static void Menu_SubjectPreviewStep(uint8 *preview_subject, int8 delta)
+{
+    int16 next = 0;
+
+    if (preview_subject == NULL)
+    {
+        return;
+    }
+    next = (int16)Menu_ClampSubject(*preview_subject) + (int16)delta;
+    if (next < 1)
+    {
+        next = (int16)NAG_SUBJECT_COUNT;
+    }
+    else if (next > (int16)NAG_SUBJECT_COUNT)
+    {
+        next = 1;
+    }
+    *preview_subject = (uint8)next;
+}
 
 uint8 Menu_GetRunLaunchFieldIndex(void)
 {
@@ -199,6 +240,58 @@ float Menu_GetInitLegLong(void)
 uint8 Menu_GetRunJumpFieldIndex(void)
 {
     return s_run_jump_field_index;
+}
+
+uint8 Menu_GetRunRecSubjPreview(void)
+{
+    return s_run_rec_subj_preview;
+}
+
+uint8 Menu_GetRunPlaySubjPreview(void)
+{
+    return s_run_play_subj_preview;
+}
+
+void Menu_SyncRunRecSubjPreview(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc;
+    dualcore_ctrl_to_ui_pull(&dc);
+    s_run_rec_subj_preview = Menu_ClampSubject(dc.nag_record_subject);
+#else
+    s_run_rec_subj_preview = Menu_ClampSubject(g_nag_record_subject);
+#endif
+}
+
+void Menu_SyncRunPlaySubjPreview(void)
+{
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_t dc;
+    dualcore_ctrl_to_ui_pull(&dc);
+    s_run_play_subj_preview = Menu_ClampSubject(dc.nag_replay_subject);
+#else
+    s_run_play_subj_preview = Menu_ClampSubject(g_nag_replay_subject);
+#endif
+}
+
+void Menu_ConfirmRunRecSubj(uint8 subject)
+{
+#if defined(CY_CORE_CM7_0)
+    Nag_SetRecordSubject(subject);
+    flash_RunLaunchSpeed_Write();
+#else
+    (void)subject;
+#endif
+}
+
+void Menu_ConfirmRunPlaySubj(uint8 subject)
+{
+#if defined(CY_CORE_CM7_0)
+    Nag_SetReplaySubject(subject);
+    flash_RunLaunchSpeed_Write();
+#else
+    (void)subject;
+#endif
 }
 
 void Menu_RunConfigToggleField(uint8 field_index)
@@ -386,6 +479,14 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsRunRecSubjPage() && MenuTryHandleRunRecSubjKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunPlaySubjPage() && MenuTryHandleRunPlaySubjKeyEvent())
+   {
+        return;
+   }
    if(MenuIsGpsDebugPage() && MenuTryHandleGpsDebugKeyEvent())
    {
         return;
@@ -481,6 +582,14 @@ void menu_key_capture_event(void)
         return;
    }
    if(MenuIsRunGyroBiasPage() && MenuTryHandleRunGyroBiasKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunRecSubjPage() && MenuTryHandleRunRecSubjKeyEvent())
+   {
+        return;
+   }
+   if(MenuIsRunPlaySubjPage() && MenuTryHandleRunPlaySubjKeyEvent())
    {
         return;
    }
@@ -843,6 +952,16 @@ static uint8 MenuIsRunGyroBiasPage(void)
     return (uint8)(strcmp(menuMember.pos, "3.5.1") == 0);
 }
 
+static uint8 MenuIsRunRecSubjPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.6.1") == 0);
+}
+
+static uint8 MenuIsRunPlaySubjPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "3.7.1") == 0);
+}
+
 static void MenuAdjustRunLaunchParam(float delta)
 {
 #if defined(CY_CORE_CM7_1)
@@ -953,6 +1072,70 @@ static uint8 MenuTryHandleRunGyroBiasKeyEvent(void)
         (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START, 0, 0.0f);
 #else
         GyroBias_CalibStart();
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* RecSubj：KEY1/2 切换预览科目，KEY3 确认并写 Flash V17。 */
+static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
+{
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        Menu_SubjectPreviewStep(&s_run_rec_subj_preview, -1);
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+        Menu_SubjectPreviewStep(&s_run_rec_subj_preview, 1);
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_2);
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_RECORD_SUBJECT_CONFIRM,
+                                   (uint32)Menu_ClampSubject(s_run_rec_subj_preview), 0.0f);
+#else
+        Menu_ConfirmRunRecSubj(s_run_rec_subj_preview);
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_3);
+        return 1u;
+    }
+    return 0u;
+}
+
+/* PlaySubj：KEY1/2 切换预览科目，KEY3 确认并写 Flash V17。 */
+static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
+{
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+        Menu_SubjectPreviewStep(&s_run_play_subj_preview, -1);
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_1);
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+        Menu_SubjectPreviewStep(&s_run_play_subj_preview, 1);
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_2);
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_NAG_REPLAY_SUBJECT_CONFIRM,
+                                   (uint32)Menu_ClampSubject(s_run_play_subj_preview), 0.0f);
+#else
+        Menu_ConfirmRunPlaySubj(s_run_play_subj_preview);
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
@@ -1365,6 +1548,16 @@ void MenuInit()
     strcpy(menuMember.pos, "3.5");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
 
+    menuMember.gui = GUI_3_6;
+    menuMember.act = ACT_3_6;
+    strcpy(menuMember.pos, "3.6");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_7;
+    menuMember.act = ACT_3_7;
+    strcpy(menuMember.pos, "3.7");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
     menuMember.gui = GUI_3_1_1;
     menuMember.act = ACT_3_1_1;
     strcpy(menuMember.pos, "3.1.1");
@@ -1383,6 +1576,16 @@ void MenuInit()
     menuMember.gui = GUI_3_5_1;
     menuMember.act = ACT_3_5_1;
     strcpy(menuMember.pos, "3.5.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_6_1;
+    menuMember.act = ACT_3_6_1;
+    strcpy(menuMember.pos, "3.6.1");
+    hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+    menuMember.gui = GUI_3_7_1;
+    menuMember.act = ACT_3_7_1;
+    strcpy(menuMember.pos, "3.7.1");
     hashMenu.vPtr->insert(&hashMenu, &menuMember);
     
     menuMember.gui = GUI_1_1_1;

@@ -131,6 +131,8 @@ void dualcore_ctrl_to_ui_publish(void)
   c->menu_nav_fusion_enable = g_menu_nav_fusion_enable;
   c->menu_odo_slip_enable = g_menu_odo_slip_enable;
   c->menu_init_leg_long_sel = g_menu_init_leg_long_sel;
+  c->nag_record_subject = Nag_ClampSubject(g_nag_record_subject);
+  c->nag_replay_subject = Nag_ClampSubject(g_nag_replay_subject);
   c->jump_takeoff_p = jump_takeoff_p;
   c->jump_retract_p = jump_retract_p;
   c->jump_prepare_p = jump_prepare_p;
@@ -543,6 +545,12 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     break;
   case DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE:
     (void)Nag_PathFix_ExitSave();
+    break;
+  case DUALCORE_UI_CMD_NAG_RECORD_SUBJECT_CONFIRM:
+    Menu_ConfirmRunRecSubj(Nag_ClampSubject((uint8)s->arg_u32));
+    break;
+  case DUALCORE_UI_CMD_NAG_REPLAY_SUBJECT_CONFIRM:
+    Menu_ConfirmRunPlaySubj(Nag_ClampSubject((uint8)s->arg_u32));
     break;
   default:
     break;

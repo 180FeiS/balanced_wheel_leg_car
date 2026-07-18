@@ -65,6 +65,104 @@ Nag N;
 uint8 nav_heading_mode = NAV_HEADING_MODE_INS;
 NagEvent Nag_Event_Table[Nag_Event_Max];
 uint8 Nag_Vofa_Group = 0;
+/* 惯导三科目：Run→RecSubj/PlaySubj 配置，Flash V17 持久化；非法值钳位 1~3 */
+uint8 g_nag_record_subject = 1u;
+uint8 g_nag_replay_subject = 1u;
+
+uint8 Nag_ClampSubject(uint8 subject)
+{
+    if (subject < 1u)
+    {
+        return 1u;
+    }
+    if (subject > NAG_SUBJECT_COUNT)
+    {
+        return NAG_SUBJECT_COUNT;
+    }
+    return subject;
+}
+
+uint8 Nag_GetSubjectMetaPage(uint8 subject)
+{
+    switch (Nag_ClampSubject(subject))
+    {
+    case 2u:
+        return Nag_Subject2_Meta_Page;
+    case 3u:
+        return Nag_Subject3_Meta_Page;
+    default:
+        return Nag_Subject1_Meta_Page;
+    }
+}
+
+uint8 Nag_GetSubjectYawStartPage(uint8 subject)
+{
+    switch (Nag_ClampSubject(subject))
+    {
+    case 2u:
+        return Nag_Subject2_Yaw_Start_Page;
+    case 3u:
+        return Nag_Subject3_Yaw_Start_Page;
+    default:
+        return Nag_Subject1_Yaw_Start_Page;
+    }
+}
+
+uint8 Nag_GetSubjectYawEndPage(uint8 subject)
+{
+    switch (Nag_ClampSubject(subject))
+    {
+    case 2u:
+        return Nag_Subject2_Yaw_End_Page;
+    case 3u:
+        return Nag_Subject3_Yaw_End_Page;
+    default:
+        return Nag_Subject1_Yaw_End_Page;
+    }
+}
+
+uint8 Nag_GetSubjectEventPage(uint8 subject)
+{
+    switch (Nag_ClampSubject(subject))
+    {
+    case 2u:
+        return Nag_Subject2_Event_Page;
+    case 3u:
+        return Nag_Subject3_Event_Page;
+    default:
+        return Nag_Subject1_Event_Page;
+    }
+}
+
+void Nag_SubjectPreviewStep(uint8 *preview_subject, int8 delta)
+{
+    int16 next = 0;
+
+    if (preview_subject == NULL)
+    {
+        return;
+    }
+    next = (int16)Nag_ClampSubject(*preview_subject) + (int16)delta;
+    if (next < 1)
+    {
+        next = (int16)NAG_SUBJECT_COUNT;
+    }
+    else if (next > (int16)NAG_SUBJECT_COUNT)
+    {
+        next = 1;
+    }
+    *preview_subject = (uint8)next;
+}
+
+void Nag_SetRecordSubject(uint8 subject)
+{
+    g_nag_record_subject = Nag_ClampSubject(subject);
+}
+
+void Nag_SetReplaySubject(uint8 subject)
+{
+    g_nag_replay_subject = Nag_ClampSubject(subject);
+}
 
 #if NAV_FUSION_ENABLE && NAG_USE_FUSION_MILEAGE && NAV_FUSION_ORIGIN_ENABLE
 /* 惯导回放：flash 读完置 1；与原点采集均完成后才进入 index=3 */
@@ -3851,8 +3949,8 @@ void Run_Nag_Save()
        {
            flash_Nag_Write();
            N.size=0;   //将数组大小为0，下一次从新开始取
-           N.Flash_page_index--;   //flash页索引减小
-           zf_assert(N.Flash_page_index > Nag_End_Page);//防止越界保护
+           N.Flash_page_index--;
+           zf_assert(N.Flash_page_index > Nag_GetSubjectYawEndPage(g_nag_record_subject));
        }
        int32 Save=(int32)(Nag_Yaw*100); //取偏航角放大100倍，避免使用Float类型存储
        flash_union_buffer[N.size++].int32_type = Save;  //将偏航角写入缓冲区
@@ -3948,7 +4046,7 @@ void Init_Nag()
     N.Stair2_Exit_Run_Index = NAG_STAIR2_EXIT_INDEX_INVALID;
     N.Stair2_Paired_Enter_Index = NAG_STAIR2_PAIRED_ENTER_INVALID;
     memset(Nag_Event_Table, 0, sizeof(Nag_Event_Table));
-    N.Flash_page_index=Nag_Start_Page;
+    N.Flash_page_index = Nag_GetSubjectYawStartPage(g_nag_record_subject);
     N.Event_Active_Index = 0xFFu;
     N.Event_Record_Type = NAG_EVENT_TYPE_SPIN;
     flash_Nag_ResetReadState();
@@ -3958,6 +4056,7 @@ void Init_Nag()
 
 void Nag_Begin_Record(void)
 {
+    /* 按 Run→RecSubj 所选科目绑定 Flash 页区后进入录制态（index=1） */
     Init_Nag();
     steer_yaw_request_pending = 0;
     steer_yaw_delayed_by_spin = 0;
@@ -4039,6 +4138,7 @@ void Nag_CompleteReplayAfterOrigin(void)
 
 void Nag_Begin_Replay(void)
 {
+    /* 按 Run→PlaySubj 所选科目从 Flash 装载轨迹（index=2→NagFlashRead→3） */
     nav_heading_mode = NAV_HEADING_MODE_INS;
     N.Mileage_All = 0;
     N.Mileage_Step = 0;
@@ -4052,7 +4152,7 @@ void Nag_Begin_Replay(void)
     N.Nag_Stop_f = 0;
     N.Save_state = 0;
     N.End_f = 0;
-    N.Flash_page_index = Nag_Start_Page;
+    N.Flash_page_index = Nag_GetSubjectYawStartPage(g_nag_replay_subject);
     N.Requested_Target_Yaw = 0;
     N.Target_Request_Valid = 0;
     Nag_ClearEventConsumed();
@@ -4437,7 +4537,7 @@ void Nag_System(){
 //-------------------------------------------------------------------------------------------------------------------
 void NagFlashRead(){
   if(N.Save_state) return;
-  N.Flash_page_index = Nag_Start_Page;
+  N.Flash_page_index = Nag_GetSubjectYawStartPage(g_nag_replay_subject);
   flash_Nag_Read();
   uint8 page_trun=0;
   

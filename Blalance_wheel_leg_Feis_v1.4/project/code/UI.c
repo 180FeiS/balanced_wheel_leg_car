@@ -476,6 +476,18 @@ void GUI_2_2_1(void) // 导航调试界面（须从 2.2 按「右」进入）
     ips200_show_string(128, ROW_6, ")");
 
 #if defined(CY_CORE_CM7_1)
+    ips200_show_string(144, ROW_6, "R");
+    ips200_show_uint(160, ROW_6, (uint32)s_ui_dc.nag_record_subject, 1);
+    ips200_show_string(176, ROW_6, "P");
+    ips200_show_uint(192, ROW_6, (uint32)s_ui_dc.nag_replay_subject, 1);
+#else
+    ips200_show_string(144, ROW_6, "R");
+    ips200_show_uint(160, ROW_6, (uint32)g_nag_record_subject, 1);
+    ips200_show_string(176, ROW_6, "P");
+    ips200_show_uint(192, ROW_6, (uint32)g_nag_replay_subject, 1);
+#endif
+
+#if defined(CY_CORE_CM7_1)
     ips200_show_string(0, ROW_7, "RunIdx:");
     ips200_show_uint(64, ROW_7, (uint32)nag_system_run_index, 1);
 #else
@@ -1034,7 +1046,7 @@ static void GUI_Display_Level2_Common3(void)
     GUI_Display_FPS();
 }
 
-/** 二级 Run 列表：selected_row_index 0=Launch 1=Save 2=Config 3=Jump 4=GyroBias */
+/** 二级 Run 列表：0=Launch 1=Save 2=Config 3=Jump 4=GyroBias 5=RecSubj 6=PlaySubj */
 static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
 {
     int16 ay;
@@ -1042,10 +1054,12 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
     GUI_Display_Level2_Common3();
 
     ips200_show_string(80, ROW_8,  " Launch ");
-    ips200_show_string(80, ROW_10, " Save   ");
-    ips200_show_string(80, ROW_12, " Config ");
-    ips200_show_string(80, ROW_14, " Jump   ");
-    ips200_show_string(80, ROW_16, "GyroBias");
+    ips200_show_string(80, ROW_9,  " Save   ");
+    ips200_show_string(80, ROW_10, " Config ");
+    ips200_show_string(80, ROW_11, " Jump   ");
+    ips200_show_string(80, ROW_12, "GyroBias");
+    ips200_show_string(80, ROW_13, "RecSubj ");
+    ips200_show_string(80, ROW_14, "PlaySubj");
 
     switch (selected_row_index)
     {
@@ -1053,23 +1067,29 @@ static void GUI_Run_ShowSubmenuList(uint8 selected_row_index)
         ay = ROW_8;
         break;
     case 1u:
-        ay = ROW_10;
+        ay = ROW_9;
         break;
     case 2u:
-        ay = ROW_12;
+        ay = ROW_10;
         break;
     case 3u:
-        ay = ROW_14;
+        ay = ROW_11;
         break;
     case 4u:
-        ay = ROW_16;
+        ay = ROW_12;
+        break;
+    case 5u:
+        ay = ROW_13;
+        break;
+    case 6u:
+        ay = ROW_14;
         break;
     }
     ips200_show_string(48, ay, "-->");
     ips200_show_string(152, ay, "<--");
     if (selected_row_index == 1u)
     {
-        ips200_show_string(24, ROW_17, "K3:save all");
+        ips200_show_string(24, ROW_15, "K3:save all");
     }
 }
 
@@ -1134,6 +1154,32 @@ void ACT_3_5()
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '5';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_6(void)
+{
+    GUI_Run_ShowSubmenuList(5u);
+}
+void ACT_3_6()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '6';
+    ReadPos[3] = 0x00;
+    ReadPos[4] = 0x00;
+}
+
+void GUI_3_7(void)
+{
+    GUI_Run_ShowSubmenuList(6u);
+}
+void ACT_3_7()
+{
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '7';
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
 }
@@ -1456,6 +1502,76 @@ void ACT_3_5_1()
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '5';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
+static void GUI_RunSubjectPage(const char *title, uint8 confirmed_subject, uint8 preview_subject)
+{
+    GUI_Display_Level2_Common3();
+    ips200_show_string(40, ROW_3, title);
+    ips200_draw_line(16, ROW_14, 223, ROW_14, IPS200_DEFAULT_PENCOLOR);
+
+    ips200_show_string(8, ROW_6, "Saved:");
+    ips200_show_uint(72, ROW_6, (uint32)confirmed_subject, 1);
+
+    ips200_show_string(8, ROW_8, "Select:");
+    ips200_show_uint(72, ROW_8, (uint32)preview_subject, 1);
+
+    ips200_show_string(8, ROW_10, "Range 1-3");
+
+    ips200_show_string(8, ROW_15, "K1/K2:sel K3:ok");
+    ips200_show_string(8, ROW_16, "K4:back");
+}
+
+void GUI_3_6_1(void)
+{
+    uint8 confirmed = 1u;
+    uint8 preview = Menu_GetRunRecSubjPreview();
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    confirmed = s_ui_dc.nag_record_subject;
+#else
+    confirmed = g_nag_record_subject;
+#endif
+
+    GUI_RunSubjectPage("RecSubj", confirmed, preview);
+}
+
+void ACT_3_6_1()
+{
+    Menu_SyncRunRecSubjPreview();
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '6';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
+}
+
+void GUI_3_7_1(void)
+{
+    uint8 confirmed = 1u;
+    uint8 preview = Menu_GetRunPlaySubjPreview();
+
+#if defined(CY_CORE_CM7_1)
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    confirmed = s_ui_dc.nag_replay_subject;
+#else
+    confirmed = g_nag_replay_subject;
+#endif
+
+    GUI_RunSubjectPage("PlaySubj", confirmed, preview);
+}
+
+void ACT_3_7_1()
+{
+    Menu_SyncRunPlaySubjPreview();
+    ReadPos[0] = '3';
+    ReadPos[1] = '.';
+    ReadPos[2] = '7';
     ReadPos[3] = '.';
     ReadPos[4] = '1';
     ReadPos[5] = 0x00;

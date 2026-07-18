@@ -7,6 +7,50 @@
 #include "Menu.h"
 
 static uint8 nag_flash_index_read = 0;
+/* 当前 flash 读写绑定的科目（1~3）；由 flash_Nag_BindSubject* 在操作前设置 */
+static uint8 s_nag_flash_subject = 1u;
+
+static void flash_Nag_BindSubjectRecord(void)
+{
+    s_nag_flash_subject = Nag_ClampSubject(g_nag_record_subject);
+}
+
+static void flash_Nag_BindSubjectReplay(void)
+{
+    s_nag_flash_subject = Nag_ClampSubject(g_nag_replay_subject);
+}
+
+static void flash_Nag_BindSubjectActive(void)
+{
+    if (N.Nag_SystemRun_Index == 1u)
+    {
+        flash_Nag_BindSubjectRecord();
+    }
+    else
+    {
+        flash_Nag_BindSubjectReplay();
+    }
+}
+
+static uint8 flash_Nag_MetaPage(void)
+{
+    return Nag_GetSubjectMetaPage(s_nag_flash_subject);
+}
+
+static uint8 flash_Nag_EventPage(void)
+{
+    return Nag_GetSubjectEventPage(s_nag_flash_subject);
+}
+
+static uint8 flash_Nag_YawStartPage(void)
+{
+    return Nag_GetSubjectYawStartPage(s_nag_flash_subject);
+}
+
+static uint8 flash_Nag_YawEndPage(void)
+{
+    return Nag_GetSubjectYawEndPage(s_nag_flash_subject);
+}
 
 #define GPS_POINTS_PAGE 48u
 #define GPS_POINTS_MAGIC 0x47505350u
@@ -50,6 +94,8 @@ static void flash_RunLaunchParamsPack(void)
     flash_union_buffer[23].float_type = nag_enter_bump_target_speed;
     flash_union_buffer[24].float_type = nag_enter_stair2_target_speed;
     flash_union_buffer[25].uint32_type = (g_menu_init_leg_long_sel != 0u) ? 1u : 0u;
+    flash_union_buffer[26].uint32_type = (uint32)Nag_ClampSubject(g_nag_record_subject);
+    flash_union_buffer[27].uint32_type = (uint32)Nag_ClampSubject(g_nag_replay_subject);
 }
 
 static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
@@ -66,7 +112,7 @@ static uint32 flash_RunLaunchParamsChecksumEx(uint32 version, uint8 param_count)
 
 static uint32 flash_RunLaunchParamsChecksum(void)
 {
-    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V16,
+    return flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V17,
                                            Nag_Run_Launch_Config_Word_Count);
 }
 
@@ -182,6 +228,15 @@ static void flash_RunLaunchParamsUnpackV16(void)
     flash_RunLaunchParamsUnpackV15();
     g_menu_init_leg_long_sel = (uint8)(flash_union_buffer[25].uint32_type & 1u);
     leg_long = Menu_GetInitLegLong();
+    g_nag_record_subject = 1u;
+    g_nag_replay_subject = 1u;
+}
+
+static void flash_RunLaunchParamsUnpackV17(void)
+{
+    flash_RunLaunchParamsUnpackV16();
+    g_nag_record_subject = Nag_ClampSubject((uint8)flash_union_buffer[26].uint32_type);
+    g_nag_replay_subject = Nag_ClampSubject((uint8)flash_union_buffer[27].uint32_type);
 }
 
 static void flash_RunLaunchParamsUnpackV7(void)
@@ -374,11 +429,11 @@ static void flash_Nag_WriteEventPage(void)
                                                    (uint32)Nag_Event_Table[event_index].valid;
     }
 
-    if (flash_check(0, Nag_Event_Page))
+    if (flash_check(0, flash_Nag_EventPage()))
     {
-        flash_erase_page(0, Nag_Event_Page);
+        flash_erase_page(0, flash_Nag_EventPage());
     }
-    flash_write_page_from_buffer(0, Nag_Event_Page, FLASH_PAGE_LENGTH);
+    flash_write_page_from_buffer(0, flash_Nag_EventPage(), FLASH_PAGE_LENGTH);
     flash_buffer_clear();
 }
 
@@ -393,13 +448,13 @@ static void flash_Nag_ReadEventPage(void)
 
     flash_Nag_ClearEventTable();
 
-    if (!flash_check(0, Nag_Event_Page))
+    if (!flash_check(0, flash_Nag_EventPage()))
     {
         return;
     }
 
     flash_buffer_clear();
-    flash_read_page_to_buffer(0, Nag_Event_Page, FLASH_PAGE_LENGTH);
+    flash_read_page_to_buffer(0, flash_Nag_EventPage(), FLASH_PAGE_LENGTH);
     event_magic = flash_union_buffer[0].uint32_type;
     event_version = flash_union_buffer[1].uint32_type;
     event_count = flash_union_buffer[2].uint32_type;
@@ -443,12 +498,12 @@ static void flash_Nag_ReadEventPage(void)
     flash_buffer_clear();
 }
 
-/* 保存 Run Launch 参数 + 输入模式 + VOFA 开关 + VOFA 组 + 融合开关 + 颠簸时长 + 打滑纠偏 + 颠簸速度 + 台阶2速度 + 初始腿长（页 47 V16）。 */
+/* 保存 Run Launch 参数 + 录/放科目等（页 47 V17）。RecSubj/PlaySubj KEY3 亦调用本函数即时落盘。 */
 void flash_RunLaunchSpeed_Write(void)
 {
     flash_buffer_clear();
     flash_union_buffer[0].uint32_type = Nag_Run_Launch_Speed_Magic;
-    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V16;
+    flash_union_buffer[1].uint32_type = Nag_Run_Launch_Params_Version_V17;
     flash_RunLaunchParamsPack();
     flash_union_buffer[2].uint32_type = flash_RunLaunchParamsChecksum();
 
@@ -486,9 +541,15 @@ void flash_RunLaunchSpeed_Read(void)
         return;
     }
 
-    if ((speed_version == Nag_Run_Launch_Params_Version_V16) &&
-        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V16,
+    if ((speed_version == Nag_Run_Launch_Params_Version_V17) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V17,
                                                            Nag_Run_Launch_Config_Word_Count)))
+    {
+        flash_RunLaunchParamsUnpackV17();
+    }
+    else if ((speed_version == Nag_Run_Launch_Params_Version_V16) &&
+        (speed_checksum == flash_RunLaunchParamsChecksumEx(Nag_Run_Launch_Params_Version_V16,
+                                                           Nag_Run_Launch_Config_Word_Count_V16)))
     {
         flash_RunLaunchParamsUnpackV16();
     }
@@ -856,6 +917,7 @@ void flash_GpsPoints_Clear(void)
 }
 
 void flash_Nag_Write(){
+    flash_Nag_BindSubjectActive();
    
     if(flash_check(0, N.Flash_page_index))flash_erase_page(0, N.Flash_page_index);                  
                        
@@ -864,8 +926,8 @@ void flash_Nag_Write(){
     {    
      flash_buffer_clear();
      flash_union_buffer[MaxSize+2].uint32_type = N.Save_index;
-     if(flash_check(0, Nag_End_Page))flash_erase_page(0, Nag_End_Page);
-     flash_write_page_from_buffer(0,Nag_End_Page,FLASH_PAGE_LENGTH);
+     if(flash_check(0, flash_Nag_MetaPage()))flash_erase_page(0, flash_Nag_MetaPage());
+     flash_write_page_from_buffer(0, flash_Nag_MetaPage(), FLASH_PAGE_LENGTH);
      flash_Nag_WriteEventPage();
     }
     
@@ -882,11 +944,12 @@ void flash_Nag_ResetReadState(void)
 }
 
 void flash_Nag_Read(){
+    flash_Nag_BindSubjectActive();
     flash_buffer_clear();
 
     if(0 == nag_flash_index_read)
     {
-       flash_read_page_to_buffer(0,Nag_End_Page,FLASH_PAGE_LENGTH);
+       flash_read_page_to_buffer(0, flash_Nag_MetaPage(), FLASH_PAGE_LENGTH);
         N.Save_index = flash_union_buffer[MaxSize+2].uint32_type;       
         nag_flash_index_read = 1;
         flash_buffer_clear();
@@ -911,9 +974,10 @@ uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
     }
 
     *out_save_index = 0u;
+    flash_Nag_BindSubjectReplay();
     flash_Nag_ResetReadState();
     flash_buffer_clear();
-    flash_read_page_to_buffer(0, Nag_End_Page, FLASH_PAGE_LENGTH);
+    flash_read_page_to_buffer(0, flash_Nag_MetaPage(), FLASH_PAGE_LENGTH);
     save_index = (uint16)flash_union_buffer[MaxSize + 2].uint32_type;
     flash_buffer_clear();
 
@@ -925,7 +989,7 @@ uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
     N.Save_index = save_index;
     flash_Nag_ReadEventPage();
 
-    N.Flash_page_index = Nag_Start_Page;
+    N.Flash_page_index = flash_Nag_YawStartPage();
     flash_Nag_ResetReadState();
     flash_Nag_Read();
 
@@ -948,17 +1012,25 @@ uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
     return 1u;
 }
 
-/* 将 Nav_read[0..save_index-1] 整表回写 Flash 页 2~45、元数据页 1 与事件页 46 */
+/* 将 Nav_read[0..save_index-1] 整表回写当前回放科目对应 Flash 页区 */
 uint8 flash_Nag_WriteFullPath(uint16 save_index)
 {
     uint16 page_count = 0u;
     uint8 page_idx = 0u;
     uint8 lowest_page = 0u;
+    uint8 yaw_start = 0u;
+    uint8 yaw_end = 0u;
+    uint8 meta_page = 0u;
 
     if ((save_index == 0u) || (save_index > Read_MaxSize))
     {
         return 0u;
     }
+
+    flash_Nag_BindSubjectReplay();
+    yaw_start = flash_Nag_YawStartPage();
+    yaw_end = flash_Nag_YawEndPage();
+    meta_page = flash_Nag_MetaPage();
 
     page_count = (uint16)((save_index + MaxSize - 1u) / MaxSize);
     if (page_count == 0u)
@@ -966,8 +1038,8 @@ uint8 flash_Nag_WriteFullPath(uint16 save_index)
         return 0u;
     }
 
-    lowest_page = (uint8)(Nag_Start_Page - page_count + 1u);
-    if (lowest_page <= Nag_End_Page)
+    lowest_page = (uint8)(yaw_start - page_count + 1u);
+    if (lowest_page <= yaw_end)
     {
         return 0u;
     }
@@ -976,7 +1048,7 @@ uint8 flash_Nag_WriteFullPath(uint16 save_index)
     {
         uint16 base = (uint16)(page_idx * MaxSize);
         uint16 count = (uint16)(save_index - base);
-        uint8 flash_page = (uint8)(Nag_Start_Page - page_idx);
+        uint8 flash_page = (uint8)(yaw_start - page_idx);
         uint16 i = 0u;
 
         if (count > MaxSize)
@@ -996,10 +1068,10 @@ uint8 flash_Nag_WriteFullPath(uint16 save_index)
         flash_write_page_from_buffer(0, flash_page, FLASH_PAGE_LENGTH);
     }
 
-    if (lowest_page > (Nag_End_Page + 1u))
+    if (lowest_page > (yaw_end + 1u))
     {
         uint8 erase_page = (uint8)(lowest_page - 1u);
-        while (erase_page > Nag_End_Page)
+        while (erase_page > yaw_end)
         {
             if (flash_check(0, erase_page))
             {
@@ -1011,16 +1083,16 @@ uint8 flash_Nag_WriteFullPath(uint16 save_index)
 
     flash_buffer_clear();
     flash_union_buffer[MaxSize + 2].uint32_type = save_index;
-    if (flash_check(0, Nag_End_Page))
+    if (flash_check(0, meta_page))
     {
-        flash_erase_page(0, Nag_End_Page);
+        flash_erase_page(0, meta_page);
     }
-    flash_write_page_from_buffer(0, Nag_End_Page, FLASH_PAGE_LENGTH);
+    flash_write_page_from_buffer(0, meta_page, FLASH_PAGE_LENGTH);
 
     flash_Nag_WriteEventPage();
 
     N.Save_index = save_index;
-    N.Flash_page_index = Nag_Start_Page;
+    N.Flash_page_index = yaw_start;
     flash_buffer_clear();
     return 1u;
 }

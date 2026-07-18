@@ -21,7 +21,7 @@
 // #define MAX_EXPLAIN    10        /*最大说明缓冲*/
 
 #define HASH_KEY_LEN 20            // 哈希表中存储的位置字符串的最大长度
-#define HASH_SIZE 50               // 哈希表大小(最多可存储的菜单项数量)
+#define HASH_SIZE 64               // 哈希表大小(最多可存储的菜单项数量)
 #define HASH_OK 1                  // 哈希操作成功返回值
 #define HASH_ERROR (HASH_SIZE + 2) // 哈希操作失败返回值
 
@@ -143,6 +143,14 @@ extern void Menu_RunConfigToggleField(uint8 field_index);
 
 /* Run -> Jump 三级页当前选中的参数字段索引（0..Run_Jump_Param_Count-1） */
 extern uint8 Menu_GetRunJumpFieldIndex(void);
+
+/* Run -> RecSubj / PlaySubj：预览科目（1~3）；进入页时 Menu_Sync*Preview 与已确认值对齐 */
+extern uint8 Menu_GetRunRecSubjPreview(void);
+extern uint8 Menu_GetRunPlaySubjPreview(void);
+extern void Menu_SyncRunRecSubjPreview(void);
+extern void Menu_SyncRunPlaySubjPreview(void);
+extern void Menu_ConfirmRunRecSubj(uint8 subject);
+extern void Menu_ConfirmRunPlaySubj(uint8 subject);
 
 /* Debug -> Image（pos 2.1*）：边沿进入时 arm 自动曝光会话 */
 extern uint8 MenuIsImageSectionPage(void);

@@ -64,6 +64,8 @@ typedef enum
   DUALCORE_UI_CMD_PATHFIX_YAW_DEC = 33,     /* KEY2：选中点 yaw -2° */
   DUALCORE_UI_CMD_PATHFIX_YAW_INC = 34,     /* KEY3：选中点 yaw +2° */
   DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE = 35,   /* KEY4：dirty 时保存并结束会话 */
+  DUALCORE_UI_CMD_NAG_RECORD_SUBJECT_CONFIRM = 36, /* RecSubj KEY3：arg_u32=科目 1~3，写 V17 */
+  DUALCORE_UI_CMD_NAG_REPLAY_SUBJECT_CONFIRM = 37, /* PlaySubj KEY3：arg_u32=科目 1~3，写 V17 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -126,6 +128,8 @@ typedef struct
   uint8 menu_nav_fusion_enable; /* 0=关 1=开 GPS+惯导融合；Run Config 可配，Save 写 Flash V10 */
   uint8 menu_odo_slip_enable;    /* 0=关 1=开里程打滑纠偏；Run Config 可配，Save 写 Flash V13 */
   uint8 menu_init_leg_long_sel;  /* 0=3.5 1=5.5 初始腿长；Run Config 可配，Save 写 Flash V16 */
+  uint8 nag_record_subject;      /* 惯导录制科目 1~3；Run RecSubj KEY3 / Flash V17 */
+  uint8 nag_replay_subject;      /* 惯导回放科目 1~3；Run PlaySubj KEY3 / Flash V17 */
   float jump_takeoff_p;
   float jump_retract_p;
   float jump_prepare_p;

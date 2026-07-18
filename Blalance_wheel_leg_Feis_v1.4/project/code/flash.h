@@ -9,6 +9,7 @@
  * 5. 保存/读取 Jump 参数（页 50）。
  * 6. 保存/读取 gyro_z 零偏标定（页 51）。
  * 7. 保存/读取 GPS 点位、经纬度和 GPS 专用元素表。
+ * 8. 惯导三科目：每科目独立元数据/yaw/元素页（见 navigation.h NAG_SUBJECT_*）。
  */
 
 void flash_Nag_Write(void);

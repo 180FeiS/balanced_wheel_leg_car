@@ -14,9 +14,32 @@
 
 #define Read_MaxSize 10000//导航读取数组，1w个应该是够了
 
-//存储范围 <0 - 47>
-#define Nag_End_Page 1      //flash结束页数
-#define Nag_Start_Page 45   //flash开始页数
+/*
+ * 惯导三科目 Flash 页布局（Work Flash 共 96 页）：
+ * 科目1（兼容旧固件单槽）：元数据 1，yaw 45→2，元素 46；
+ * 科目2：元数据 52，yaw 72→53（20 页≈10000 点），元素 73；
+ * 科目3：元数据 74，yaw 94→75（20 页），元素 95。
+ * 页 47~51 仍为 Launch/GPS/Jump/GyroBias 等参数，勿占用。
+ * 录制/回放/PathFix 通过 g_nag_record_subject / g_nag_replay_subject 选择槽位。
+ */
+#define NAG_SUBJECT_COUNT 3u
+#define Nag_Subject1_Meta_Page 1u
+#define Nag_Subject1_Yaw_Start_Page 45u
+#define Nag_Subject1_Yaw_End_Page 2u
+#define Nag_Subject1_Event_Page 46u
+#define Nag_Subject2_Meta_Page 52u
+#define Nag_Subject2_Yaw_Start_Page 72u
+#define Nag_Subject2_Yaw_End_Page 53u
+#define Nag_Subject2_Event_Page 73u
+#define Nag_Subject3_Meta_Page 74u
+#define Nag_Subject3_Yaw_Start_Page 94u
+#define Nag_Subject3_Yaw_End_Page 75u
+#define Nag_Subject3_Event_Page 95u
+
+/* 科目1 别名，兼容旧代码与已有 Flash 数据 */
+#define Nag_End_Page Nag_Subject1_Meta_Page
+#define Nag_Start_Page Nag_Subject1_Yaw_Start_Page
+#define Nag_Event_Page Nag_Subject1_Event_Page
 
 /* 速度积分式里程计参数：
  * 1. Nag_Set_mileage 表示每隔多少“距离单位”记录/回放一次 yaw，当前按 cm 理解；
@@ -237,14 +260,13 @@ extern float nag_enter_stair2_target_speed;
 #define Nag_Stair2Blob_Yaw_Max_Offset   30.0f
 #define Nag_Stair2Blob_Yaw_Deadband      0.1f
 
-/* 元素段数量先固定为少量结构，并写入单独的 flash 专用页：
- * 1. yaw 轨迹仍放在页 2~45；
- * 2. Save_index 仍放在页 1；
- * 3. 元素表单独放在 Nag_Event_Page，避免和导航元数据页混在一起；
- * 4. 事件页头的 Nag_Event_Version 与固件不一致时整块表不装载（枚举 type 语义变更时需升版并重录）。
+/* 元素段数量先固定为少量结构，并写入各科目独立 flash 元素页（见 NAG_SUBJECT_*）：
+ * 1. 每科目 yaw 轨迹在高页→低页写入；
+ * 2. Save_index 存在该科目元数据页；
+ * 3. 元素表与元数据分离；
+ * 4. 事件页 Nag_Event_Version 与固件不一致时整块表不装载（需重录）。
  */
 #define Nag_Event_Max 8u
-#define Nag_Event_Page 46u
 #define Nag_Event_Magic 0x4E414745u     // "NAGE"
 #define Nag_Event_Version 7u            // v7：新增 ENTER/EXIT_STAIR2 type 11/12；旧事件表需重录
 
@@ -258,7 +280,8 @@ extern float nag_enter_stair2_target_speed;
  * v13：v12 + g_menu_odo_slip_enable @ [22]；
  * v14：v13 + nag_enter_bump_target_speed @ [23]；
  * v15：v14 + nag_enter_stair2_target_speed @ [24]；
- * v16：v15 + g_menu_init_leg_long_sel @ [25]。
+ * v16：v15 + g_menu_init_leg_long_sel @ [25]；
+ * v17：v16 + g_nag_record_subject @ [26]、g_nag_replay_subject @ [27]（Run→RecSubj/PlaySubj KEY3 即时写）。
  */
 #define Nag_Run_Launch_Speed_Page 47u
 #define Nag_Run_Launch_Speed_Magic 0x524C5350u   // "RLSP"
@@ -278,6 +301,7 @@ extern float nag_enter_stair2_target_speed;
 #define Nag_Run_Launch_Params_Version_V14 14u    /* v14：v13 + nag_enter_bump_target_speed @ [23] */
 #define Nag_Run_Launch_Params_Version_V15 15u    /* v15：v14 + nag_enter_stair2_target_speed @ [24] */
 #define Nag_Run_Launch_Params_Version_V16 16u    /* v16：v15 + g_menu_init_leg_long_sel @ [25] */
+#define Nag_Run_Launch_Params_Version_V17 17u    /* v17：v16 + 录/放科目 @ [26][27] */
 #define Nag_Run_Launch_Param_Count 17u
 #define Nag_Run_Launch_Config_Word_Count_V5 11u  /* v5：10 float + menu_input_remote_first @ [13] */
 #define Nag_Run_Launch_Config_Word_Count_V6 12u  /* v6：v5 + menu_vofa_enable @ [14] */
@@ -290,7 +314,8 @@ extern float nag_enter_stair2_target_speed;
 #define Nag_Run_Launch_Config_Word_Count_V13 20u /* v13：v12 + odo_slip_enable @ [22] */
 #define Nag_Run_Launch_Config_Word_Count_V14 21u /* v14：v13 + bump_target_speed @ [23] */
 #define Nag_Run_Launch_Config_Word_Count_V15 22u /* v15：v14 + stair2_target_speed @ [24] */
-#define Nag_Run_Launch_Config_Word_Count 23u     /* v16：v15 + init_leg_long_sel @ [25] */
+#define Nag_Run_Launch_Config_Word_Count_V16 23u /* v16：v15 + init_leg_long_sel @ [25] */
+#define Nag_Run_Launch_Config_Word_Count 25u     /* v17：v16 + record/replay subject @ [26][27] */
 
 /* Launch 页字段索引（与 flash 顺序一致） */
 #define Nag_Launch_Field_Base_Spd 0u
@@ -682,6 +707,18 @@ extern Nag N;   //导航相关的结构体，用户开放参数
 extern int32 Nav_read[Read_MaxSize];//每5cm的点，1000个点50m
 extern NagEvent Nag_Event_Table[Nag_Event_Max];
 extern uint8 Nag_Vofa_Group; // VOFA 调试组切换（菜单 n / 上位机命令循环）
+/* Run→RecSubj / PlaySubj 所选科目（1~3）；Flash V17；录制写 record 槽，回放/PathFix 读 replay 槽 */
+extern uint8 g_nag_record_subject;
+extern uint8 g_nag_replay_subject;
+
+uint8 Nag_ClampSubject(uint8 subject);
+uint8 Nag_GetSubjectMetaPage(uint8 subject);
+uint8 Nag_GetSubjectYawStartPage(uint8 subject);
+uint8 Nag_GetSubjectYawEndPage(uint8 subject);
+uint8 Nag_GetSubjectEventPage(uint8 subject);
+void Nag_SubjectPreviewStep(uint8 *preview_subject, int8 delta);
+void Nag_SetRecordSubject(uint8 subject);
+void Nag_SetReplaySubject(uint8 subject);
 /* 0=IMU 姿态；1=速度目标/实测；2=GPS+惯导融合；3=里程纠偏/打滑 */
 #define NAG_VOFA_GROUP_COUNT (5u)
 
