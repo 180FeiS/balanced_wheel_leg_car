@@ -21,6 +21,9 @@
 
 #define DUALCORE_UI_CMD_QUEUE_DEPTH  (32u)
 
+/* PathFix 界面折线快照最大点数（与 navigation.h Nag_PathFix_Draw_Max 一致） */
+#define DUALCORE_PATHFIX_DRAW_MAX  (180u)
+
 typedef enum
 {
   DUALCORE_UI_CMD_NONE = 0,
@@ -53,6 +56,12 @@ typedef enum
   DUALCORE_UI_CMD_RUN_CONFIG_TOGGLE = 27, /* Config 页：arg_u32=字段索引，切换当前字段取值 */
   DUALCORE_UI_CMD_RUN_JUMP_PARAM_DELTA = 28, /* Jump 页：arg_u32=字段索引，arg_f32=增量 */
   DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START = 29, /* GyroBias 页：KEY3 开始 10s 零偏标定 */
+  DUALCORE_UI_CMD_INPUT_BEEP = 30, /* CM7_1 菜单/按键短按：CM7_0 执行一次非阻塞蜂鸣（BRIDGE_BEEP_MS） */
+  DUALCORE_UI_CMD_PATHFIX_BEGIN = 31,       /* 进入 PathFix：从 Flash 载入轨迹 */
+  DUALCORE_UI_CMD_PATHFIX_SELECT = 32,      /* KEY1：循环选中点 */
+  DUALCORE_UI_CMD_PATHFIX_YAW_DEC = 33,     /* KEY2：选中点 yaw -2° */
+  DUALCORE_UI_CMD_PATHFIX_YAW_INC = 34,     /* KEY3：选中点 yaw +2° */
+  DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE = 35,   /* KEY4：dirty 时保存并结束会话 */
 } dualcore_ui_cmd_op_t;
 
 typedef struct
@@ -236,6 +245,17 @@ typedef struct
   uint8 spin_phase_snap;
   uint8 spin_fail_reason_snap;
   uint8 spin_failed_snap;
+  /* PathFix（Debug 2.6.1）：CM7_0 计算屏幕折线，CM7_1 只读绘制 */
+  uint8 pathfix_active;
+  uint8 pathfix_loaded;
+  uint8 pathfix_dirty;
+  uint16 pathfix_select_index;
+  uint32 pathfix_point_count;
+  int32 pathfix_select_yaw_x100;
+  uint16 pathfix_draw_count;
+  uint16 pathfix_draw_sel_idx;
+  int16 pathfix_draw_x[DUALCORE_PATHFIX_DRAW_MAX];
+  int16 pathfix_draw_y[DUALCORE_PATHFIX_DRAW_MAX];
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

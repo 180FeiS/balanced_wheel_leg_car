@@ -351,7 +351,7 @@ void GUI_2_1(void) // Debug ∂˛º∂¡–±Ì£∫Image ––
     ips200_show_string(80, ROW_10, " GPS    ");
     ips200_show_string(80, ROW_12, " Speed  ");
     ips200_show_string(80, ROW_14, "W_Flash");
-    ips200_show_string(80, ROW_16, "C_Flash ");
+    ips200_show_string(80, ROW_16, "PathFix");
 
     ips200_show_string(48, ROW_6, "-->");
     ips200_show_string(152, ROW_6, "<--");
@@ -375,7 +375,7 @@ void GUI_2_2(void) // µ˜ ‘¡–±Ì£∫NavDbg ––—°÷–£®”Î∆‰À¸œÓ“ª÷¬Œ™¡–±ÌÃ¨£ª∞¥°∏”“°πΩ¯»
     ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
+    ips200_show_string(80,ROW_16,"PathFix");
 
     ips200_show_string(48,ROW_8,"-->");
     ips200_show_string(152,ROW_8,"<--");
@@ -546,7 +546,7 @@ void GUI_2_3(void) // GPS£®µ˜ ‘∂˛º∂¡–±ÌœÓ£©
     ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
+    ips200_show_string(80,ROW_16,"PathFix");
     
 
     ips200_show_string(48,ROW_10,"-->");
@@ -762,7 +762,7 @@ void GUI_2_4(void) // ÀŸ∂»…Ë÷√
     ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
+    ips200_show_string(80,ROW_16,"PathFix");
     
 
     ips200_show_string(48,ROW_12,"-->");
@@ -786,7 +786,7 @@ void GUI_2_5(void) // ∏¸–¬ Flash ≤Œ ˝
     ips200_show_string(80,ROW_10," GPS    ");
     ips200_show_string(80,ROW_12," Speed  ");
     ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
+    ips200_show_string(80,ROW_16,"PathFix");
     
 
     ips200_show_string(48,ROW_14,"-->");
@@ -810,20 +810,19 @@ void ACT_2_5()
 #endif
 }
 
-void GUI_2_6(void) // «Âø’ FLASH ª∫¥Ê«¯
+void GUI_2_6(void) // PathFix£®µ˜ ‘∂˛º∂¡–±ÌœÓ£¨∞¥ KEY3 Ω¯»Î GUI_2_6_1£©
 {
     GUI_Display_Level2_Common2();
-    
-    ips200_show_string(80,ROW_6," Image  ");
-    ips200_show_string(80,ROW_8," NavDbg ");
-    ips200_show_string(80,ROW_10," GPS    ");
-    ips200_show_string(80,ROW_12," Speed  ");
-    ips200_show_string(80,ROW_14,"W_Flash");
-    ips200_show_string(80,ROW_16,"C_Flash ");
-    
 
-    ips200_show_string(48,ROW_16,"-->");
-    ips200_show_string(152,ROW_16,"<--");
+    ips200_show_string(80, ROW_6, " Image  ");
+    ips200_show_string(80, ROW_8, " NavDbg ");
+    ips200_show_string(80, ROW_10, " GPS    ");
+    ips200_show_string(80, ROW_12, " Speed  ");
+    ips200_show_string(80, ROW_14, "W_Flash");
+    ips200_show_string(80, ROW_16, "PathFix");
+
+    ips200_show_string(48, ROW_16, "-->");
+    ips200_show_string(152, ROW_16, "<--");
 }
 void ACT_2_6()
 {
@@ -832,15 +831,195 @@ void ACT_2_6()
     ReadPos[2] = '6';
     ReadPos[3] = 0x00;
     ReadPos[4] = 0x00;
-#if FLASH_MODE
-    if(Flash.Flash_Error == FLASH_RUNNING && Flash.Flash_state == FLASH_CLEAR)
+}
+
+#if defined(CY_CORE_CM7_1)
+static uint16 UI_PathFix_ClampU16(int32 value, uint16 min_value, uint16 max_value)
+{
+    if (value < (int32)min_value)
     {
-        while(Flash_Clear());
-        Flash.Flash_Error = FLASH_STOP;
-        Flash.Flash_state = FLASH_WAIT;
-        ips200_show_string(88,ROW_1,"CFlash_OK!");
+        return min_value;
+    }
+    if (value > (int32)max_value)
+    {
+        return max_value;
+    }
+    return (uint16)value;
+}
+
+/* ”Î navigation.c Nag_PathFix_DrawSelectedMarker “ª÷¬£∫CM7_1 ÷ª∂¡øÏ’’ªÊ÷∆ */
+static void UI_PathFix_DrawSelectedMarker(uint16 x,
+                                          uint16 y,
+                                          uint16 x_offset,
+                                          uint16 y_offset,
+                                          uint16 width,
+                                          uint16 height)
+{
+    uint16 x_max = (uint16)(x_offset + width);
+    uint16 y_max = (uint16)(y_offset + height);
+    uint16 x0 = UI_PathFix_ClampU16((int32)x, x_offset, x_max);
+    uint16 y0 = UI_PathFix_ClampU16((int32)y, y_offset, y_max);
+    uint16 span = 4u;
+    int32 dx = 0;
+    int32 dy = 0;
+
+    for (dx = -(int32)span; dx <= (int32)span; dx++)
+    {
+        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max), y0, RGB565_BLACK);
+        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
+                          UI_PathFix_ClampU16((int32)y0 + 1, y_offset, y_max), RGB565_BLACK);
+        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
+                          UI_PathFix_ClampU16((int32)y0 - 1, y_offset, y_max), RGB565_BLACK);
+    }
+    for (dy = -(int32)span; dy <= (int32)span; dy++)
+    {
+        ips200_draw_point(x0, UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
+        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + 1, x_offset, x_max),
+                          UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
+        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 - 1, x_offset, x_max),
+                          UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
+    }
+
+    ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - (int32)span, x_offset, x_max), y0,
+                     UI_PathFix_ClampU16((int32)x0 + (int32)span, x_offset, x_max), y0,
+                     RGB565_YELLOW);
+    ips200_draw_line(x0, UI_PathFix_ClampU16((int32)y0 - (int32)span, y_offset, y_max),
+                     x0, UI_PathFix_ClampU16((int32)y0 + (int32)span, y_offset, y_max),
+                     RGB565_YELLOW);
+    ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
+                     UI_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
+                     UI_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
+                     UI_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
+                     RGB565_YELLOW);
+    ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
+                     UI_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
+                     UI_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
+                     UI_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
+                     RGB565_YELLOW);
+}
+#endif
+
+void GUI_2_6_1(void) // PathFix πﬂµº¬∑æ∂–ﬁ’˝π¶ƒ‹“≥£®–Î¥” 2.6 ∞¥ KEY3 Ω¯»Î£©
+{
+    uint8 pathfix_active = 0u;
+    uint8 pathfix_loaded = 0u;
+    uint8 pathfix_dirty = 0u;
+    uint16 pathfix_select = 0u;
+    uint32 pathfix_count = 0u;
+    int32 pathfix_yaw_x100 = 0;
+
+    GUI_Display_Level2_Common2();
+    ips200_show_string(56, ROW_3, "PathFix");
+
+#if defined(CY_CORE_CM7_1)
+    {
+    uint16 draw_count = 0u;
+    uint16 draw_sel = 0u;
+    uint16 i = 0u;
+
+    dualcore_ctrl_to_ui_pull(&s_ui_dc);
+    pathfix_active = s_ui_dc.pathfix_active;
+    pathfix_loaded = s_ui_dc.pathfix_loaded;
+    pathfix_dirty = s_ui_dc.pathfix_dirty;
+    pathfix_select = s_ui_dc.pathfix_select_index;
+    pathfix_count = s_ui_dc.pathfix_point_count;
+    pathfix_yaw_x100 = s_ui_dc.pathfix_select_yaw_x100;
+    draw_count = s_ui_dc.pathfix_draw_count;
+    draw_sel = s_ui_dc.pathfix_draw_sel_idx;
+
+    if (pathfix_loaded != 0u)
+    {
+        uint16 x_off = 136u;
+        uint16 y_off = (uint16)ROW_5;
+        uint16 w = 88u;
+        uint16 h = 112u;
+        uint16 y = 0u;
+        uint16 x_end = (uint16)(x_off + w);
+        uint16 y_end = (uint16)(y_off + h);
+
+        for (y = y_off; y <= y_end; y++)
+        {
+            ips200_draw_line(x_off, y, x_end, y, RGB565_WHITE);
+        }
+        for (i = 1u; i < draw_count; i++)
+        {
+            ips200_draw_line((uint16)s_ui_dc.pathfix_draw_x[i - 1u],
+                             (uint16)s_ui_dc.pathfix_draw_y[i - 1u],
+                             (uint16)s_ui_dc.pathfix_draw_x[i],
+                             (uint16)s_ui_dc.pathfix_draw_y[i],
+                             RGB565_RED);
+        }
+        for (i = 0u; i < draw_count; i++)
+        {
+            ips200_draw_point((uint16)s_ui_dc.pathfix_draw_x[i],
+                              (uint16)s_ui_dc.pathfix_draw_y[i], RGB565_BLUE);
+        }
+        if (draw_count > 0u)
+        {
+            ips200_draw_point((uint16)s_ui_dc.pathfix_draw_x[0],
+                              (uint16)s_ui_dc.pathfix_draw_y[0], RGB565_GREEN);
+            if (draw_count > 1u)
+            {
+                ips200_draw_point((uint16)s_ui_dc.pathfix_draw_x[draw_count - 1u],
+                                  (uint16)s_ui_dc.pathfix_draw_y[draw_count - 1u],
+                                  RGB565_PURPLE);
+            }
+            if (draw_sel < draw_count)
+            {
+                UI_PathFix_DrawSelectedMarker((uint16)s_ui_dc.pathfix_draw_x[draw_sel],
+                                              (uint16)s_ui_dc.pathfix_draw_y[draw_sel],
+                                              x_off, y_off, w, h);
+            }
+        }
+    }
+    }
+#else
+    pathfix_active = g_nag_pathfix.active;
+    pathfix_loaded = g_nag_pathfix.loaded;
+    pathfix_dirty = g_nag_pathfix.dirty;
+    pathfix_select = g_nag_pathfix.select_index;
+    pathfix_count = (uint32)g_nag_pathfix.point_count;
+    if ((pathfix_loaded != 0u) && (pathfix_select < g_nag_pathfix.point_count))
+    {
+        pathfix_yaw_x100 = Nav_read[pathfix_select];
+    }
+    if (pathfix_loaded != 0u)
+    {
+        Nag_PathFix_DrawViewport(136u, (uint16)ROW_5, 88u, 112u);
     }
 #endif
+
+    if (pathfix_loaded == 0u)
+    {
+        ips200_show_string(0, ROW_5, "No Path");
+        ips200_show_string(0, ROW_6, "Record first");
+    }
+    else
+    {
+        ips200_show_string(0, ROW_5, "Pt:");
+        ips200_show_uint(24, ROW_5, (uint32)pathfix_select, 5);
+        ips200_show_string(72, ROW_5, "/");
+        ips200_show_uint(80, ROW_5, pathfix_count, 5);
+        ips200_show_string(0, ROW_6, "Yaw:");
+        ips200_show_float(40, ROW_6, (float)pathfix_yaw_x100 / 100.0f, 4, 2);
+        ips200_show_string(0, ROW_7, pathfix_dirty ? "Dirty:Y" : "Dirty:N");
+    }
+
+    ips200_show_string(0, ROW_9, "K1 Sel+10");
+    ips200_show_string(0, ROW_10, "K2 Yaw-2");
+    ips200_show_string(0, ROW_11, "K3 Yaw+2");
+    ips200_show_string(0, ROW_12, "K4 SaveExit");
+
+    (void)pathfix_active;
+}
+void ACT_2_6_1()
+{
+    ReadPos[0] = '2';
+    ReadPos[1] = '.';
+    ReadPos[2] = '6';
+    ReadPos[3] = '.';
+    ReadPos[4] = '1';
+    ReadPos[5] = 0x00;
 }
 // *********************************************************************************************************************
 // * Run ∂˛º∂/»˝º∂£∫Common3 ∂•¿∏ + ¡–±ÌªÚ∑¢≥µ“≥°£“ªº∂ GUI_3 ≤ªµ√∏¥”√œ¬¡–¡–±Ì£¨∑Ò‘Ú”Î menu  ˜¥ÌŒª

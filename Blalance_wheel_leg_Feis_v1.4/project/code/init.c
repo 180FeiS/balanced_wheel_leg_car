@@ -221,6 +221,8 @@ void buzzer_beep_poll(void)
   }
 }
 
+/* buzzer_beep_poll() 由 CM7_0 leg_control()（5ms）调用；request 可在 CM7_0 本地或经 DUALCORE_UI_CMD_INPUT_BEEP 触发。 */
+
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     摄像头初始化
 // 参数说明     null

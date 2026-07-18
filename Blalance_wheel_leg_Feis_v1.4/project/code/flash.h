@@ -24,5 +24,9 @@ void flash_GpsPoints_Write(void);
 void flash_GpsPoints_Read(void);
 void flash_GpsPoints_Clear(void);
 
+/* 仅载入惯导 yaw 轨迹到 Nav_read[]（不进入回放态）；out_save_index 输出点数 */
+uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index);
+/* 将 Nav_read[0..save_index-1] 整表回写 Flash 页 2~45、元数据页 1 与事件页 46 */
+uint8 flash_Nag_WriteFullPath(uint16 save_index);
 
 #endif

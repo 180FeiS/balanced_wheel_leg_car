@@ -824,4 +824,41 @@ bool Nag_Hook_ExitCones_IsDone(void);
 void Nag_Hook_ExitCones_Stop(void);
 
 void Nag_System();  //偏航角函数的封装，包装进中断小
+
+/*
+ * 惯导路径修正界面（Debug → PathFix → 2.6.1 功能页）：
+ * 1. 从 Flash 载入 Nav_read[]（yaw×100，每 Nag_Set_mileage cm 一点），在 LCD 上重建二维折线；
+ * 2. KEY1 每次前进 Nag_PathFix_Select_Step 个点（循环）；KEY2/KEY3 对选中点 yaw ±Nag_PathFix_Yaw_Step_Deg；KEY4 有修改时写回 Flash 并退出；
+ * 3. 不修改 Nag_SystemRun_Index，录制/回放进行中禁止进入；修正后的 Nav_read[] 直接用于下次惯导回放。
+ */
+#define Nag_PathFix_Yaw_Step_Deg   2.0f
+#define Nag_PathFix_Select_Step    10u    /* KEY1 每次切换的路径点数 */
+#define Nag_PathFix_Draw_Max       180u   /* 与 dualcore_shared.h DUALCORE_PATHFIX_DRAW_MAX 保持一致 */
+
+typedef struct
+{
+    uint8 active;        /* 1=PathFix 会话进行中 */
+    uint8 loaded;        /* 1=已从 Flash 载入有效轨迹到 Nav_read[] */
+    uint8 dirty;         /* 1=自上次 Flash 保存后有 yaw 修改 */
+    uint16 select_index; /* 当前选中点 [0, point_count) */
+    uint16 point_count;  /* 轨迹点数（等于载入时的 Save_index） */
+} NagPathFixState;
+
+extern NagPathFixState g_nag_pathfix;
+
+uint8 Nag_PathFix_Enter(void);
+void Nag_PathFix_Leave(uint8 save_if_dirty);
+uint8 Nag_PathFix_CycleSelect(void);
+uint8 Nag_PathFix_AdjustYaw(float delta_deg);
+uint8 Nag_PathFix_ExitSave(void);
+void Nag_PathFix_PublishDrawMap(uint16 x_offset, uint16 y_offset, uint16 width, uint16 height,
+                                int16 *out_x, int16 *out_y, uint16 out_max,
+                                uint16 *out_count, uint16 *out_sel_draw);
+void Nag_PathFix_SyncToShared(void *ctrl_snapshot,
+                              uint16 x_offset,
+                              uint16 y_offset,
+                              uint16 width,
+                              uint16 height);
+void Nag_PathFix_DrawViewport(uint16 x_offset, uint16 y_offset, uint16 width, uint16 height);
+
 #endif /* _NAVIGATION_H_ */

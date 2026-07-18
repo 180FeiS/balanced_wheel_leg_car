@@ -66,6 +66,7 @@
 #include "my_gps.h"
 #include "image.h"
 #include "control.h"
+#include "init.h"
 #if defined(CY_CORE_CM7_0)
 #include "navigation.h"
 #include "flash.h"
@@ -122,7 +123,29 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void);
 static uint8 MenuTryHandleRunConfigKeyEvent(void);
 static uint8 MenuTryHandleRunGyroBiasKeyEvent(void);
 static uint8 MenuTryHandleGpsDebugKeyEvent(void);
+static uint8 MenuIsPathFixPage(void);
+static uint8 MenuTryHandlePathFixKeyEvent(void);
+static void Menu_UpdatePathFixSession(void);
+static uint8 MenuIsLiveUiPage(void);
+static void MenuRedrawCurrentPage(void);
 static uint8 MenuIsRemoteMenuFirst(void);
+
+static char s_menu_pathfix_last_pos[HASH_KEY_LEN] = "0";
+
+/*-------------------------------------------------------------------------------------------------------------------
+// 函数简介     菜单 KEY1~KEY4 有效短按统一反馈：翻转 LED1 并请求一次短蜂鸣
+// 备注信息     CM7_1 经 DUALCORE_UI_CMD_INPUT_BEEP 交给 CM7_0 蜂鸣器；单核/CM7_0 菜单路径本地 buzzer_beep_request。
+//              仅用于已消费的 KEY_SHORT_PRESS，按住/无事件/遥控门控拦截时不调用。
+-------------------------------------------------------------------------------------------------------------------*/
+static void MenuInputFeedbackLedBeep(void)
+{
+    gpio_toggle_level(LED1);
+#if defined(CY_CORE_CM7_1)
+    (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_INPUT_BEEP, 0, 0.0f);
+#else
+    buzzer_beep_request(BRIDGE_BEEP_MS);
+#endif
+}
 
 static uint8 s_was_in_image_section = 0u;
 
@@ -366,24 +389,28 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsPathFixPage() && MenuTryHandlePathFixKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
         {
             (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_RECORD, 0, 0.0f);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_1);
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
             (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_STOP_REC, 0, 0.0f);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_2);
         }
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
             (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_KEY_NAV_KEY3, 0, 0.0f);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
@@ -400,7 +427,7 @@ void menu_key_capture_event(void)
             {
                 MenuKeyEventPush(MENU_KEY_NAV_LEFT);
             }
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_4);
         }
    }
@@ -409,25 +436,25 @@ void menu_key_capture_event(void)
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_UP);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_1);
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_DOWN);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_2);
         }
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_LEFT);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_4);
         }
    }
@@ -460,18 +487,22 @@ void menu_key_capture_event(void)
    {
         return;
    }
+   if(MenuIsPathFixPage() && MenuTryHandlePathFixKeyEvent())
+   {
+        return;
+   }
    if(MenuIsNavDebugPage())
    {
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
         {
             Nag_Begin_Record();
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_1);
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
             Nag_Request_Stop_Record();
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_2);
         }
         /* 录制态统一门控：
@@ -490,7 +521,7 @@ void menu_key_capture_event(void)
             {
                 Nag_Begin_Replay();
             }
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
@@ -512,7 +543,7 @@ void menu_key_capture_event(void)
             {
                 MenuKeyEventPush(MENU_KEY_NAV_LEFT);
             }
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_4);
         }
    }
@@ -521,25 +552,25 @@ void menu_key_capture_event(void)
         if(key_get_state(KEY_1) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_UP);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_1);
         }
         if(key_get_state(KEY_2) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_DOWN);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_2);
         }
         if(key_get_state(KEY_3) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_RIGHT);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_3);
         }
         if(key_get_state(KEY_4) == KEY_SHORT_PRESS)
         {
             MenuKeyEventPush(MENU_KEY_NAV_LEFT);
-            gpio_toggle_level(LED1);
+            MenuInputFeedbackLedBeep();
             key_clear_state(KEY_4);
         }
     }
@@ -596,11 +627,15 @@ void selectMenu_Key(void)
    }
 
    /* 与 selectMenu() 一致：导航后立刻重绘，且须在主循环内完成，避免与 ips200 SPI 冲突。 */
-   if(menu_nav && (motor_sw_key == MOTOR_OFF))
+   if(menu_nav && ((motor_sw_key == MOTOR_OFF) || MenuIsLiveUiPage()))
    {
+        Menu_UpdatePathFixSession();
         ips200_clear();
-        menuMember.gui();
-        menuMember.act();
+        MenuRedrawCurrentPage();
+   }
+   else
+   {
+        Menu_UpdatePathFixSession();
    }
 }
 
@@ -639,6 +674,124 @@ static uint8 MenuIsNavDebugPage(void)
 static uint8 MenuIsGpsDebugPage(void)
 {
     return (uint8)(strcmp(menuMember.pos, "2.3.1") == 0);
+}
+
+static uint8 MenuIsPathFixPage(void)
+{
+    return (uint8)(strcmp(menuMember.pos, "2.6.1") == 0);
+}
+
+/* NavDbg / GPS Debug / PathFix 需要持续刷新（含右侧轨迹），不受 Motor_Switch 关屏影响 */
+static uint8 MenuIsLiveUiPage(void)
+{
+    return (uint8)(MenuIsNavDebugPage() || MenuIsGpsDebugPage() || MenuIsPathFixPage());
+}
+
+static void MenuRedrawCurrentPage(void)
+{
+    menuMember.gui();
+    menuMember.act();
+}
+
+static void Menu_UpdatePathFixSession(void)
+{
+    if ((strcmp(s_menu_pathfix_last_pos, "2.6.1") == 0) &&
+        (strcmp(menuMember.pos, "2.6.1") != 0))
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE, 0, 0.0f);
+#else
+        Nag_PathFix_Leave(1u);
+#endif
+    }
+    else if ((strcmp(menuMember.pos, "2.6.1") == 0) &&
+             (strcmp(s_menu_pathfix_last_pos, "2.6.1") != 0))
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_BEGIN, 0, 0.0f);
+#else
+        (void)Nag_PathFix_Enter();
+#endif
+    }
+#if defined(CY_CORE_CM7_1)
+    else if (strcmp(menuMember.pos, "2.6.1") == 0)
+    {
+        /* CM7_0 异步处理 BEGIN：未载入前周期性重试，避免首帧空白 */
+        dualcore_ctrl_to_ui_t dc_pf;
+        static uint8 s_pathfix_begin_retry = 0u;
+
+        dualcore_ctrl_to_ui_pull(&dc_pf);
+        if ((dc_pf.pathfix_active == 0u) && (dc_pf.pathfix_loaded == 0u))
+        {
+            s_pathfix_begin_retry++;
+            if (s_pathfix_begin_retry >= 4u)
+            {
+                s_pathfix_begin_retry = 0u;
+                (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_BEGIN, 0, 0.0f);
+            }
+        }
+        else
+        {
+            s_pathfix_begin_retry = 0u;
+        }
+    }
+#endif
+
+    strcpy(s_menu_pathfix_last_pos, menuMember.pos);
+}
+
+/* PathFix（pos 2.6.1）：KEY1 每次 +10 点；KEY2/3 ±2°；KEY4 保存并返回上级 */
+static uint8 MenuTryHandlePathFixKeyEvent(void)
+{
+    if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_SELECT, 0, 0.0f);
+#else
+        (void)Nag_PathFix_CycleSelect();
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_1);
+        MenuRedrawCurrentPage();
+        return 1u;
+    }
+    if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_YAW_DEC, 0, 0.0f);
+#else
+        (void)Nag_PathFix_AdjustYaw(-Nag_PathFix_Yaw_Step_Deg);
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_2);
+        MenuRedrawCurrentPage();
+        return 1u;
+    }
+    if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_YAW_INC, 0, 0.0f);
+#else
+        (void)Nag_PathFix_AdjustYaw(Nag_PathFix_Yaw_Step_Deg);
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_3);
+        MenuRedrawCurrentPage();
+        return 1u;
+    }
+    if (key_get_state(KEY_4) == KEY_SHORT_PRESS)
+    {
+#if defined(CY_CORE_CM7_1)
+        (void)dualcore_ui_cmd_push(DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE, 0, 0.0f);
+#else
+        (void)Nag_PathFix_ExitSave();
+#endif
+        MenuInputFeedbackLedBeep();
+        key_clear_state(KEY_4);
+        MenuKeyEventPush(MENU_KEY_NAV_LEFT);
+        return 1u;
+    }
+    return 0u;
 }
 
 /* 仅发车速度三级页拦截 KEY1/2/3；不要扩大到 "3.1" 的 Launch 二级列表页。 */
@@ -688,7 +841,7 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     {
         s_run_launch_field_index =
             (uint8)((s_run_launch_field_index + 1u) % Nag_Run_Launch_Param_Count);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
         return 1u;
     }
@@ -696,7 +849,7 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     {
         step = Nag_LaunchParamGetStep(s_run_launch_field_index);
         MenuAdjustRunLaunchParam(step);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
         return 1u;
     }
@@ -704,7 +857,7 @@ static uint8 MenuTryHandleRunLaunchSpeedKeyEvent(void)
     {
         step = -Nag_LaunchParamGetStep(s_run_launch_field_index);
         MenuAdjustRunLaunchParam(step);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
         return 1u;
     }
@@ -730,21 +883,21 @@ static uint8 MenuTryHandleRunJumpKeyEvent(void)
     {
         s_run_jump_field_index =
             (uint8)((s_run_jump_field_index + 1u) % Run_Jump_Param_Count);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
     {
         MenuAdjustRunJumpParam(step);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
     {
         MenuAdjustRunJumpParam(-step);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
         return 1u;
     }
@@ -763,7 +916,7 @@ static uint8 MenuTryHandleRunFlashKeyEvent(void)
         flash_JumpParams_Write();
         flash_GyroBias_Write();
 #endif
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
         return 1u;
     }
@@ -780,7 +933,7 @@ static uint8 MenuTryHandleRunGyroBiasKeyEvent(void)
 #else
         GyroBias_CalibStart();
 #endif
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
         return 1u;
     }
@@ -794,7 +947,7 @@ static uint8 MenuTryHandleRunConfigKeyEvent(void)
     {
         s_run_config_field_index =
             (uint8)((s_run_config_field_index + 1u) % Run_Config_Field_Count);
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
         return 1u;
     }
@@ -806,7 +959,7 @@ static uint8 MenuTryHandleRunConfigKeyEvent(void)
 #else
         Menu_RunConfigToggleField(s_run_config_field_index);
 #endif
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
         return 1u;
     }
@@ -838,7 +991,7 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
             GPS_BeginRecord();
 #endif
         }
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
         return 1u;
     }
@@ -850,7 +1003,7 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
         GPS_EndRecord();
         flash_GpsPoints_Write();
 #endif
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
         return 1u;
     }
@@ -872,7 +1025,7 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
             GPS_ApplyLaunchSpeed();
 #endif
         }
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
         return 1u;
     }
@@ -883,7 +1036,7 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 #else
         (void)GPS_CycleCurrentElement();
 #endif
-        gpio_toggle_level(LED1);
+        MenuInputFeedbackLedBeep();
         key_clear_state(KEY_4);
         return 1u;
     }
@@ -1067,12 +1220,10 @@ void selectMenu(void)
     }
 
     Menu_command = 0;
-    if(motor_sw_sel == MOTOR_OFF
-  //  || MOTOR_ON
-    )
+    Menu_UpdatePathFixSession();
+    if((motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
     {
-        menuMember.gui();
-        menuMember.act();
+        MenuRedrawCurrentPage();
     }
 }
 
@@ -1280,6 +1431,11 @@ void MenuInit()
         menuMember.gui = GUI_2_3_1;
         menuMember.act = ACT_2_3_1;
         strcpy(menuMember.pos, "2.3.1");
+        hashMenu.vPtr->insert(&hashMenu, &menuMember);
+
+        menuMember.gui = GUI_2_6_1;
+        menuMember.act = ACT_2_6_1;
+        strcpy(menuMember.pos, "2.6.1");
         hashMenu.vPtr->insert(&hashMenu, &menuMember);
 /*
 

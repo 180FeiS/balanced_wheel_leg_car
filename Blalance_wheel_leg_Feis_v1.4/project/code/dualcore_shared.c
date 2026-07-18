@@ -13,6 +13,7 @@
 #include "flash.h"
 #include "zf_device_gnss.h"
 #include "nav_fusion.h"
+#include "init.h"
 #endif
 
 #if defined(CY_CORE_CM7_0)
@@ -270,6 +271,23 @@ void dualcore_ctrl_to_ui_publish(void)
 #endif
 #endif
 
+  if (g_nag_pathfix.active != 0u)
+  {
+    /* 与 GUI_2_6_1 右侧视口一致：x=136, y=ROW_5(64), w=88, h=112 */
+    Nag_PathFix_SyncToShared(c, 136u, 64u, 88u, 112u);
+  }
+  else
+  {
+    c->pathfix_active = 0u;
+    c->pathfix_loaded = 0u;
+    c->pathfix_dirty = 0u;
+    c->pathfix_select_index = 0u;
+    c->pathfix_point_count = 0u;
+    c->pathfix_select_yaw_x100 = 0;
+    c->pathfix_draw_count = 0u;
+    c->pathfix_draw_sel_idx = 0u;
+  }
+
   c->seq++;
   __DSB();
 
@@ -469,6 +487,9 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
   case DUALCORE_UI_CMD_GYRO_BIAS_CALIB_START:
     GyroBias_CalibStart();
     break;
+  case DUALCORE_UI_CMD_INPUT_BEEP:
+    buzzer_beep_request(BRIDGE_BEEP_MS);
+    break;
   case DUALCORE_UI_CMD_GPS_SAVE_POINT:
     (void)GPS_SaveCurrentPointFromCoord(gnss.latitude, gnss.longitude);
     break;
@@ -507,6 +528,21 @@ static void dualcore_apply_one_ui_cmd(const dualcore_ui_cmd_slot_t *s)
     }
     break;
   }
+  case DUALCORE_UI_CMD_PATHFIX_BEGIN:
+    (void)Nag_PathFix_Enter();
+    break;
+  case DUALCORE_UI_CMD_PATHFIX_SELECT:
+    (void)Nag_PathFix_CycleSelect();
+    break;
+  case DUALCORE_UI_CMD_PATHFIX_YAW_DEC:
+    (void)Nag_PathFix_AdjustYaw(-Nag_PathFix_Yaw_Step_Deg);
+    break;
+  case DUALCORE_UI_CMD_PATHFIX_YAW_INC:
+    (void)Nag_PathFix_AdjustYaw(Nag_PathFix_Yaw_Step_Deg);
+    break;
+  case DUALCORE_UI_CMD_PATHFIX_EXIT_SAVE:
+    (void)Nag_PathFix_ExitSave();
+    break;
   default:
     break;
   }

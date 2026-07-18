@@ -20,10 +20,10 @@
 #define SERVO_FREQ              (300)                   //定义主板上舵机频率
 #define SERVO_LEFT              (55)                    //左极限值 待测
 #define SERVO_RIGHT             (170)                   //右极限值 待测
-#define SERVO1_MID              (2651)//防水(2651) 新   3700       //舵机1中值     左上 小上
+#define SERVO1_MID              (3051)//防水(2651) 新   3700       //舵机1中值     左上 小上
 #define SERVO2_MID              (4962)//防水(4962) 新   5562    //舵机2中值     左下  大 上
-#define SERVO3_MID              (4620)//防水(4620) 新   4570      //舵机3中值     右上  大 上
-#define SERVO4_MID              (3500)//防水(3500) 新   3300       //舵机4中值     右下  小 上
+#define SERVO3_MID              (4820)//防水(4620) 新   4570      //舵机3中值     右上  大 上
+#define SERVO4_MID              (3800)//防水(3500) 新   3300       //舵机4中值     右下  小 上
 
 
 
@@ -55,7 +55,7 @@ void buzzer_check(uint32 buzzer_time);      //蜂鸣器检测
 #define BRIDGE_BEEP_MS  100u
 
 void buzzer_beep_request(uint32 ms);
-void buzzer_beep_poll(void);
+void buzzer_beep_poll(void); /* 须在 CM7_0 固定 5ms 控制周期（leg_control）调用，与 request 配对自动关断 */
 
 void my_camera_init(void);                  //摄像头初始化
 

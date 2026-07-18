@@ -47,7 +47,8 @@
 *      - 2_3_4. 转向外环D
 *    - 2_4. 速度设置
 *    - 2_5. 更新Flash参数
-*    - 2_6. 清空FLASH缓存区
+ *    - 2_6. PathFix 惯导路径修正（进入 2_6_1）
+ *      - 2_6_1. PathFix 功能页（KEY1 +10点 KEY2/3 调 yaw KEY4 保存退出）
 *
 * 3. 运行模式 (GUI_3)
 *    - 3    pos「3」一级 Run（与主菜单其它一级同级）
@@ -130,6 +131,9 @@ extern void ACT_2_5();
 
 extern void GUI_2_6();
 extern void ACT_2_6();
+
+extern void GUI_2_6_1();
+extern void ACT_2_6_1();
 
 extern void GUI_3_1();
 extern void ACT_3_1();

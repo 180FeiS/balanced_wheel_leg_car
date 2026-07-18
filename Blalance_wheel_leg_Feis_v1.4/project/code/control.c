@@ -34,8 +34,8 @@ const float Rmoto_K = 4980;
 pid_t leg_hight, turn_angle, turn_gyro, gyro, angle, speed, turn;
 
 float angle_kd = 0;    // 角度环kd
-float pitch_mid = 1.5;  // pitch机械中值（俯仰平衡）1.0
-float roll_mid = -0.7; // roll机械中值（横滚平衡，leg_hight PID目标） -0.5
+float pitch_mid = 2.5;  // pitch机械中值（俯仰平衡）1.0
+float roll_mid = -2.0; // roll机械中值（横滚平衡，leg_hight PID目标） -0.5
 
 // 各个环节PID的运算周期
 float dt_pid_gyro = 0.002f;
@@ -60,7 +60,7 @@ float leg_long = 5.5f; //3.5
  * - motor_user_speed_cmd：运行中的用户速度基准；只有惯导回放进入执行态时从 run_launch_speed 装载，
  *   LORA 遥控和导航元素临时接管等实时路径仍可直接写入；
  * - motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发显示航向对齐（任意时刻，非车辆转向）；
- *   上升沿→当前朝向显示为 0°，下降沿→当前朝向显示为 180°；成功时翻转 LED1。
+ *   上升沿→当前朝向显示为 180°，下降沿→当前朝向显示为 0°；成功时翻转 LED1 并短蜂鸣一次。
  * - motor_user_speed_cmd_set_from_pc()：串口 V<数值> 更新发车速度设定值；
  * - Motor_Switch 仅由 SWITCH1 与 Motor_Runaway_Latch 决定（见 Menu.c）。
  *---------------------------------------------------------------------------*/
@@ -70,6 +70,24 @@ float motor_user_speed_cmd = 0.0f;
 /* 发车速度设定值：菜单/串口先改这里，惯导回放真正进入执行态时才装载到 motor_user_speed_cmd。 */
 float run_launch_speed = 0.0f;
 float speed_target_effective = 0.0f; /* 经 Nag_GetControlSpeedTarget() 后的速度环目标，供调试对比 */
+
+/*
+ * 车辆重新装配后，两个轮子的共同正方向与原控制约定相反：
+ * 保持左右轮与差速转向的对应关系，仅将两个最终驱动量同时取反。
+ * 若恢复原机械/驱动方向，将此宏改为 0；不要只反转其中一个轮子。
+ */
+#ifndef MOTOR_COMMON_DIRECTION_INVERT
+#define MOTOR_COMMON_DIRECTION_INVERT  0
+#endif
+
+static void motor_set_duty_with_direction_compensation(int16 left_duty, int16 right_duty)
+{
+#if MOTOR_COMMON_DIRECTION_INVERT
+    small_driver_set_duty((int16)(-left_duty), (int16)(-right_duty));
+#else
+    small_driver_set_duty(left_duty, right_duty);
+#endif
+}
 
 /* jump_flag：1=跳跃流程进行中；仅应在 jump_is_allowed()==1 时由外部（LORA/双核/导航等）置 1。
  * jump_step_index：当前阶段 0=起跳 1=收腿 2=准备缓冲 3=执行缓冲，由 jump_control() 每 20ms 更新。
@@ -682,8 +700,8 @@ static void control_yaw_soft_reset_sync(void)
     steer_angle_err = 0.0f;
 }
 
-#define SWITCH2_YAW_ALIGN_ZERO_DEG   0.0f    /* 上升沿：当前朝向重新标记为 0°（显示航向） */
-#define SWITCH2_YAW_ALIGN_REVERSE_DEG 180.0f /* 下降沿：当前朝向重新标记为 180°（±180° 坐标系） */
+#define SWITCH2_YAW_ALIGN_ZERO_DEG   0.0f    /* 下降沿：当前朝向重新标记为 0°（显示航向） */
+#define SWITCH2_YAW_ALIGN_REVERSE_DEG 180.0f /* 上升沿：当前朝向重新标记为 180°（±180° 坐标系） */
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     SWITCH2 边沿触发显示航向对齐
@@ -691,8 +709,9 @@ static void control_yaw_soft_reset_sync(void)
 // 返回参数     null
 // 使用示例     motor_poll_switch2_speed_baseline();
 // 备注信息     GPIO_LOW→sw2_now=0，GPIO_HIGH→sw2_now=1。
-//              上升沿（0→1）：Yaw_AlignDisplayDeg(0°)；下降沿（1→0）：Yaw_AlignDisplayDeg(180°)。
+//              上升沿（0→1）：Yaw_AlignDisplayDeg(180°)；下降沿（1→0）：Yaw_AlignDisplayDeg(0°)。
 //              仅改 yaw_zero_offset_deg，不驱动车辆转向；首次采样只同步 s_switch2_prev，不改变 yaw。
+//              有效边沿与 LED1 翻转同步请求一次非阻塞蜂鸣（buzzer_beep_request，CM7_0 本地执行）。
 -------------------------------------------------------------------------------------------------------------------*/
 void motor_poll_switch2_speed_baseline(void)
 {
@@ -716,14 +735,15 @@ void motor_poll_switch2_speed_baseline(void)
 
     if (sw2_now == 1u)
     {
-        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_ZERO_DEG);
+        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_REVERSE_DEG);
     }
     else
     {
-        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_REVERSE_DEG);
+        Yaw_AlignDisplayDeg(SWITCH2_YAW_ALIGN_ZERO_DEG);
     }
     control_yaw_soft_reset_sync();
     gpio_toggle_level(LED1);
+    buzzer_beep_request(BRIDGE_BEEP_MS);
 }
 
 /* pit0_ch0 1ms 内、Nag_HeadingHold 之后若需消费 pending 之前调用；与导航元素锁航/自旋互斥，补发规则对齐 Nag_HeadingHold_ShouldRequest。 */
@@ -1126,21 +1146,21 @@ void LQR_control(float V_target, float th)
         {
             if (30 >= euler_angle.pitch)
             {
-                small_driver_set_duty(LO, -RO);
+                motor_set_duty_with_direction_compensation(LO, (int16)(-RO));
             }
             if (euler_angle.pitch >= -50)
             {
-                small_driver_set_duty(LO, -RO);
+                motor_set_duty_with_direction_compensation(LO, (int16)(-RO));
             }
             else
             {
-                small_driver_set_duty(0, 0);
+                motor_set_duty_with_direction_compensation(0, 0);
             }
         }
     }
     else
     {
-        small_driver_set_duty(0, 0);
+        motor_set_duty_with_direction_compensation(0, 0);
     }
 }
 
@@ -1485,12 +1505,14 @@ void pid_ctrl_Run(void)
         else
         {
             float scale = (jump_flag == 1) ? JUMP_PID_SCALE : 1.0f;
-            small_driver_set_duty((int16)((gyro.out + turn_mix_cmd) * scale), (int16)(-(gyro.out - turn_mix_cmd) * scale));
+            motor_set_duty_with_direction_compensation(
+                (int16)((gyro.out + turn_mix_cmd) * scale),
+                (int16)(-(gyro.out - turn_mix_cmd) * scale));
         }
     }
     else
     {
-        small_driver_set_duty(0, 0);
+        motor_set_duty_with_direction_compensation(0, 0);
     }
 
     
@@ -1591,6 +1613,7 @@ static float leg_servo_get_desired_tilt_angle(void)
 // 使用示例     leg_control();
 // 备注信息     leg_control 比 jump_control(20ms) 更密：Motor_Switch 关闭时若仍 jump_flag==1，此处立即 jump_stop()，
 //              避免数拍内仍走跳跃腿形；与 jump_is_allowed() 中电机关闭互锁一致。
+//              末尾 buzzer_beep_poll() 按 5ms 递减蜂鸣计时，到期拉低 BUZZER_PIN（与 buzzer_beep_request 配对）。
 -------------------------------------------------------------------------------------------------------------------*/
 void leg_control(void)
 {
@@ -1664,6 +1687,8 @@ void leg_control(void)
     left_leg_control(out_left_p, -out_left_angle);
     right_leg_control(out_right_p, out_right_angle);
 #endif
+
+    buzzer_beep_poll();
 }
 
 /*-------------------------------------------------------------------------------------------------------------------

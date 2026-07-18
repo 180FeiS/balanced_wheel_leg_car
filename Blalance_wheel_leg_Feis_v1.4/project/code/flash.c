@@ -897,3 +897,130 @@ void flash_Nag_Read(){
         flash_read_page_to_buffer(0, N.Flash_page_index,FLASH_PAGE_LENGTH);
     }
 }
+
+/* 仅载入惯导 yaw 轨迹到 Nav_read[]，不进入回放态；out_save_index 为点数 Save_index */
+uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
+{
+    uint16 save_index = 0u;
+    uint8 page_turn = 0u;
+    int index = 0;
+
+    if (out_save_index == NULL)
+    {
+        return 0u;
+    }
+
+    *out_save_index = 0u;
+    flash_Nag_ResetReadState();
+    flash_buffer_clear();
+    flash_read_page_to_buffer(0, Nag_End_Page, FLASH_PAGE_LENGTH);
+    save_index = (uint16)flash_union_buffer[MaxSize + 2].uint32_type;
+    flash_buffer_clear();
+
+    if ((save_index == 0u) || (save_index > Read_MaxSize))
+    {
+        return 0u;
+    }
+
+    N.Save_index = save_index;
+    flash_Nag_ReadEventPage();
+
+    N.Flash_page_index = Nag_Start_Page;
+    flash_Nag_ResetReadState();
+    flash_Nag_Read();
+
+    for (index = 0; index < (int)save_index; index++)
+    {
+        int temp_index = index - ((int)MaxSize * (int)page_turn);
+
+        if (temp_index >= (int)MaxSize)
+        {
+            N.Flash_page_index--;
+            page_turn++;
+            flash_Nag_Read();
+            temp_index = index - ((int)MaxSize * (int)page_turn);
+        }
+        Nav_read[index] = flash_union_buffer[temp_index].int32_type;
+    }
+
+    flash_buffer_clear();
+    *out_save_index = save_index;
+    return 1u;
+}
+
+/* 将 Nav_read[0..save_index-1] 整表回写 Flash 页 2~45、元数据页 1 与事件页 46 */
+uint8 flash_Nag_WriteFullPath(uint16 save_index)
+{
+    uint16 page_count = 0u;
+    uint8 page_idx = 0u;
+    uint8 lowest_page = 0u;
+
+    if ((save_index == 0u) || (save_index > Read_MaxSize))
+    {
+        return 0u;
+    }
+
+    page_count = (uint16)((save_index + MaxSize - 1u) / MaxSize);
+    if (page_count == 0u)
+    {
+        return 0u;
+    }
+
+    lowest_page = (uint8)(Nag_Start_Page - page_count + 1u);
+    if (lowest_page <= Nag_End_Page)
+    {
+        return 0u;
+    }
+
+    for (page_idx = 0u; page_idx < page_count; page_idx++)
+    {
+        uint16 base = (uint16)(page_idx * MaxSize);
+        uint16 count = (uint16)(save_index - base);
+        uint8 flash_page = (uint8)(Nag_Start_Page - page_idx);
+        uint16 i = 0u;
+
+        if (count > MaxSize)
+        {
+            count = MaxSize;
+        }
+
+        flash_buffer_clear();
+        for (i = 0u; i < count; i++)
+        {
+            flash_union_buffer[i].int32_type = Nav_read[base + i];
+        }
+        if (flash_check(0, flash_page))
+        {
+            flash_erase_page(0, flash_page);
+        }
+        flash_write_page_from_buffer(0, flash_page, FLASH_PAGE_LENGTH);
+    }
+
+    if (lowest_page > (Nag_End_Page + 1u))
+    {
+        uint8 erase_page = (uint8)(lowest_page - 1u);
+        while (erase_page > Nag_End_Page)
+        {
+            if (flash_check(0, erase_page))
+            {
+                flash_erase_page(0, erase_page);
+            }
+            erase_page--;
+        }
+    }
+
+    flash_buffer_clear();
+    flash_union_buffer[MaxSize + 2].uint32_type = save_index;
+    if (flash_check(0, Nag_End_Page))
+    {
+        flash_erase_page(0, Nag_End_Page);
+    }
+    flash_write_page_from_buffer(0, Nag_End_Page, FLASH_PAGE_LENGTH);
+
+    flash_Nag_WriteEventPage();
+
+    N.Save_index = save_index;
+    N.Flash_page_index = Nag_Start_Page;
+    flash_buffer_clear();
+    return 1u;
+}

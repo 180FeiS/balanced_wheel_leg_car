@@ -33,7 +33,7 @@ extern float dt_pid_turn_gyro;
  * 发车页/串口调速先写 run_launch_speed，只有惯导回放进入执行态时才装载到本量；
  * LORA 遥控、导航元素接管等实时控制路径仍可直接写本量。
  * motor_poll_switch2_speed_baseline()：SWITCH2 边沿触发显示航向对齐（任意时刻，非车辆转向）；
- *   上升沿→当前朝向显示 0°，下降沿→当前朝向显示 180°；成功时翻转 LED1。
+ *   上升沿→当前朝向显示 180°，下降沿→当前朝向显示 0°；成功时翻转 LED1。
  * 旧工程中的 set_speed 已合并为该变量，请勿在模块外随意直接写全局，优先调用 motor_* API。
  */
 extern float motor_user_speed_cmd;
@@ -47,7 +47,7 @@ extern float speed_target_effective;      //真正送入速度环的目标速度
 void stair_jump_reset_boost_phase(void); /* EXIT_STAIR 或台阶序列结束时清零 stair_jump_speed_boost_phase */
 
 void motor_user_speed_cmd_set_from_pc(float cmd);
-void motor_poll_switch2_speed_baseline(void); /* SWITCH2 边沿：上升沿显示 yaw=0°，下降沿显示 yaw=180°，成功翻转 LED1 */
+void motor_poll_switch2_speed_baseline(void); /* SWITCH2 边沿：航向对齐 + LED1 翻转 + 短蜂鸣；首次采样不响 */
 extern uint8 jump_flag;                   // 1=跳跃中；仅当 jump_is_allowed()==1 时由外部置位
 uint8 jump_is_allowed(void);              // 1=允许跳跃：MOTOR_ON 且无 Motor_Runaway_Latch；否则禁止
 void jump_stop(void);                     // 终止跳跃，清时序，leg_long 回默认；保护/关电机时调用
