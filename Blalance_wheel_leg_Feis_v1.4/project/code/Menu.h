@@ -126,7 +126,15 @@ extern HASH_TABLE_t hashMenu;
 extern char ReadPos[HASH_KEY_LEN];
 // 菜单系统初始化函数
 extern void MenuInit(void);
+/*
+ * 主循环菜单刷新入口（CM7_1 每圈调用）。
+ * 屏幕刷新统一受 motor_switch 门控：MOTOR_ON 时不调用 ips200 清屏/绘制，MOTOR_OFF 后自动恢复当前页。
+ */
 extern void selectMenu(void);
+/*
+ * 板载键导航队列消费与页面重绘（CM7_1 主循环调用，先于 selectMenu）。
+ * 电机 ON 时仅更新 menuMember，不刷新 LCD；与 selectMenu() 共用 Menu_MayRefreshScreen 门控。
+ */
 extern void selectMenu_Key(void);
 extern void menu_key_capture_event(void);
 extern void dip_switch_motor_sync_from_hw(void);

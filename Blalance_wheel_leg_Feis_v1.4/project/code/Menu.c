@@ -134,7 +134,7 @@ static uint8 MenuIsPathFixPage(void);
 static uint8 MenuTryHandlePathFixKeyEvent(void);
 static void Menu_UpdatePathFixSession(void);
 static void Menu_UpdateRunSubjectPreviewSession(void);
-static uint8 MenuIsLiveUiPage(void);
+static uint8 Menu_MayRefreshScreen(uint8 motor_switch);
 static void MenuRedrawCurrentPage(void);
 static void MenuRequestRedrawFromIsr(void);
 static uint8 MenuTakeRedrawRequest(void);
@@ -745,18 +745,17 @@ void selectMenu_Key(void)
         }
    }
 
-   /* 与 selectMenu() 一致：导航后立刻重绘，且须在主循环内完成，避免与 ips200 SPI 冲突。 */
-   if(menu_nav && ((motor_sw_key == MOTOR_OFF) || MenuIsLiveUiPage() || MenuIsPathFixPage()))
+   /*
+    * 与 selectMenu() 一致：导航后仅在电机关闭时清屏重绘。
+    * motor_sw_key：CM7_1 读 dualcore 快照 motor_switch，CM7_0 读 Motor_Switch。
+    * 电机 ON 时仍更新 menuMember，但延迟显示至 MOTOR_OFF 后由 selectMenu() 周期刷新恢复。
+    */
+   Menu_UpdatePathFixSession();
+   Menu_UpdateRunSubjectPreviewSession();
+   if (menu_nav && Menu_MayRefreshScreen(motor_sw_key))
    {
-        Menu_UpdatePathFixSession();
-        Menu_UpdateRunSubjectPreviewSession();
         ips200_clear();
         MenuRedrawCurrentPage();
-   }
-   else
-   {
-        Menu_UpdatePathFixSession();
-        Menu_UpdateRunSubjectPreviewSession();
    }
 }
 
@@ -802,10 +801,14 @@ static uint8 MenuIsPathFixPage(void)
     return (uint8)(strcmp(menuMember.pos, "2.6.1") == 0);
 }
 
-/* NavDbg / GPS Debug 需要持续刷新；PathFix 单独限帧，避免每圈全量 SPI 卡死按键 */
-static uint8 MenuIsLiveUiPage(void)
+/*
+ * LCD/SPI 刷新许可（按键模式与遥控模式统一门控）。
+ * motor_switch：MOTOR_ON 时禁止 ips200 清屏/绘制，减轻与平衡环/视觉任务的 CPU 争用；
+ *              MOTOR_OFF 时允许刷新；电机关闭后 selectMenu() 主循环会自动恢复当前页显示。
+ */
+static uint8 Menu_MayRefreshScreen(uint8 motor_switch)
 {
-    return (uint8)(MenuIsNavDebugPage() || MenuIsGpsDebugPage());
+    return (uint8)(motor_switch == MOTOR_OFF);
 }
 
 static void MenuRedrawCurrentPage(void)
@@ -831,7 +834,7 @@ static uint8 MenuTakeRedrawRequest(void)
     return requested;
 }
 
-/* PathFix 静止时每 100ms 刷新一次；不能按主循环次数限帧。 */
+/* PathFix 静止时每 100ms 限帧一次；实际是否绘制仍由 Menu_MayRefreshScreen() 在调用处门控。 */
 static uint8 Menu_ShouldRedrawPathFixPage(void)
 {
     static uint8 s_pathfix_last_tick = 0u;
@@ -1301,9 +1304,11 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 
 /*
  * @Function: selectMenu
- * @Description: 菜单选择处理函数
+ * @Description: 菜单选择处理函数（串口/遥控命令 + 周期刷新）
  * @Param: Void
  * @Return: Void
+ * @Note: motor_sw_sel 来自 Motor_Switch 或 dualcore 快照 motor_switch；
+ *        MOTOR_ON 时跳过所有 ips200 绘制，电机关闭后主循环自动恢复显示。
  * @Example: selectMenu();
  */
 
@@ -1339,25 +1344,37 @@ void selectMenu(void)
     case 'a':
         /* 与板载键一致：同级上一项 */
         hashMenu.vPtr->searchLeft(&hashMenu, &menuMember);
-        ips200_clear();
+        if (Menu_MayRefreshScreen(motor_sw_sel))
+        {
+            ips200_clear();
+        }
         break;
 
     case 'b':
         /* 与板载键一致：同级下一项 */
         hashMenu.vPtr->searchRight(&hashMenu, &menuMember);
-        ips200_clear();
+        if (Menu_MayRefreshScreen(motor_sw_sel))
+        {
+            ips200_clear();
+        }
         break;
 
     case 'c':
         /* 与板载键一致：进入下级 */
         hashMenu.vPtr->searchDown(&hashMenu, &menuMember);
-        ips200_clear();
+        if (Menu_MayRefreshScreen(motor_sw_sel))
+        {
+            ips200_clear();
+        }
         break;
 
     case 'd':
         /* 与板载键一致：返回上级 */
         hashMenu.vPtr->searchUp(&hashMenu, &menuMember);
-        ips200_clear();
+        if (Menu_MayRefreshScreen(motor_sw_sel))
+        {
+            ips200_clear();
+        }
         break;
         /*
     case 'e':
@@ -1481,17 +1498,24 @@ void selectMenu(void)
     Menu_UpdatePathFixSession();
     Menu_UpdateRunSubjectPreviewSession();
     redraw_requested = MenuTakeRedrawRequest();
-    /* 所有 LCD/SPI 重绘均在主循环完成；PathFix 额外按 100ms 限帧。 */
-    if (MenuIsPathFixPage())
+    /*
+     * 所有 LCD/SPI 重绘均在主循环完成；motor_sw_sel 为唯一电机门控。
+     * PathFix 额外 100ms 限帧；NavDbg/GPS 等实时页在电机 ON 时同样不刷新。
+     * 电机关闭后 motor_sw_sel==MOTOR_OFF 分支每圈恢复当前 menuMember 页面。
+     */
+    if (Menu_MayRefreshScreen(motor_sw_sel))
     {
-        if (redraw_requested || Menu_ShouldRedrawPathFixPage())
+        if (MenuIsPathFixPage())
+        {
+            if (redraw_requested || Menu_ShouldRedrawPathFixPage())
+            {
+                MenuRedrawCurrentPage();
+            }
+        }
+        else if (redraw_requested || (motor_sw_sel == MOTOR_OFF))
         {
             MenuRedrawCurrentPage();
         }
-    }
-    else if (redraw_requested || (motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
-    {
-        MenuRedrawCurrentPage();
     }
 }
 
