@@ -183,15 +183,23 @@ void buzzer_init(void)
 -------------------------------------------------------------------------------------------------------------------*/
 void buzzer_check(uint32 buzzer_time)
 {
+#if BUZZER_ENABLE
   gpio_set_level(BUZZER_PIN, GPIO_HIGH);
   system_delay_ms(buzzer_time);
   gpio_set_level(BUZZER_PIN, GPIO_LOW);
+#else
+  (void)buzzer_time;
+#endif
 }
 
 static uint16 s_buzzer_remain_ms;
 
 void buzzer_beep_request(uint32 ms)
 {
+#if !BUZZER_ENABLE
+  (void)ms;
+  return;
+#endif
   if (ms == 0u)
   {
     ms = BRIDGE_BEEP_MS;

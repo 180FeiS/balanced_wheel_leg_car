@@ -128,6 +128,7 @@ static uint8 MenuTryHandlePathFixKeyEvent(void);
 static void Menu_UpdatePathFixSession(void);
 static uint8 MenuIsLiveUiPage(void);
 static void MenuRedrawCurrentPage(void);
+static uint8 Menu_ShouldRedrawPathFixPage(void);
 static uint8 MenuIsRemoteMenuFirst(void);
 
 static char s_menu_pathfix_last_pos[HASH_KEY_LEN] = "0";
@@ -627,7 +628,7 @@ void selectMenu_Key(void)
    }
 
    /* 与 selectMenu() 一致：导航后立刻重绘，且须在主循环内完成，避免与 ips200 SPI 冲突。 */
-   if(menu_nav && ((motor_sw_key == MOTOR_OFF) || MenuIsLiveUiPage()))
+   if(menu_nav && ((motor_sw_key == MOTOR_OFF) || MenuIsLiveUiPage() || MenuIsPathFixPage()))
    {
         Menu_UpdatePathFixSession();
         ips200_clear();
@@ -681,16 +682,36 @@ static uint8 MenuIsPathFixPage(void)
     return (uint8)(strcmp(menuMember.pos, "2.6.1") == 0);
 }
 
-/* NavDbg / GPS Debug / PathFix 需要持续刷新（含右侧轨迹），不受 Motor_Switch 关屏影响 */
+/* NavDbg / GPS Debug 需要持续刷新；PathFix 单独限帧，避免每圈全量 SPI 卡死按键 */
 static uint8 MenuIsLiveUiPage(void)
 {
-    return (uint8)(MenuIsNavDebugPage() || MenuIsGpsDebugPage() || MenuIsPathFixPage());
+    return (uint8)(MenuIsNavDebugPage() || MenuIsGpsDebugPage());
 }
 
 static void MenuRedrawCurrentPage(void)
 {
     menuMember.gui();
     menuMember.act();
+}
+
+/* PathFix：按键立即刷；静止时约每 8 主循环刷一次左侧文字/轨迹 */
+static uint8 Menu_ShouldRedrawPathFixPage(void)
+{
+    static uint8 s_pathfix_redraw_div = 0u;
+
+    if (MenuIsPathFixPage() == 0u)
+    {
+        s_pathfix_redraw_div = 0u;
+        return 0u;
+    }
+
+    s_pathfix_redraw_div++;
+    if (s_pathfix_redraw_div >= 8u)
+    {
+        s_pathfix_redraw_div = 0u;
+        return 1u;
+    }
+    return 0u;
 }
 
 static void Menu_UpdatePathFixSession(void)
@@ -740,7 +761,7 @@ static void Menu_UpdatePathFixSession(void)
     strcpy(s_menu_pathfix_last_pos, menuMember.pos);
 }
 
-/* PathFix（pos 2.6.1）：KEY1 每次 +10 点；KEY2/3 ±2°；KEY4 保存并返回上级 */
+/* PathFix（pos 2.6.1）：KEY1 跳锚点；KEY2/3 ±yaw 并锚点间插值；KEY4 保存并返回上级 */
 static uint8 MenuTryHandlePathFixKeyEvent(void)
 {
     if (key_get_state(KEY_1) == KEY_SHORT_PRESS)
@@ -1221,7 +1242,15 @@ void selectMenu(void)
 
     Menu_command = 0;
     Menu_UpdatePathFixSession();
-    if((motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
+    /* PathFix 单独限帧；其它页保持原 Motor_OFF / Live 页每圈刷新逻辑 */
+    if (MenuIsPathFixPage())
+    {
+        if (Menu_ShouldRedrawPathFixPage())
+        {
+            MenuRedrawCurrentPage();
+        }
+    }
+    else if ((motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
     {
         MenuRedrawCurrentPage();
     }

@@ -4504,6 +4504,21 @@ void NagFlashRead(){
 
 NagPathFixState g_nag_pathfix;
 
+/* 折线屏幕坐标缓存：避免每帧 O(N) 甚至旧实现 O(N^2) 重算 */
+static int16 s_pathfix_cache_x[Nag_PathFix_Draw_Max];
+static int16 s_pathfix_cache_y[Nag_PathFix_Draw_Max];
+static uint16 s_pathfix_cache_count = 0u;
+static uint16 s_pathfix_cache_sel = 0u;
+static uint8 s_pathfix_cache_valid = 0u;
+static uint16 s_pathfix_cache_x_off = 0u;
+static uint16 s_pathfix_cache_y_off = 0u;
+static uint16 s_pathfix_cache_w = 0u;
+static uint16 s_pathfix_cache_h = 0u;
+/* 元素点十字（统一颜色，不区分类型） */
+static int16 s_pathfix_elem_x[Nag_PathFix_Elem_Max];
+static int16 s_pathfix_elem_y[Nag_PathFix_Elem_Max];
+static uint16 s_pathfix_elem_count = 0u;
+
 static float Nag_PathFix_WrapYawDeg(float yaw_deg)
 {
     while (yaw_deg > 180.0f)
@@ -4538,29 +4553,6 @@ static uint8 Nag_PathFix_CanEnter(void)
         return 0u;
     }
     return 1u;
-}
-
-static void Nag_PathFix_WorldCmAt(uint16 idx, float *out_x, float *out_y)
-{
-    uint16 i = 0;
-    float x = 0.0f;
-    float y = 0.0f;
-
-    if ((out_x == NULL) || (out_y == NULL) || (idx >= g_nag_pathfix.point_count))
-    {
-        return;
-    }
-
-    for (i = 1u; i <= idx; i++)
-    {
-        float yaw_deg = (float)Nav_read[i - 1u] / 100.0f;
-        float yaw_rad = yaw_deg * 3.1415926f / 180.0f;
-
-        x += Nag_Set_mileage * sinf(yaw_rad);
-        y += Nag_Set_mileage * cosf(yaw_rad);
-    }
-    *out_x = x;
-    *out_y = y;
 }
 
 static uint16 Nag_PathFix_ClampU16(int32 value, uint16 min_value, uint16 max_value)
@@ -4606,7 +4598,30 @@ static void Nag_PathFix_DrawPoint(uint16 x,
     ips200_draw_point(x, Nag_PathFix_ClampU16((int32)y - 1, y_offset, y_max), color);
 }
 
-/* 当前选中点：黄色十字 + 菱形，最后绘制以免被轨迹/端点覆盖 */
+/* 通用十字标记（元素点/选中点共用几何，颜色由调用方指定） */
+static void Nag_PathFix_DrawCrossMarker(uint16 x,
+                                        uint16 y,
+                                        uint16 x_offset,
+                                        uint16 y_offset,
+                                        uint16 width,
+                                        uint16 height,
+                                        uint16 color,
+                                        uint16 span)
+{
+    uint16 x_max = (uint16)(x_offset + width);
+    uint16 y_max = (uint16)(y_offset + height);
+    uint16 x0 = Nag_PathFix_ClampU16((int32)x, x_offset, x_max);
+    uint16 y0 = Nag_PathFix_ClampU16((int32)y, y_offset, y_max);
+
+    ips200_draw_line(Nag_PathFix_ClampU16((int32)x0 - (int32)span, x_offset, x_max), y0,
+                     Nag_PathFix_ClampU16((int32)x0 + (int32)span, x_offset, x_max), y0,
+                     color);
+    ips200_draw_line(x0, Nag_PathFix_ClampU16((int32)y0 - (int32)span, y_offset, y_max),
+                     x0, Nag_PathFix_ClampU16((int32)y0 + (int32)span, y_offset, y_max),
+                     color);
+}
+
+/* 当前选中点：黄色加粗十字，最后绘制以免被轨迹/端点覆盖 */
 static void Nag_PathFix_DrawSelectedMarker(uint16 x,
                                            uint16 y,
                                            uint16 x_offset,
@@ -4619,32 +4634,9 @@ static void Nag_PathFix_DrawSelectedMarker(uint16 x,
     uint16 x0 = Nag_PathFix_ClampU16((int32)x, x_offset, x_max);
     uint16 y0 = Nag_PathFix_ClampU16((int32)y, y_offset, y_max);
     uint16 span = 4u;
-    int32 dx = 0;
-    int32 dy = 0;
 
-    for (dx = -(int32)span; dx <= (int32)span; dx++)
-    {
-        ips200_draw_point(Nag_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max), y0, RGB565_BLACK);
-        ips200_draw_point(Nag_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
-                          Nag_PathFix_ClampU16((int32)y0 + 1, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(Nag_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
-                          Nag_PathFix_ClampU16((int32)y0 - 1, y_offset, y_max), RGB565_BLACK);
-    }
-    for (dy = -(int32)span; dy <= (int32)span; dy++)
-    {
-        ips200_draw_point(x0, Nag_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(Nag_PathFix_ClampU16((int32)x0 + 1, x_offset, x_max),
-                          Nag_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(Nag_PathFix_ClampU16((int32)x0 - 1, x_offset, x_max),
-                          Nag_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-    }
-
-    ips200_draw_line(Nag_PathFix_ClampU16((int32)x0 - (int32)span, x_offset, x_max), y0,
-                     Nag_PathFix_ClampU16((int32)x0 + (int32)span, x_offset, x_max), y0,
-                     RGB565_YELLOW);
-    ips200_draw_line(x0, Nag_PathFix_ClampU16((int32)y0 - (int32)span, y_offset, y_max),
-                     x0, Nag_PathFix_ClampU16((int32)y0 + (int32)span, y_offset, y_max),
-                     RGB565_YELLOW);
+    Nag_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_BLACK, span);
+    Nag_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_YELLOW, span);
     ips200_draw_line(Nag_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      Nag_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
                      Nag_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
@@ -4657,15 +4649,89 @@ static void Nag_PathFix_DrawSelectedMarker(uint16 x,
                      RGB565_YELLOW);
 }
 
-void Nag_PathFix_PublishDrawMap(uint16 x_offset,
-                              uint16 y_offset,
-                              uint16 width,
-                              uint16 height,
-                              int16 *out_x,
-                              int16 *out_y,
-                              uint16 out_max,
-                              uint16 *out_count,
-                              uint16 *out_sel_draw)
+/* 收集有效元素 enter/exit 索引（去重），全部用同一颜色显示 */
+static uint16 Nag_PathFix_CollectElemIndices(uint16 *out_idx, uint16 out_max)
+{
+    uint16 n = 0u;
+    uint8 ei = 0u;
+    uint8 event_count = N.Event_Count;
+
+    if ((out_idx == NULL) || (out_max == 0u))
+    {
+        return 0u;
+    }
+    if (event_count > Nag_Event_Max)
+    {
+        event_count = Nag_Event_Max;
+    }
+
+    for (ei = 0u; ei < event_count; ei++)
+    {
+        uint16 idxs[2];
+        uint8 k = 0u;
+
+        if (Nag_Event_Table[ei].valid == 0u)
+        {
+            continue;
+        }
+
+        idxs[0] = Nag_Event_Table[ei].enter_index;
+        idxs[1] = Nag_Event_Table[ei].exit_index;
+        for (k = 0u; k < 2u; k++)
+        {
+            uint16 j = 0u;
+            uint8 dup = 0u;
+
+            if (idxs[k] >= g_nag_pathfix.point_count)
+            {
+                continue;
+            }
+            /* 单点元素 enter==exit，只记一次 */
+            if ((k == 1u) && (idxs[1] == idxs[0]))
+            {
+                continue;
+            }
+            for (j = 0u; j < n; j++)
+            {
+                if (out_idx[j] == idxs[k])
+                {
+                    dup = 1u;
+                    break;
+                }
+            }
+            if ((dup == 0u) && (n < out_max))
+            {
+                out_idx[n++] = idxs[k];
+            }
+        }
+    }
+    return n;
+}
+
+/* 由原始点索引映射到抽稀后的显示索引（O(1)） */
+static uint16 Nag_PathFix_SrcToDrawIdx(uint16 src_idx, uint16 draw_count, uint16 point_count)
+{
+    if ((draw_count == 0u) || (point_count == 0u))
+    {
+        return 0u;
+    }
+    if (draw_count == 1u)
+    {
+        return 0u;
+    }
+    if (src_idx >= point_count)
+    {
+        src_idx = (uint16)(point_count - 1u);
+    }
+    return (uint16)((uint32)src_idx * (uint32)(draw_count - 1u) / (uint32)(point_count - 1u));
+}
+
+/* O(N) 单次累计：先求包围盒，再抽稀映射到屏幕；替代旧版对每个点 WorldCmAt 的 O(N^2) */
+static void Nag_PathFix_RebuildDrawMap(uint16 x_offset,
+                                       uint16 y_offset,
+                                       uint16 width,
+                                       uint16 height,
+                                       uint16 out_max)
 {
     float x_min = 0.0f;
     float x_max = 0.0f;
@@ -4673,60 +4739,57 @@ void Nag_PathFix_PublishDrawMap(uint16 x_offset,
     float y_max = 0.0f;
     float x_range = 0.0f;
     float y_range = 0.0f;
-    uint16 draw_count = 0;
-    uint16 i = 0;
-    uint16 src_idx = 0;
-    uint16 sel_draw = 0;
-    uint16 best_diff = 0xFFFFu;
-    uint16 select_index = g_nag_pathfix.select_index;
+    float wx = 0.0f;
+    float wy = 0.0f;
+    uint16 point_count = g_nag_pathfix.point_count;
+    uint16 draw_count = 0u;
+    uint16 i = 0u;
+    uint16 next_src = 0u;
+    uint16 emit_i = 0u;
+    uint16 elem_idx[Nag_PathFix_Elem_Max];
+    uint16 elem_n = 0u;
 
-    if ((out_x == NULL) || (out_y == NULL) || (out_count == NULL) || (out_max == 0u))
+    s_pathfix_cache_valid = 0u;
+    s_pathfix_cache_count = 0u;
+    s_pathfix_cache_sel = 0u;
+    s_pathfix_elem_count = 0u;
+
+    if ((point_count == 0u) || (out_max == 0u) || (width == 0u) || (height == 0u))
     {
         return;
     }
 
-    *out_count = 0u;
-    if (out_sel_draw != NULL)
-    {
-        *out_sel_draw = 0u;
-    }
+    elem_n = Nag_PathFix_CollectElemIndices(elem_idx, Nag_PathFix_Elem_Max);
 
-    if ((g_nag_pathfix.loaded == 0u) || (g_nag_pathfix.point_count == 0u))
+    /* Pass1：O(N) 累计求包围盒 */
+    wx = 0.0f;
+    wy = 0.0f;
+    x_min = 0.0f;
+    x_max = 0.0f;
+    y_min = 0.0f;
+    y_max = 0.0f;
+    for (i = 1u; i < point_count; i++)
     {
-        return;
-    }
+        float yaw_deg = (float)Nav_read[i - 1u] / 100.0f;
+        float yaw_rad = yaw_deg * 3.1415926f / 180.0f;
 
-    for (i = 0u; i < g_nag_pathfix.point_count; i++)
-    {
-        float wx = 0.0f;
-        float wy = 0.0f;
-
-        Nag_PathFix_WorldCmAt(i, &wx, &wy);
-        if (i == 0u)
+        wx += Nag_Set_mileage * sinf(yaw_rad);
+        wy += Nag_Set_mileage * cosf(yaw_rad);
+        if (wx < x_min)
         {
             x_min = wx;
-            x_max = wx;
-            y_min = wy;
-            y_max = wy;
         }
-        else
+        if (wx > x_max)
         {
-            if (wx < x_min)
-            {
-                x_min = wx;
-            }
-            if (wx > x_max)
-            {
-                x_max = wx;
-            }
-            if (wy < y_min)
-            {
-                y_min = wy;
-            }
-            if (wy > y_max)
-            {
-                y_max = wy;
-            }
+            x_max = wx;
+        }
+        if (wy < y_min)
+        {
+            y_min = wy;
+        }
+        if (wy > y_max)
+        {
+            y_max = wy;
         }
     }
 
@@ -4741,54 +4804,162 @@ void Nag_PathFix_PublishDrawMap(uint16 x_offset,
         y_range = 1.0f;
     }
 
-    draw_count = g_nag_pathfix.point_count;
+    draw_count = point_count;
     if (draw_count > out_max)
     {
         draw_count = out_max;
     }
-
-    for (i = 0u; i < draw_count; i++)
+    if (draw_count > Nag_PathFix_Draw_Max)
     {
-        float wx = 0.0f;
-        float wy = 0.0f;
-        float x_ratio = 0.0f;
-        float y_ratio = 0.0f;
-        int32 mapped_x = 0;
-        int32 mapped_y = 0;
+        draw_count = Nag_PathFix_Draw_Max;
+    }
 
-        if (draw_count == 1u)
+    /* Pass2：O(N) 再扫一遍，按均匀抽稀写入屏幕坐标 */
+    wx = 0.0f;
+    wy = 0.0f;
+    emit_i = 0u;
+    next_src = 0u;
+    for (i = 0u; i < point_count; i++)
+    {
+        if (i > 0u)
         {
-            src_idx = 0u;
+            float yaw_deg = (float)Nav_read[i - 1u] / 100.0f;
+            float yaw_rad = yaw_deg * 3.1415926f / 180.0f;
+
+            wx += Nag_Set_mileage * sinf(yaw_rad);
+            wy += Nag_Set_mileage * cosf(yaw_rad);
         }
-        else
-        {
-            src_idx = (uint16)((uint32)i * (uint32)(g_nag_pathfix.point_count - 1u) / (uint32)(draw_count - 1u));
-        }
-
-        Nag_PathFix_WorldCmAt(src_idx, &wx, &wy);
-        x_ratio = (wx - x_min) / x_range;
-        y_ratio = (y_max - wy) / y_range;
-        mapped_x = (int32)x_offset + (int32)(x_ratio * (float)width);
-        mapped_y = (int32)y_offset + (int32)(y_ratio * (float)height);
-
-        out_x[i] = (int16)Nag_PathFix_ClampU16(mapped_x, x_offset, (uint16)(x_offset + width));
-        out_y[i] = (int16)Nag_PathFix_ClampU16(mapped_y, y_offset, (uint16)(y_offset + height));
 
         {
-            uint16 diff = (src_idx >= select_index) ? (uint16)(src_idx - select_index)
-                                                      : (uint16)(select_index - src_idx);
-            if (diff < best_diff)
+            float x_ratio = 0.0f;
+            float y_ratio = 0.0f;
+            int32 mapped_x = 0;
+            int32 mapped_y = 0;
+            uint16 ei = 0u;
+            uint8 is_sample = (uint8)((i == next_src) && (emit_i < draw_count));
+            uint8 is_elem = 0u;
+
+            for (ei = 0u; ei < elem_n; ei++)
             {
-                best_diff = diff;
-                sel_draw = i;
+                if (elem_idx[ei] == i)
+                {
+                    is_elem = 1u;
+                    break;
+                }
+            }
+
+            if ((is_sample != 0u) || (is_elem != 0u))
+            {
+                /* 横向镜像：车体左转对应屏幕左侧（与实车左右一致；wy 仍北向上） */
+                x_ratio = (x_max - wx) / x_range;
+                y_ratio = (y_max - wy) / y_range;
+                mapped_x = (int32)x_offset + (int32)(x_ratio * (float)width);
+                mapped_y = (int32)y_offset + (int32)(y_ratio * (float)height);
+            }
+
+            if (is_sample != 0u)
+            {
+                s_pathfix_cache_x[emit_i] =
+                    (int16)Nag_PathFix_ClampU16(mapped_x, x_offset, (uint16)(x_offset + width));
+                s_pathfix_cache_y[emit_i] =
+                    (int16)Nag_PathFix_ClampU16(mapped_y, y_offset, (uint16)(y_offset + height));
+                emit_i++;
+
+                if (emit_i < draw_count)
+                {
+                    next_src = (uint16)((uint32)emit_i * (uint32)(point_count - 1u) /
+                                        (uint32)(draw_count - 1u));
+                }
+            }
+
+            if ((is_elem != 0u) && (s_pathfix_elem_count < Nag_PathFix_Elem_Max))
+            {
+                s_pathfix_elem_x[s_pathfix_elem_count] =
+                    (int16)Nag_PathFix_ClampU16(mapped_x, x_offset, (uint16)(x_offset + width));
+                s_pathfix_elem_y[s_pathfix_elem_count] =
+                    (int16)Nag_PathFix_ClampU16(mapped_y, y_offset, (uint16)(y_offset + height));
+                s_pathfix_elem_count++;
             }
         }
     }
 
-    *out_count = draw_count;
+    s_pathfix_cache_count = emit_i;
+    s_pathfix_cache_sel = Nag_PathFix_SrcToDrawIdx(g_nag_pathfix.select_index,
+                                                    s_pathfix_cache_count,
+                                                    point_count);
+    s_pathfix_cache_x_off = x_offset;
+    s_pathfix_cache_y_off = y_offset;
+    s_pathfix_cache_w = width;
+    s_pathfix_cache_h = height;
+    s_pathfix_cache_valid = 1u;
+    g_nag_pathfix.map_dirty = 0u;
+}
+
+void Nag_PathFix_PublishDrawMap(uint16 x_offset,
+                              uint16 y_offset,
+                              uint16 width,
+                              uint16 height,
+                              int16 *out_x,
+                              int16 *out_y,
+                              uint16 out_max,
+                              uint16 *out_count,
+                              uint16 *out_sel_draw)
+{
+    uint16 i = 0u;
+    uint8 need_rebuild = 0u;
+
+    if ((out_x == NULL) || (out_y == NULL) || (out_count == NULL) || (out_max == 0u))
+    {
+        return;
+    }
+
+    *out_count = 0u;
     if (out_sel_draw != NULL)
     {
-        *out_sel_draw = sel_draw;
+        *out_sel_draw = 0u;
+    }
+
+    if ((g_nag_pathfix.loaded == 0u) || (g_nag_pathfix.point_count == 0u))
+    {
+        s_pathfix_cache_valid = 0u;
+        s_pathfix_elem_count = 0u;
+        return;
+    }
+
+    need_rebuild = (uint8)((g_nag_pathfix.map_dirty != 0u) ||
+                           (s_pathfix_cache_valid == 0u) ||
+                           (s_pathfix_cache_x_off != x_offset) ||
+                           (s_pathfix_cache_y_off != y_offset) ||
+                           (s_pathfix_cache_w != width) ||
+                           (s_pathfix_cache_h != height));
+
+    if (need_rebuild != 0u)
+    {
+        Nag_PathFix_RebuildDrawMap(x_offset, y_offset, width, height, out_max);
+    }
+    else
+    {
+        /* 仅选点变化：O(1) 更新高亮索引，不重算几何 */
+        s_pathfix_cache_sel = Nag_PathFix_SrcToDrawIdx(g_nag_pathfix.select_index,
+                                                        s_pathfix_cache_count,
+                                                        g_nag_pathfix.point_count);
+    }
+
+    if (s_pathfix_cache_valid == 0u)
+    {
+        return;
+    }
+
+    *out_count = s_pathfix_cache_count;
+    if (out_sel_draw != NULL)
+    {
+        *out_sel_draw = s_pathfix_cache_sel;
+    }
+
+    for (i = 0u; i < s_pathfix_cache_count; i++)
+    {
+        out_x[i] = s_pathfix_cache_x[i];
+        out_y[i] = s_pathfix_cache_y[i];
     }
 }
 
@@ -4810,16 +4981,11 @@ void Nag_PathFix_DrawViewport(uint16 x_offset, uint16 y_offset, uint16 width, ui
                               map_x, map_y, Nag_PathFix_Draw_Max,
                               &draw_count, &sel_draw);
 
+    /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黄) */
     for (i = 1u; i < draw_count; i++)
     {
         ips200_draw_line((uint16)map_x[i - 1u], (uint16)map_y[i - 1u],
                          (uint16)map_x[i], (uint16)map_y[i], RGB565_RED);
-    }
-
-    for (i = 0u; i < draw_count; i++)
-    {
-        Nag_PathFix_DrawPoint((uint16)map_x[i], (uint16)map_y[i],
-                              x_offset, y_offset, width, height, RGB565_BLUE);
     }
 
     if (draw_count > 0u)
@@ -4831,6 +4997,18 @@ void Nag_PathFix_DrawViewport(uint16 x_offset, uint16 y_offset, uint16 width, ui
             Nag_PathFix_DrawPoint((uint16)map_x[draw_count - 1u], (uint16)map_y[draw_count - 1u],
                                   x_offset, y_offset, width, height, RGB565_PURPLE);
         }
+    }
+
+    for (i = 0u; i < s_pathfix_elem_count; i++)
+    {
+        Nag_PathFix_DrawCrossMarker((uint16)s_pathfix_elem_x[i],
+                                    (uint16)s_pathfix_elem_y[i],
+                                    x_offset, y_offset, width, height,
+                                    RGB565_BLUE, 3u);
+    }
+
+    if ((draw_count > 0u) && (sel_draw < draw_count))
+    {
         Nag_PathFix_DrawSelectedMarker((uint16)map_x[sel_draw], (uint16)map_y[sel_draw],
                                        x_offset, y_offset, width, height);
     }
@@ -4871,6 +5049,24 @@ void Nag_PathFix_SyncToShared(void *ctrl_snapshot,
                                DUALCORE_PATHFIX_DRAW_MAX,
                                &c->pathfix_draw_count,
                                &c->pathfix_draw_sel_idx);
+
+    c->pathfix_elem_count = 0u;
+    if (s_pathfix_elem_count > 0u)
+    {
+        uint16 copy_n = s_pathfix_elem_count;
+        uint16 ei = 0u;
+
+        if (copy_n > DUALCORE_PATHFIX_ELEM_MAX)
+        {
+            copy_n = DUALCORE_PATHFIX_ELEM_MAX;
+        }
+        for (ei = 0u; ei < copy_n; ei++)
+        {
+            c->pathfix_elem_x[ei] = s_pathfix_elem_x[ei];
+            c->pathfix_elem_y[ei] = s_pathfix_elem_y[ei];
+        }
+        c->pathfix_elem_count = (uint8)copy_n;
+    }
 }
 #endif
 
@@ -4885,10 +5081,12 @@ uint8 Nag_PathFix_Enter(void)
 
     if (Nag_PathFix_CanEnter() == 0u)
     {
+        s_pathfix_cache_valid = 0u;
         memset(&g_nag_pathfix, 0, sizeof(g_nag_pathfix));
         return 0u;
     }
 
+    s_pathfix_cache_valid = 0u;
     memset(&g_nag_pathfix, 0, sizeof(g_nag_pathfix));
     if (flash_Nag_LoadTrajectoryOnly(&save_index) == 0u)
     {
@@ -4899,6 +5097,8 @@ uint8 Nag_PathFix_Enter(void)
     g_nag_pathfix.loaded = 1u;
     g_nag_pathfix.point_count = save_index;
     g_nag_pathfix.select_index = 0u;
+    g_nag_pathfix.map_dirty = 1u;
+    s_pathfix_cache_valid = 0u;
     return 1u;
 }
 
@@ -4908,6 +5108,9 @@ void Nag_PathFix_Leave(uint8 save_if_dirty)
     {
         (void)flash_Nag_WriteFullPath(g_nag_pathfix.point_count);
     }
+    s_pathfix_cache_valid = 0u;
+    s_pathfix_cache_count = 0u;
+    s_pathfix_elem_count = 0u;
     memset(&g_nag_pathfix, 0, sizeof(g_nag_pathfix));
 }
 
@@ -4921,12 +5124,65 @@ uint8 Nag_PathFix_CycleSelect(void)
 
     g_nag_pathfix.select_index =
         (uint16)((g_nag_pathfix.select_index + Nag_PathFix_Select_Step) % g_nag_pathfix.point_count);
+    /* 选点不改几何，仅刷新高亮索引 */
+    if (s_pathfix_cache_valid != 0u)
+    {
+        s_pathfix_cache_sel = Nag_PathFix_SrcToDrawIdx(g_nag_pathfix.select_index,
+                                                        s_pathfix_cache_count,
+                                                        g_nag_pathfix.point_count);
+    }
     return 1u;
 }
 
+/* 两航向最短弧插值，t∈[0,1] */
+static float Nag_PathFix_LerpYawDeg(float yaw_a_deg, float yaw_b_deg, float t)
+{
+    float diff = yaw_b_deg - yaw_a_deg;
+
+    while (diff > 180.0f)
+    {
+        diff -= 360.0f;
+    }
+    while (diff < -180.0f)
+    {
+        diff += 360.0f;
+    }
+    return Nag_PathFix_WrapYawDeg(yaw_a_deg + diff * t);
+}
+
+/* 用两端点当前 yaw 线性填充 (i0, i1) 之间的中间点，使整段斜线一起变向 */
+static void Nag_PathFix_LerpSegmentYaw(uint16 i0, uint16 i1)
+{
+    float y0 = 0.0f;
+    float y1 = 0.0f;
+    uint16 i = 0u;
+    uint16 span = 0u;
+
+    if ((i1 <= i0) || (i1 >= g_nag_pathfix.point_count))
+    {
+        return;
+    }
+
+    y0 = (float)Nav_read[i0] / 100.0f;
+    y1 = (float)Nav_read[i1] / 100.0f;
+    span = (uint16)(i1 - i0);
+    for (i = (uint16)(i0 + 1u); i < i1; i++)
+    {
+        float t = (float)(i - i0) / (float)span;
+        Nav_read[i] = Nag_PathFix_YawToStorage(Nag_PathFix_LerpYawDeg(y0, y1, t));
+    }
+}
+
+/*
+ * KEY2/3：改当前选中点 yaw，并按 Select_Step 锚点网格重插相邻段。
+ * 例：先改锚点 A、再改锚点 B，则 [A,B] 整段被拉成新斜线，而不是只动两个端点。
+ */
 uint8 Nag_PathFix_AdjustYaw(float delta_deg)
 {
     uint16 idx = 0;
+    uint16 step = Nag_PathFix_Select_Step;
+    uint16 left = 0u;
+    uint16 right = 0u;
     float yaw_deg = 0.0f;
 
     if ((g_nag_pathfix.active == 0u) || (g_nag_pathfix.loaded == 0u) ||
@@ -4941,9 +5197,45 @@ uint8 Nag_PathFix_AdjustYaw(float delta_deg)
         return 0u;
     }
 
+    if (step == 0u)
+    {
+        step = 1u;
+    }
+
     yaw_deg = (float)Nav_read[idx] / 100.0f + delta_deg;
     Nav_read[idx] = Nag_PathFix_YawToStorage(yaw_deg);
+
+    left = (uint16)((idx / step) * step);
+    right = (uint16)(left + step);
+    if (right >= g_nag_pathfix.point_count)
+    {
+        right = (uint16)(g_nag_pathfix.point_count - 1u);
+    }
+
+    if (idx == left)
+    {
+        /* 落在锚点：重插前一段 + 后一段 */
+        if (left >= step)
+        {
+            Nag_PathFix_LerpSegmentYaw((uint16)(left - step), left);
+        }
+        if (right > left)
+        {
+            Nag_PathFix_LerpSegmentYaw(left, right);
+        }
+    }
+    else
+    {
+        /* 落在段内：以当前点为折点，分别插值到左右锚点 */
+        Nag_PathFix_LerpSegmentYaw(left, idx);
+        if (right > idx)
+        {
+            Nag_PathFix_LerpSegmentYaw(idx, right);
+        }
+    }
+
     g_nag_pathfix.dirty = 1u;
+    g_nag_pathfix.map_dirty = 1u;
     return 1u;
 }
 
@@ -4962,6 +5254,9 @@ uint8 Nag_PathFix_ExitSave(void)
         }
     }
 
+    s_pathfix_cache_valid = 0u;
+    s_pathfix_cache_count = 0u;
+    s_pathfix_elem_count = 0u;
     memset(&g_nag_pathfix, 0, sizeof(g_nag_pathfix));
     return 1u;
 }

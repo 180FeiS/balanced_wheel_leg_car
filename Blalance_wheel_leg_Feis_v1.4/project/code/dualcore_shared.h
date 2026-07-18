@@ -23,6 +23,8 @@
 
 /* PathFix 界面折线快照最大点数（与 navigation.h Nag_PathFix_Draw_Max 一致） */
 #define DUALCORE_PATHFIX_DRAW_MAX  (180u)
+/* 元素点十字标记上限：enter+exit，与 Nag_Event_Max*2 对齐 */
+#define DUALCORE_PATHFIX_ELEM_MAX  (16u)
 
 typedef enum
 {
@@ -256,6 +258,10 @@ typedef struct
   uint16 pathfix_draw_sel_idx;
   int16 pathfix_draw_x[DUALCORE_PATHFIX_DRAW_MAX];
   int16 pathfix_draw_y[DUALCORE_PATHFIX_DRAW_MAX];
+  /* 元素点（统一颜色十字），不区分类型 */
+  uint8 pathfix_elem_count;
+  int16 pathfix_elem_x[DUALCORE_PATHFIX_ELEM_MAX];
+  int16 pathfix_elem_y[DUALCORE_PATHFIX_ELEM_MAX];
 } dualcore_ctrl_to_ui_t;
 
 typedef struct

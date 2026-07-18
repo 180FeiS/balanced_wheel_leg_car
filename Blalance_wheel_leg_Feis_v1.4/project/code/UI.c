@@ -847,7 +847,29 @@ static uint16 UI_PathFix_ClampU16(int32 value, uint16 min_value, uint16 max_valu
     return (uint16)value;
 }
 
-/* 与 navigation.c Nag_PathFix_DrawSelectedMarker 一致：CM7_1 只读快照绘制 */
+static void UI_PathFix_DrawCrossMarker(uint16 x,
+                                       uint16 y,
+                                       uint16 x_offset,
+                                       uint16 y_offset,
+                                       uint16 width,
+                                       uint16 height,
+                                       uint16 color,
+                                       uint16 span)
+{
+    uint16 x_max = (uint16)(x_offset + width);
+    uint16 y_max = (uint16)(y_offset + height);
+    uint16 x0 = UI_PathFix_ClampU16((int32)x, x_offset, x_max);
+    uint16 y0 = UI_PathFix_ClampU16((int32)y, y_offset, y_max);
+
+    ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - (int32)span, x_offset, x_max), y0,
+                     UI_PathFix_ClampU16((int32)x0 + (int32)span, x_offset, x_max), y0,
+                     color);
+    ips200_draw_line(x0, UI_PathFix_ClampU16((int32)y0 - (int32)span, y_offset, y_max),
+                     x0, UI_PathFix_ClampU16((int32)y0 + (int32)span, y_offset, y_max),
+                     color);
+}
+
+/* 与 navigation.c 一致：CM7_1 只读快照绘制选中高亮 */
 static void UI_PathFix_DrawSelectedMarker(uint16 x,
                                           uint16 y,
                                           uint16 x_offset,
@@ -860,32 +882,9 @@ static void UI_PathFix_DrawSelectedMarker(uint16 x,
     uint16 x0 = UI_PathFix_ClampU16((int32)x, x_offset, x_max);
     uint16 y0 = UI_PathFix_ClampU16((int32)y, y_offset, y_max);
     uint16 span = 4u;
-    int32 dx = 0;
-    int32 dy = 0;
 
-    for (dx = -(int32)span; dx <= (int32)span; dx++)
-    {
-        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max), y0, RGB565_BLACK);
-        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
-                          UI_PathFix_ClampU16((int32)y0 + 1, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + dx, x_offset, x_max),
-                          UI_PathFix_ClampU16((int32)y0 - 1, y_offset, y_max), RGB565_BLACK);
-    }
-    for (dy = -(int32)span; dy <= (int32)span; dy++)
-    {
-        ips200_draw_point(x0, UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 + 1, x_offset, x_max),
-                          UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-        ips200_draw_point(UI_PathFix_ClampU16((int32)x0 - 1, x_offset, x_max),
-                          UI_PathFix_ClampU16((int32)y0 + dy, y_offset, y_max), RGB565_BLACK);
-    }
-
-    ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - (int32)span, x_offset, x_max), y0,
-                     UI_PathFix_ClampU16((int32)x0 + (int32)span, x_offset, x_max), y0,
-                     RGB565_YELLOW);
-    ips200_draw_line(x0, UI_PathFix_ClampU16((int32)y0 - (int32)span, y_offset, y_max),
-                     x0, UI_PathFix_ClampU16((int32)y0 + (int32)span, y_offset, y_max),
-                     RGB565_YELLOW);
+    UI_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_BLACK, span);
+    UI_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_YELLOW, span);
     ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      UI_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
                      UI_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
@@ -941,6 +940,7 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
         {
             ips200_draw_line(x_off, y, x_end, y, RGB565_WHITE);
         }
+        /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黄) */
         for (i = 1u; i < draw_count; i++)
         {
             ips200_draw_line((uint16)s_ui_dc.pathfix_draw_x[i - 1u],
@@ -948,11 +948,6 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
                              (uint16)s_ui_dc.pathfix_draw_x[i],
                              (uint16)s_ui_dc.pathfix_draw_y[i],
                              RGB565_RED);
-        }
-        for (i = 0u; i < draw_count; i++)
-        {
-            ips200_draw_point((uint16)s_ui_dc.pathfix_draw_x[i],
-                              (uint16)s_ui_dc.pathfix_draw_y[i], RGB565_BLUE);
         }
         if (draw_count > 0u)
         {
@@ -964,12 +959,19 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
                                   (uint16)s_ui_dc.pathfix_draw_y[draw_count - 1u],
                                   RGB565_PURPLE);
             }
-            if (draw_sel < draw_count)
-            {
-                UI_PathFix_DrawSelectedMarker((uint16)s_ui_dc.pathfix_draw_x[draw_sel],
-                                              (uint16)s_ui_dc.pathfix_draw_y[draw_sel],
-                                              x_off, y_off, w, h);
-            }
+        }
+        for (i = 0u; (i < (uint16)s_ui_dc.pathfix_elem_count) && (i < DUALCORE_PATHFIX_ELEM_MAX); i++)
+        {
+            UI_PathFix_DrawCrossMarker((uint16)s_ui_dc.pathfix_elem_x[i],
+                                       (uint16)s_ui_dc.pathfix_elem_y[i],
+                                       x_off, y_off, w, h,
+                                       RGB565_BLUE, 3u);
+        }
+        if ((draw_count > 0u) && (draw_sel < draw_count))
+        {
+            UI_PathFix_DrawSelectedMarker((uint16)s_ui_dc.pathfix_draw_x[draw_sel],
+                                          (uint16)s_ui_dc.pathfix_draw_y[draw_sel],
+                                          x_off, y_off, w, h);
         }
     }
     }
@@ -1005,9 +1007,9 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
         ips200_show_string(0, ROW_7, pathfix_dirty ? "Dirty:Y" : "Dirty:N");
     }
 
-    ips200_show_string(0, ROW_9, "K1 Sel+10");
-    ips200_show_string(0, ROW_10, "K2 Yaw-2");
-    ips200_show_string(0, ROW_11, "K3 Yaw+2");
+    ips200_show_string(0, ROW_9, "K1 Anchor");
+    ips200_show_string(0, ROW_10, "K2 Yaw-5");
+    ips200_show_string(0, ROW_11, "K3 Yaw+5");
     ips200_show_string(0, ROW_12, "K4 SaveExit");
 
     (void)pathfix_active;

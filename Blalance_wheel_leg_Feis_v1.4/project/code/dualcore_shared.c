@@ -286,6 +286,7 @@ void dualcore_ctrl_to_ui_publish(void)
     c->pathfix_select_yaw_x100 = 0;
     c->pathfix_draw_count = 0u;
     c->pathfix_draw_sel_idx = 0u;
+    c->pathfix_elem_count = 0u;
   }
 
   c->seq++;
