@@ -95,6 +95,9 @@ typedef enum
 static volatile uint8 menu_key_nav_queue[MENU_KEY_EVENT_QUEUE_LEN];
 static volatile uint8 menu_key_nav_head = 0;
 static volatile uint8 menu_key_nav_tail = 0;
+/* PIT 按键中断只提交重绘请求；LCD/SPI 必须由主循环独占访问。 */
+static volatile uint8 s_menu_redraw_requested = 0u;
+static volatile uint8 s_menu_tick_10ms = 0u;
 
 /* 内部函数声明 */
 static void HashTableCtor(HASH_TABLE_t *const This);                                                // 哈希表初始化
@@ -133,6 +136,8 @@ static void Menu_UpdatePathFixSession(void);
 static void Menu_UpdateRunSubjectPreviewSession(void);
 static uint8 MenuIsLiveUiPage(void);
 static void MenuRedrawCurrentPage(void);
+static void MenuRequestRedrawFromIsr(void);
+static uint8 MenuTakeRedrawRequest(void);
 static uint8 Menu_ShouldRedrawPathFixPage(void);
 static uint8 MenuIsRemoteMenuFirst(void);
 
@@ -452,10 +457,12 @@ void dip_switch_motor_sync_from_hw(void)
  */
 void menu_key_capture_event(void)
 {
+   s_menu_tick_10ms++;
 #if defined(CY_CORE_CM7_1)
-   dualcore_ctrl_to_ui_t dc;
+   /* 快照含 PathFix 大数组，放静态区避免占用中断栈；本次扫描只拉取一次。 */
+   static dualcore_ctrl_to_ui_t dc;
    dualcore_ctrl_to_ui_pull(&dc);
-   if (MenuIsRemoteMenuFirst() != 0u && dc.remote_local_keys_debug == 0u)
+   if (dc.menu_input_remote_first != 0u && dc.remote_local_keys_debug == 0u)
    {
        return;
    }
@@ -807,21 +814,38 @@ static void MenuRedrawCurrentPage(void)
     menuMember.act();
 }
 
-/* PathFix：按键立即刷；静止时约每 8 主循环刷一次左侧文字/轨迹 */
+static void MenuRequestRedrawFromIsr(void)
+{
+    s_menu_redraw_requested = 1u;
+}
+
+static uint8 MenuTakeRedrawRequest(void)
+{
+    uint8 requested;
+    uint32 interrupt_status = interrupt_global_disable();
+
+    requested = s_menu_redraw_requested;
+    s_menu_redraw_requested = 0u;
+
+    interrupt_global_enable(interrupt_status);
+    return requested;
+}
+
+/* PathFix 静止时每 100ms 刷新一次；不能按主循环次数限帧。 */
 static uint8 Menu_ShouldRedrawPathFixPage(void)
 {
-    static uint8 s_pathfix_redraw_div = 0u;
+    static uint8 s_pathfix_last_tick = 0u;
+    uint8 now = s_menu_tick_10ms;
 
     if (MenuIsPathFixPage() == 0u)
     {
-        s_pathfix_redraw_div = 0u;
+        s_pathfix_last_tick = now;
         return 0u;
     }
 
-    s_pathfix_redraw_div++;
-    if (s_pathfix_redraw_div >= 8u)
+    if ((uint8)(now - s_pathfix_last_tick) >= 10u)
     {
-        s_pathfix_redraw_div = 0u;
+        s_pathfix_last_tick = now;
         return 1u;
     }
     return 0u;
@@ -903,7 +927,7 @@ static uint8 MenuTryHandlePathFixKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
@@ -915,7 +939,7 @@ static uint8 MenuTryHandlePathFixKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -927,7 +951,7 @@ static uint8 MenuTryHandlePathFixKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_4) == KEY_SHORT_PRESS)
@@ -1109,7 +1133,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_rec_subj_preview, -1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
@@ -1117,7 +1141,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_rec_subj_preview, 1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -1130,7 +1154,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     return 0u;
@@ -1144,7 +1168,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_play_subj_preview, -1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
@@ -1152,7 +1176,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_play_subj_preview, 1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -1165,7 +1189,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
-        MenuRedrawCurrentPage();
+        MenuRequestRedrawFromIsr();
         return 1u;
     }
     return 0u;
@@ -1205,7 +1229,8 @@ static uint8 MenuTryHandleRunConfigKeyEvent(void)
 static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 {
 #if defined(CY_CORE_CM7_1)
-    dualcore_ctrl_to_ui_t dc;
+    /* 本函数由按键 PIT 中断调用，避免大快照落在中断栈。 */
+    static dualcore_ctrl_to_ui_t dc;
     dualcore_ctrl_to_ui_pull(&dc);
     uint8 recording_active = dc.gps_recording_active;
 #else
@@ -1285,6 +1310,8 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void)
 
 void selectMenu(void)
 {
+    uint8 redraw_requested;
+
     ReadDataFromPc();
 #if !defined(CY_CORE_CM7_1)
     dip_switch_motor_sync_from_hw();
@@ -1453,15 +1480,16 @@ void selectMenu(void)
     Menu_command = 0;
     Menu_UpdatePathFixSession();
     Menu_UpdateRunSubjectPreviewSession();
-    /* PathFix 单独限帧；其它页保持原 Motor_OFF / Live 页每圈刷新逻辑 */
+    redraw_requested = MenuTakeRedrawRequest();
+    /* 所有 LCD/SPI 重绘均在主循环完成；PathFix 额外按 100ms 限帧。 */
     if (MenuIsPathFixPage())
     {
-        if (Menu_ShouldRedrawPathFixPage())
+        if (redraw_requested || Menu_ShouldRedrawPathFixPage())
         {
             MenuRedrawCurrentPage();
         }
     }
-    else if ((motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
+    else if (redraw_requested || (motor_sw_sel == MOTOR_OFF) || MenuIsLiveUiPage())
     {
         MenuRedrawCurrentPage();
     }
