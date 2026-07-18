@@ -15,6 +15,8 @@
 void flash_Nag_Write(void);
 void flash_Nag_Read(void);
 void flash_Nag_ResetReadState(void);
+/* 显式绑定惯导 Flash 槽位（1~3）；PathFix 保存时使用会话载入时的 replay_subject */
+void flash_Nag_BindSubjectSlot(uint8 subject);
 void flash_RunLaunchSpeed_Write(void);
 void flash_RunLaunchSpeed_Read(void);
 void flash_JumpParams_Write(void);
@@ -25,9 +27,9 @@ void flash_GpsPoints_Write(void);
 void flash_GpsPoints_Read(void);
 void flash_GpsPoints_Clear(void);
 
-/* 仅载入惯导 yaw 轨迹到 Nav_read[]（不进入回放态）；out_save_index 输出点数 */
+/* 仅载入惯导 yaw 轨迹到 Nav_read[]（不进入回放态）；调用前须 flash_Nag_BindSubjectSlot */
 uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index);
-/* 将 Nav_read[0..save_index-1] 整表回写 Flash 页 2~45、元数据页 1 与事件页 46 */
+/* 将 Nav_read[0..save_index-1] 整表回写已绑定 Flash 槽；调用前须 flash_Nag_BindSubjectSlot */
 uint8 flash_Nag_WriteFullPath(uint16 save_index);
 
 #endif

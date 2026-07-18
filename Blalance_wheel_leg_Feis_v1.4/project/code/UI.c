@@ -915,6 +915,7 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
     uint8 pathfix_active = 0u;
     uint8 pathfix_loaded = 0u;
     uint8 pathfix_dirty = 0u;
+    uint8 replay_subject = 1u;
     uint16 pathfix_select = 0u;
     uint32 pathfix_count = 0u;
     int32 pathfix_yaw_x100 = 0;
@@ -932,6 +933,11 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
     pathfix_active = s_ui_dc.pathfix_active;
     pathfix_loaded = s_ui_dc.pathfix_loaded;
     pathfix_dirty = s_ui_dc.pathfix_dirty;
+    replay_subject = s_ui_dc.pathfix_replay_subject;
+    if (replay_subject == 0u)
+    {
+        replay_subject = s_ui_dc.nag_replay_subject;
+    }
     pathfix_select = s_ui_dc.pathfix_select_index;
     pathfix_count = s_ui_dc.pathfix_point_count;
     pathfix_yaw_x100 = s_ui_dc.pathfix_select_yaw_x100;
@@ -993,6 +999,11 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
     pathfix_dirty = g_nag_pathfix.dirty;
     pathfix_select = g_nag_pathfix.select_index;
     pathfix_count = (uint32)g_nag_pathfix.point_count;
+    replay_subject = g_nag_pathfix.replay_subject;
+    if (replay_subject == 0u)
+    {
+        replay_subject = g_nag_replay_subject;
+    }
     if ((pathfix_loaded != 0u) && (pathfix_select < g_nag_pathfix.point_count))
     {
         pathfix_yaw_x100 = Nav_read[pathfix_select];
@@ -1003,9 +1014,12 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
     }
 #endif
 
+    ips200_show_string(0, ROW_4, "Play:");
+    ips200_show_uint(40, ROW_4, (uint32)replay_subject, 1);
+
     if (pathfix_loaded == 0u)
     {
-        ips200_show_string(0, ROW_5, "No Path");
+        ips200_show_string(0, ROW_5, "Subj Empty");
         ips200_show_string(0, ROW_6, "Record first");
     }
     else
@@ -1542,7 +1556,6 @@ void GUI_3_6_1(void)
 
 void ACT_3_6_1()
 {
-    Menu_SyncRunRecSubjPreview();
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '6';
@@ -1568,7 +1581,6 @@ void GUI_3_7_1(void)
 
 void ACT_3_7_1()
 {
-    Menu_SyncRunPlaySubjPreview();
     ReadPos[0] = '3';
     ReadPos[1] = '.';
     ReadPos[2] = '7';

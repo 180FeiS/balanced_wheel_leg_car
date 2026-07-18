@@ -283,6 +283,7 @@ void dualcore_ctrl_to_ui_publish(void)
     c->pathfix_active = 0u;
     c->pathfix_loaded = 0u;
     c->pathfix_dirty = 0u;
+    c->pathfix_replay_subject = 0u;
     c->pathfix_select_index = 0u;
     c->pathfix_point_count = 0u;
     c->pathfix_select_yaw_x100 = 0;

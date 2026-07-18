@@ -20,6 +20,11 @@ static void flash_Nag_BindSubjectReplay(void)
     s_nag_flash_subject = Nag_ClampSubject(g_nag_replay_subject);
 }
 
+void flash_Nag_BindSubjectSlot(uint8 subject)
+{
+    s_nag_flash_subject = Nag_ClampSubject(subject);
+}
+
 static void flash_Nag_BindSubjectActive(void)
 {
     if (N.Nag_SystemRun_Index == 1u)
@@ -961,7 +966,7 @@ void flash_Nag_Read(){
     }
 }
 
-/* 仅载入惯导 yaw 轨迹到 Nav_read[]，不进入回放态；out_save_index 为点数 Save_index */
+/* 仅载入惯导 yaw 轨迹到 Nav_read[]，不进入回放态；调用前须 flash_Nag_BindSubjectSlot */
 uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
 {
     uint16 save_index = 0u;
@@ -974,7 +979,6 @@ uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
     }
 
     *out_save_index = 0u;
-    flash_Nag_BindSubjectReplay();
     flash_Nag_ResetReadState();
     flash_buffer_clear();
     flash_read_page_to_buffer(0, flash_Nag_MetaPage(), FLASH_PAGE_LENGTH);
@@ -1012,7 +1016,7 @@ uint8 flash_Nag_LoadTrajectoryOnly(uint16 *out_save_index)
     return 1u;
 }
 
-/* 将 Nav_read[0..save_index-1] 整表回写当前回放科目对应 Flash 页区 */
+/* 将 Nav_read[0..save_index-1] 整表回写已绑定 Flash 槽；调用前须 flash_Nag_BindSubjectSlot */
 uint8 flash_Nag_WriteFullPath(uint16 save_index)
 {
     uint16 page_count = 0u;
@@ -1027,7 +1031,6 @@ uint8 flash_Nag_WriteFullPath(uint16 save_index)
         return 0u;
     }
 
-    flash_Nag_BindSubjectReplay();
     yaw_start = flash_Nag_YawStartPage();
     yaw_end = flash_Nag_YawEndPage();
     meta_page = flash_Nag_MetaPage();

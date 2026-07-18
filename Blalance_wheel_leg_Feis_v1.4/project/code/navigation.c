@@ -5131,6 +5131,7 @@ void Nag_PathFix_SyncToShared(void *ctrl_snapshot,
     c->pathfix_active = g_nag_pathfix.active;
     c->pathfix_loaded = g_nag_pathfix.loaded;
     c->pathfix_dirty = g_nag_pathfix.dirty;
+    c->pathfix_replay_subject = g_nag_pathfix.replay_subject;
     c->pathfix_select_index = g_nag_pathfix.select_index;
     c->pathfix_point_count = (uint32)g_nag_pathfix.point_count;
 
@@ -5173,6 +5174,7 @@ void Nag_PathFix_SyncToShared(void *ctrl_snapshot,
 uint8 Nag_PathFix_Enter(void)
 {
     uint16 save_index = 0u;
+    uint8 replay_subject = 0u;
 
     if (g_nag_pathfix.active != 0u)
     {
@@ -5186,15 +5188,19 @@ uint8 Nag_PathFix_Enter(void)
         return 0u;
     }
 
+    replay_subject = Nag_ClampSubject(g_nag_replay_subject);
     s_pathfix_cache_valid = 0u;
     memset(&g_nag_pathfix, 0, sizeof(g_nag_pathfix));
+    flash_Nag_BindSubjectSlot(replay_subject);
     if (flash_Nag_LoadTrajectoryOnly(&save_index) == 0u)
     {
+        g_nag_pathfix.replay_subject = replay_subject;
         return 0u;
     }
 
     g_nag_pathfix.active = 1u;
     g_nag_pathfix.loaded = 1u;
+    g_nag_pathfix.replay_subject = replay_subject;
     g_nag_pathfix.point_count = save_index;
     g_nag_pathfix.select_index = 0u;
     g_nag_pathfix.map_dirty = 1u;
@@ -5206,6 +5212,7 @@ void Nag_PathFix_Leave(uint8 save_if_dirty)
 {
     if ((save_if_dirty != 0u) && (g_nag_pathfix.dirty != 0u) && (g_nag_pathfix.loaded != 0u))
     {
+        flash_Nag_BindSubjectSlot(g_nag_pathfix.replay_subject);
         (void)flash_Nag_WriteFullPath(g_nag_pathfix.point_count);
     }
     s_pathfix_cache_valid = 0u;
@@ -5348,6 +5355,7 @@ uint8 Nag_PathFix_ExitSave(void)
 
     if ((g_nag_pathfix.dirty != 0u) && (g_nag_pathfix.loaded != 0u))
     {
+        flash_Nag_BindSubjectSlot(g_nag_pathfix.replay_subject);
         if (flash_Nag_WriteFullPath(g_nag_pathfix.point_count) == 0u)
         {
             return 0u;

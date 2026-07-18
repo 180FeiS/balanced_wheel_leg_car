@@ -255,6 +255,7 @@ typedef struct
   uint8 pathfix_active;
   uint8 pathfix_loaded;
   uint8 pathfix_dirty;
+  uint8 pathfix_replay_subject; /* PathFix 当前载入/保存的回放科目 1~3 */
   uint16 pathfix_select_index;
   uint32 pathfix_point_count;
   int32 pathfix_select_yaw_x100;

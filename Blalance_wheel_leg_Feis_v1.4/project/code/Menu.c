@@ -130,12 +130,14 @@ static uint8 MenuTryHandleGpsDebugKeyEvent(void);
 static uint8 MenuIsPathFixPage(void);
 static uint8 MenuTryHandlePathFixKeyEvent(void);
 static void Menu_UpdatePathFixSession(void);
+static void Menu_UpdateRunSubjectPreviewSession(void);
 static uint8 MenuIsLiveUiPage(void);
 static void MenuRedrawCurrentPage(void);
 static uint8 Menu_ShouldRedrawPathFixPage(void);
 static uint8 MenuIsRemoteMenuFirst(void);
 
 static char s_menu_pathfix_last_pos[HASH_KEY_LEN] = "0";
+static char s_menu_subject_preview_last_pos[HASH_KEY_LEN] = "0";
 
 /*-------------------------------------------------------------------------------------------------------------------
 // 函数简介     菜单 KEY1~KEY4 有效短按统一反馈：翻转 LED1 并请求一次短蜂鸣
@@ -740,12 +742,14 @@ void selectMenu_Key(void)
    if(menu_nav && ((motor_sw_key == MOTOR_OFF) || MenuIsLiveUiPage() || MenuIsPathFixPage()))
    {
         Menu_UpdatePathFixSession();
+        Menu_UpdateRunSubjectPreviewSession();
         ips200_clear();
         MenuRedrawCurrentPage();
    }
    else
    {
         Menu_UpdatePathFixSession();
+        Menu_UpdateRunSubjectPreviewSession();
    }
 }
 
@@ -868,6 +872,23 @@ static void Menu_UpdatePathFixSession(void)
 #endif
 
     strcpy(s_menu_pathfix_last_pos, menuMember.pos);
+}
+
+/* 仅在进入 RecSubj/PlaySubj 功能页时同步预览；勿在 ACT 每帧调用，否则 KEY1/2 切换会被立刻覆盖。 */
+static void Menu_UpdateRunSubjectPreviewSession(void)
+{
+    if ((strcmp(menuMember.pos, "3.6.1") == 0) &&
+        (strcmp(s_menu_subject_preview_last_pos, "3.6.1") != 0))
+    {
+        Menu_SyncRunRecSubjPreview();
+    }
+    else if ((strcmp(menuMember.pos, "3.7.1") == 0) &&
+             (strcmp(s_menu_subject_preview_last_pos, "3.7.1") != 0))
+    {
+        Menu_SyncRunPlaySubjPreview();
+    }
+
+    strcpy(s_menu_subject_preview_last_pos, menuMember.pos);
 }
 
 /* PathFix（pos 2.6.1）：KEY1 跳锚点；KEY2/3 ±yaw 并锚点间插值；KEY4 保存并返回上级 */
@@ -1088,6 +1109,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_rec_subj_preview, -1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
@@ -1095,6 +1117,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_rec_subj_preview, 1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -1107,6 +1130,7 @@ static uint8 MenuTryHandleRunRecSubjKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     return 0u;
@@ -1120,6 +1144,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_play_subj_preview, -1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_1);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     if (key_get_state(KEY_2) == KEY_SHORT_PRESS)
@@ -1127,6 +1152,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
         Menu_SubjectPreviewStep(&s_run_play_subj_preview, 1);
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_2);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     if (key_get_state(KEY_3) == KEY_SHORT_PRESS)
@@ -1139,6 +1165,7 @@ static uint8 MenuTryHandleRunPlaySubjKeyEvent(void)
 #endif
         MenuInputFeedbackLedBeep();
         key_clear_state(KEY_3);
+        MenuRedrawCurrentPage();
         return 1u;
     }
     return 0u;
@@ -1425,6 +1452,7 @@ void selectMenu(void)
 
     Menu_command = 0;
     Menu_UpdatePathFixSession();
+    Menu_UpdateRunSubjectPreviewSession();
     /* PathFix 单独限帧；其它页保持原 Motor_OFF / Live 页每圈刷新逻辑 */
     if (MenuIsPathFixPage())
     {

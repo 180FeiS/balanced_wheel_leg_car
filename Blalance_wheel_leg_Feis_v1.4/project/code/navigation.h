@@ -864,12 +864,12 @@ void Nag_System();  //偏航角函数的封装，包装进中断小
 
 /*
  * 惯导路径修正界面（Debug → PathFix → 2.6.1 功能页）：
- * 1. 从 Flash 载入 Nav_read[]（yaw×100，每 Nag_Set_mileage cm 一点），在 LCD 上重建二维折线；
+ * 1. 载入 Run→PlaySubj 所选回放科目（g_nag_replay_subject）对应 Flash 槽到 Nav_read[]；
  *    重建：dx=mileage*sin(yaw)、dy=mileage*cos(yaw)；屏幕映射北向上、横向镜像（左转在左）；
  * 2. KEY1 每次前进 Nag_PathFix_Select_Step 个点（循环，作控制锚点）；
  *    KEY2/KEY3 改当前锚点 yaw ±Nag_PathFix_Yaw_Step_Deg，并在相邻锚点之间线性插值中间点（整段斜线一起变向）；
- *    KEY4 有修改时写回 Flash 并退出；
- * 3. 不修改 Nag_SystemRun_Index，录制/回放进行中禁止进入；修正后的 Nav_read[] 直接用于下次惯导回放。
+ *    KEY4 有修改时写回该科目 Flash 槽并退出；
+ * 3. 不修改 Nag_SystemRun_Index，录制/回放进行中禁止进入。
  */
 #define Nag_PathFix_Yaw_Step_Deg   5.0f
 #define Nag_PathFix_Select_Step    100u    /* KEY1 每次切换的路径点数 */
@@ -882,6 +882,7 @@ typedef struct
     uint8 loaded;        /* 1=已从 Flash 载入有效轨迹到 Nav_read[] */
     uint8 dirty;         /* 1=自上次 Flash 保存后有 yaw 修改 */
     uint8 map_dirty;     /* 1=折线几何需重建（改 yaw / 载入后）；选点仅更新高亮索引 */
+    uint8 replay_subject; /* 本会话载入/保存的回放科目 1~3（Run→PlaySubj） */
     uint16 select_index; /* 当前选中点 [0, point_count) */
     uint16 point_count;  /* 轨迹点数（等于载入时的 Save_index） */
 } NagPathFixState;
