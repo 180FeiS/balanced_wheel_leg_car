@@ -896,17 +896,16 @@ static void UI_PathFix_DrawSelectedMarker(uint16 x,
     uint16 span = 4u;
 
     UI_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_BLACK, span);
-    UI_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_YELLOW, span);
     ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      UI_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
                      UI_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
                      UI_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
-                     RGB565_YELLOW);
+                     RGB565_BLACK);
     ips200_draw_line(UI_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      UI_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
                      UI_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
                      UI_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
-                     RGB565_YELLOW);
+                     RGB565_BLACK);
 }
 #endif
 
@@ -958,7 +957,7 @@ void GUI_2_6_1(void) // PathFix 惯导路径修正功能页（须从 2.6 按 KEY3 进入）
         {
             ips200_draw_line(x_off, y, x_end, y, RGB565_WHITE);
         }
-        /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黄) */
+        /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黑) */
         for (i = 1u; i < draw_count; i++)
         {
             ips200_draw_line((uint16)s_ui_dc.pathfix_draw_x[i - 1u],

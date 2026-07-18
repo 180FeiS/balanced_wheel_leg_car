@@ -4721,7 +4721,7 @@ static void Nag_PathFix_DrawCrossMarker(uint16 x,
                      color);
 }
 
-/* 当前选中点：黄色加粗十字，最后绘制以免被轨迹/端点覆盖 */
+/* 当前选中点：黑色加粗十字，最后绘制以免被轨迹/端点覆盖 */
 static void Nag_PathFix_DrawSelectedMarker(uint16 x,
                                            uint16 y,
                                            uint16 x_offset,
@@ -4736,17 +4736,16 @@ static void Nag_PathFix_DrawSelectedMarker(uint16 x,
     uint16 span = 4u;
 
     Nag_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_BLACK, span);
-    Nag_PathFix_DrawCrossMarker(x0, y0, x_offset, y_offset, width, height, RGB565_YELLOW, span);
     ips200_draw_line(Nag_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      Nag_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
                      Nag_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
                      Nag_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
-                     RGB565_YELLOW);
+                     RGB565_BLACK);
     ips200_draw_line(Nag_PathFix_ClampU16((int32)x0 - 3, x_offset, x_max),
                      Nag_PathFix_ClampU16((int32)y0 + 3, y_offset, y_max),
                      Nag_PathFix_ClampU16((int32)x0 + 3, x_offset, x_max),
                      Nag_PathFix_ClampU16((int32)y0 - 3, y_offset, y_max),
-                     RGB565_YELLOW);
+                     RGB565_BLACK);
 }
 
 /* 收集有效元素 enter/exit 索引（去重），全部用同一颜色显示 */
@@ -5081,7 +5080,7 @@ void Nag_PathFix_DrawViewport(uint16 x_offset, uint16 y_offset, uint16 width, ui
                               map_x, map_y, Nag_PathFix_Draw_Max,
                               &draw_count, &sel_draw);
 
-    /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黄) */
+    /* 折线 → 起终点 → 元素十字(蓝) → 选中高亮(黑) */
     for (i = 1u; i < draw_count; i++)
     {
         ips200_draw_line((uint16)map_x[i - 1u], (uint16)map_y[i - 1u],
